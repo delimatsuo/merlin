@@ -1,0 +1,50 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Users collection — only the user can read/write their own data
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+
+      // Profiles subcollection
+      match /profiles/{profileId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+
+        // PII subcollection — tighter access, same rule but logically separated
+        match /pii/{piiDoc} {
+          allow read, write: if request.auth != null && request.auth.uid == uid;
+        }
+      }
+
+      // Applications subcollection
+      match /applications/{applicationId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+
+        // Resume versions
+        match /resumes/{versionId} {
+          allow read, write: if request.auth != null && request.auth.uid == uid;
+        }
+      }
+    }
+
+    // Voice sessions — user can only access their own sessions
+    match /voiceSessions/{sessionId} {
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
+
+    // Company cache — read-only for authenticated users, write by backend service account
+    match /companyCache/{companyId} {
+      allow read: if request.auth != null;
+      allow write: if false; // Only backend service account via Admin SDK
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

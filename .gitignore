@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+venv/
+__pycache__/
+*.pyc
+
+# Environment
+.env
+.env.local
+.env.*.local
+*.local
+
+# Firebase
+.firebase/
+
+# Next.js
+.next/
+out/
+frontend/.next/
+frontend/out/
+
+# Python
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Credentials
+*.json
+!firebase.json
+!firestore.indexes.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!components.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# Planning (keep for development)
+# .planning/
