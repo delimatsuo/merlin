@@ -36,120 +36,161 @@ export default function EntrevistaPage() {
   const [completed, setCompleted] = useState(false);
   const [error, setError] = useState("");
 
-  // Voice state
-  const [isRecording, setIsRecording] = useState(false);
+  // TTS state — pre-fetched audio cache
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const synthRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const [ttsLoading, setTtsLoading] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioCacheRef = useRef<Map<number, string>>(new Map());
+
+  // STT state — MediaRecorder + Cloud Speech
+  const [isRecording, setIsRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      window.speechSynthesis?.cancel();
-      recognitionRef.current?.abort();
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      audioCacheRef.current.forEach((url) => URL.revokeObjectURL(url));
+      audioCacheRef.current.clear();
+      if (mediaRecorderRef.current?.state === "recording") {
+        mediaRecorderRef.current.stop();
+      }
     };
   }, []);
 
-  // Read question aloud using TTS
-  const speakQuestion = useCallback(() => {
+  // Pre-fetch TTS audio for all questions when session starts
+  const prefetchAudio = useCallback(async (questions: string[]) => {
+    questions.forEach(async (question, index) => {
+      try {
+        const blob = await api.postBlob("/api/voice/tts", { text: question });
+        const url = URL.createObjectURL(blob);
+        audioCacheRef.current.set(index, url);
+      } catch {
+        // Silently fail — user can still click to generate on demand
+      }
+    });
+  }, []);
+
+  // Play question audio (from cache or on-demand)
+  const speakQuestion = useCallback(async () => {
     const question = session?.questions[currentIndex];
-    if (!question || !window.speechSynthesis) return;
+    if (!question) return;
 
     // Stop if already speaking
-    if (isSpeaking) {
-      window.speechSynthesis.cancel();
+    if (isSpeaking && audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
       setIsSpeaking(false);
       return;
     }
 
-    const utterance = new SpeechSynthesisUtterance(question);
-    utterance.lang = "pt-BR";
-    utterance.rate = 0.95;
-    utterance.pitch = 1;
+    // Check cache first
+    let audioUrl = audioCacheRef.current.get(currentIndex);
 
-    // Try to find a pt-BR voice
-    const voices = window.speechSynthesis.getVoices();
-    const ptVoice = voices.find(
-      (v) => v.lang === "pt-BR" || v.lang.startsWith("pt")
-    );
-    if (ptVoice) utterance.voice = ptVoice;
+    if (!audioUrl) {
+      // Fetch on demand if not cached yet
+      setTtsLoading(true);
+      setError("");
+      try {
+        const blob = await api.postBlob("/api/voice/tts", { text: question });
+        audioUrl = URL.createObjectURL(blob);
+        audioCacheRef.current.set(currentIndex, audioUrl);
+      } catch {
+        setError("Erro ao gerar audio. Tente novamente.");
+        setTtsLoading(false);
+        return;
+      }
+      setTtsLoading(false);
+    }
 
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
-
-    synthRef.current = utterance;
+    const audio = new Audio(audioUrl);
+    audioRef.current = audio;
+    audio.onended = () => setIsSpeaking(false);
+    audio.onerror = () => {
+      setIsSpeaking(false);
+      setError("Erro ao reproduzir audio.");
+    };
     setIsSpeaking(true);
-    window.speechSynthesis.speak(utterance);
+    await audio.play();
   }, [session, currentIndex, isSpeaking]);
 
-  // Auto-read question when it changes
+  // Auto-play question when it changes (if cached)
   useEffect(() => {
     if (session && !completed) {
-      // Small delay so the UI updates first
-      const timer = setTimeout(() => speakQuestion(), 500);
+      const timer = setTimeout(() => {
+        if (audioCacheRef.current.has(currentIndex)) {
+          speakQuestion();
+        }
+      }, 300);
       return () => clearTimeout(timer);
     }
-  // Only trigger on question change, not on speakQuestion reference change
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, session, completed]);
 
-  // Start/stop voice recording using Speech Recognition
-  const toggleRecording = useCallback(() => {
+  // Start/stop voice recording using MediaRecorder
+  const toggleRecording = useCallback(async () => {
     if (isRecording) {
-      recognitionRef.current?.stop();
-      setIsRecording(false);
-      return;
-    }
-
-    const SpeechRecognition =
-      window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setError("Seu navegador nao suporta reconhecimento de voz. Use Chrome.");
+      mediaRecorderRef.current?.stop();
       return;
     }
 
     // Stop TTS if playing
-    if (isSpeaking) {
-      window.speechSynthesis.cancel();
+    if (isSpeaking && audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
       setIsSpeaking(false);
     }
 
-    const recognition = new SpeechRecognition();
-    recognition.lang = "pt-BR";
-    recognition.continuous = true;
-    recognition.interimResults = true;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+          ? "audio/webm;codecs=opus"
+          : "audio/webm",
+      });
+      chunksRef.current = [];
 
-    let finalTranscript = answer;
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
 
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let interim = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          finalTranscript += (finalTranscript ? " " : "") + transcript;
-        } else {
-          interim = transcript;
+      mediaRecorder.onstop = async () => {
+        // Stop all tracks to release mic
+        stream.getTracks().forEach((t) => t.stop());
+        setIsRecording(false);
+
+        const audioBlob = new Blob(chunksRef.current, { type: "audio/webm" });
+        if (audioBlob.size < 100) return;
+
+        // Transcribe via Cloud Speech-to-Text
+        setTranscribing(true);
+        try {
+          const result = await api.postAudio("/api/voice/transcribe", audioBlob);
+          if (result.transcript) {
+            setAnswer((prev) =>
+              prev ? prev + " " + result.transcript : result.transcript
+            );
+          }
+        } catch {
+          setError("Erro na transcrição. Tente novamente ou digite.");
+        } finally {
+          setTranscribing(false);
         }
-      }
-      setAnswer(finalTranscript + (interim ? " " + interim : ""));
-    };
+      };
 
-    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      if (event.error !== "aborted") {
-        setError("Erro no reconhecimento de voz. Tente novamente.");
-      }
-      setIsRecording(false);
-    };
-
-    recognition.onend = () => {
-      setIsRecording(false);
-    };
-
-    recognitionRef.current = recognition;
-    recognition.start();
-    setIsRecording(true);
-    setError("");
-  }, [isRecording, isSpeaking, answer]);
+      mediaRecorderRef.current = mediaRecorder;
+      mediaRecorder.start();
+      setIsRecording(true);
+      setError("");
+    } catch {
+      setError("Permissão de microfone negada. Habilite nas configurações do navegador.");
+    }
+  }, [isRecording, isSpeaking]);
 
   const startInterview = async () => {
     setStarting(true);
@@ -158,6 +199,8 @@ export default function EntrevistaPage() {
       const result = await api.post<InterviewSession>("/api/voice/questions");
       setSession(result);
       setAnswers(new Array(result.questions.length).fill(""));
+      // Pre-fetch all TTS audio in background
+      prefetchAudio(result.questions);
     } catch {
       setError(
         "Erro ao iniciar entrevista. Verifique se voce ja enviou seu curriculo."
@@ -172,8 +215,7 @@ export default function EntrevistaPage() {
 
     // Stop recording if active
     if (isRecording) {
-      recognitionRef.current?.stop();
-      setIsRecording(false);
+      mediaRecorderRef.current?.stop();
     }
 
     setLoading(true);
@@ -319,15 +361,19 @@ export default function EntrevistaPage() {
                 </div>
                 <button
                   onClick={speakQuestion}
+                  disabled={ttsLoading}
                   className={cn(
                     "shrink-0 h-10 w-10 rounded-xl flex items-center justify-center transition-all",
                     isSpeaking
                       ? "bg-foreground text-background"
-                      : "bg-background/60 text-foreground/60 hover:bg-background hover:text-foreground"
+                      : "bg-background/60 text-foreground/60 hover:bg-background hover:text-foreground",
+                    ttsLoading && "opacity-50 cursor-wait"
                   )}
-                  title={isSpeaking ? "Parar leitura" : "Ouvir pergunta"}
+                  title={ttsLoading ? "Carregando audio..." : isSpeaking ? "Parar leitura" : "Ouvir pergunta"}
                 >
-                  {isSpeaking ? (
+                  {ttsLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : isSpeaking ? (
                     <VolumeX className="h-4 w-4" />
                   ) : (
                     <Volume2 className="h-4 w-4" />
@@ -342,17 +388,22 @@ export default function EntrevistaPage() {
               <div className="flex items-center gap-4">
                 <button
                   onClick={toggleRecording}
+                  disabled={transcribing}
                   className={cn(
                     "relative h-16 w-16 rounded-full flex items-center justify-center transition-all shrink-0",
                     isRecording
                       ? "bg-red-500 text-white"
-                      : "bg-secondary text-foreground/60 hover:bg-secondary/80 hover:text-foreground"
+                      : transcribing
+                        ? "bg-secondary text-foreground/40 cursor-wait"
+                        : "bg-secondary text-foreground/60 hover:bg-secondary/80 hover:text-foreground"
                   )}
                 >
                   {isRecording && (
                     <span className="absolute inset-0 rounded-full bg-red-500/30 animate-ping" />
                   )}
-                  {isRecording ? (
+                  {transcribing ? (
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                  ) : isRecording ? (
                     <MicOff className="h-6 w-6 relative z-10" />
                   ) : (
                     <Mic className="h-6 w-6" />
@@ -360,14 +411,18 @@ export default function EntrevistaPage() {
                 </button>
                 <div className="flex-1">
                   <p className="text-sm font-medium text-foreground">
-                    {isRecording
-                      ? "Gravando... Clique para parar"
-                      : "Clique para responder por voz"}
+                    {transcribing
+                      ? "Transcrevendo..."
+                      : isRecording
+                        ? "Gravando... Clique para parar"
+                        : "Clique para responder por voz"}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {isRecording
-                      ? "Sua resposta esta sendo transcrita em tempo real"
-                      : "Ou digite sua resposta abaixo"}
+                    {transcribing
+                      ? "Processando sua resposta com IA"
+                      : isRecording
+                        ? "Fale naturalmente, inclusive palavras em ingles"
+                        : "Ou digite sua resposta abaixo"}
                   </p>
                 </div>
               </div>
@@ -392,7 +447,7 @@ export default function EntrevistaPage() {
                 </p>
                 <Button
                   onClick={submitAnswer}
-                  disabled={loading || !answer.trim()}
+                  disabled={loading || !answer.trim() || transcribing}
                   className="h-11 px-6 rounded-full text-sm font-semibold"
                 >
                   {loading ? (

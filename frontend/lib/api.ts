@@ -15,59 +15,17 @@ class ApiClient {
     return headers;
   }
 
-  async get<T>(path: string): Promise<T> {
-    const headers = await this.getHeaders();
-    const response = await fetch(`${API_BASE_URL}${path}`, { headers });
-    if (response.status === 401) {
-      // Token expired, force refresh
-      const user = auth.currentUser;
-      if (user) {
-        await user.getIdToken(true);
-        return this.get(path);
-      }
-    }
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: "Erro desconhecido" }));
-      throw new Error(error.detail || `Erro ${response.status}`);
-    }
-    return response.json();
-  }
-
-  async post<T>(path: string, body?: unknown): Promise<T> {
-    const headers = await this.getHeaders();
-    const response = await fetch(`${API_BASE_URL}${path}`, {
-      method: "POST",
-      headers,
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    if (response.status === 401) {
-      const user = auth.currentUser;
-      if (user) {
-        await user.getIdToken(true);
-        return this.post(path, body);
-      }
-    }
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: "Erro desconhecido" }));
-      throw new Error(error.detail || `Erro ${response.status}`);
-    }
-    return response.json();
-  }
-
-  async upload<T>(path: string, file: File): Promise<T> {
+  private async getAuthHeaders(): Promise<HeadersInit> {
     const user = auth.currentUser;
     const headers: HeadersInit = {};
     if (user) {
       const token = await user.getIdToken();
       headers["Authorization"] = `Bearer ${token}`;
     }
-    const formData = new FormData();
-    formData.append("file", file);
-    const response = await fetch(`${API_BASE_URL}${path}`, {
-      method: "POST",
-      headers,
-      body: formData,
-    });
+    return headers;
+  }
+
+  private async handleResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: "Erro desconhecido" }));
       throw new Error(error.detail || `Erro ${response.status}`);
@@ -75,17 +33,91 @@ class ApiClient {
     return response.json();
   }
 
-  async delete<T>(path: string): Promise<T> {
-    const headers = await this.getHeaders();
-    const response = await fetch(`${API_BASE_URL}${path}`, {
-      method: "DELETE",
-      headers,
+  private async retryOnce(fn: () => Promise<Response>): Promise<Response> {
+    const response = await fn();
+    if (response.status === 401) {
+      const user = auth.currentUser;
+      if (user) {
+        await user.getIdToken(true);
+        return fn();
+      }
+    }
+    return response;
+  }
+
+  async get<T>(path: string): Promise<T> {
+    const response = await this.retryOnce(async () => {
+      const headers = await this.getHeaders();
+      return fetch(`${API_BASE_URL}${path}`, { headers });
+    });
+    return this.handleResponse<T>(response);
+  }
+
+  async post<T>(path: string, body?: unknown): Promise<T> {
+    const response = await this.retryOnce(async () => {
+      const headers = await this.getHeaders();
+      return fetch(`${API_BASE_URL}${path}`, {
+        method: "POST",
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+    });
+    return this.handleResponse<T>(response);
+  }
+
+  async upload<T>(path: string, file: File): Promise<T> {
+    const response = await this.retryOnce(async () => {
+      const headers = await this.getAuthHeaders();
+      const formData = new FormData();
+      formData.append("file", file);
+      return fetch(`${API_BASE_URL}${path}`, {
+        method: "POST",
+        headers,
+        body: formData,
+      });
+    });
+    return this.handleResponse<T>(response);
+  }
+
+  async postBlob(path: string, body?: unknown): Promise<Blob> {
+    const response = await this.retryOnce(async () => {
+      const headers = await this.getHeaders();
+      return fetch(`${API_BASE_URL}${path}`, {
+        method: "POST",
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+      });
     });
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: "Erro desconhecido" }));
       throw new Error(error.detail || `Erro ${response.status}`);
     }
-    return response.json();
+    return response.blob();
+  }
+
+  async postAudio(path: string, audioBlob: Blob): Promise<{ transcript: string }> {
+    const response = await this.retryOnce(async () => {
+      const headers = await this.getAuthHeaders();
+      const formData = new FormData();
+      formData.append("audio", audioBlob, "recording.webm");
+      return fetch(`${API_BASE_URL}${path}`, {
+        method: "POST",
+        headers,
+        body: formData,
+      });
+    });
+    return this.handleResponse(response);
+  }
+
+  async delete<T>(path: string): Promise<T> {
+    const response = await this.retryOnce(async () => {
+      const headers = await this.getHeaders();
+      return fetch(`${API_BASE_URL}${path}`, {
+        method: "DELETE",
+        headers,
+      });
+    });
+    return this.handleResponse<T>(response);
   }
 
   getWebSocketUrl(path: string): string {

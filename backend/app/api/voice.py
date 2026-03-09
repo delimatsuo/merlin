@@ -1,16 +1,136 @@
 """Voice interview WebSocket endpoints."""
 
+import asyncio
+import io
 import json
+import wave
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect, status
+from fastapi.responses import Response
+from google import genai
+from google.genai import types
+from google.api_core.client_options import ClientOptions
+from google.cloud.speech_v2 import SpeechClient
+from google.cloud.speech_v2.types import cloud_speech
+from pydantic import BaseModel
 
 from app.auth import AuthenticatedUser, verify_ws_token, get_current_user
+from app.config import get_settings
 from app.services.claude import generate_interview_questions, process_voice_answers
 from app.services.firestore import FirestoreService
 
 logger = structlog.get_logger()
 router = APIRouter()
+
+_genai_client: genai.Client | None = None
+_speech_client: SpeechClient | None = None
+
+
+def _get_genai_client() -> genai.Client:
+    global _genai_client
+    if _genai_client is None:
+        settings = get_settings()
+        _genai_client = genai.Client(api_key=settings.gemini_api_key)
+    return _genai_client
+
+
+def _get_speech_client() -> SpeechClient:
+    global _speech_client
+    if _speech_client is None:
+        _speech_client = SpeechClient(
+            client_options=ClientOptions(
+                api_endpoint="us-central1-speech.googleapis.com",
+            )
+        )
+    return _speech_client
+
+
+class TTSRequest(BaseModel):
+    text: str
+
+
+@router.post("/tts")
+async def text_to_speech(
+    body: TTSRequest,
+    user: AuthenticatedUser = Depends(get_current_user),
+):
+    """Convert text to natural speech using Gemini 2.5 Flash TTS."""
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Texto vazio.")
+    if len(text) > 2000:
+        raise HTTPException(status_code=400, detail="Texto muito longo (max 2000 chars).")
+
+    client = _get_genai_client()
+
+    response = await client.aio.models.generate_content(
+        model="gemini-2.5-flash-preview-tts",
+        contents=text,
+        config=types.GenerateContentConfig(
+            response_modalities=["AUDIO"],
+            speech_config=types.SpeechConfig(
+                voice_config=types.VoiceConfig(
+                    prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                        voice_name="Sulafat",
+                    )
+                )
+            ),
+        ),
+    )
+
+    audio_data = response.candidates[0].content.parts[0].inline_data.data
+
+    # Wrap raw PCM in WAV container for browser playback
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(24000)
+        wf.writeframes(audio_data)
+
+    return Response(
+        content=buf.getvalue(),
+        media_type="audio/wav",
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
+
+
+@router.post("/transcribe")
+async def transcribe_audio(
+    audio: UploadFile = File(...),
+    user: AuthenticatedUser = Depends(get_current_user),
+):
+    """Transcribe audio using Google Cloud Speech-to-Text Chirp 2 (multilingual)."""
+    audio_content = await audio.read()
+    if len(audio_content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Audio muito grande (max 10MB).")
+    if len(audio_content) < 100:
+        raise HTTPException(status_code=400, detail="Audio vazio.")
+
+    settings = get_settings()
+    client = _get_speech_client()
+
+    config = cloud_speech.RecognitionConfig(
+        auto_decoding_config=cloud_speech.AutoDetectDecodingConfig(),
+        language_codes=["pt-BR", "en-US"],
+        model="chirp_2",
+    )
+
+    request = cloud_speech.RecognizeRequest(
+        recognizer=f"projects/{settings.gcp_project_id}/locations/us-central1/recognizers/_",
+        config=config,
+        content=audio_content,
+    )
+
+    response = await asyncio.to_thread(client.recognize, request=request)
+
+    transcript = ""
+    for result in response.results:
+        if result.alternatives:
+            transcript += result.alternatives[0].transcript + " "
+
+    return {"transcript": transcript.strip()}
 
 
 @router.post("/questions")
