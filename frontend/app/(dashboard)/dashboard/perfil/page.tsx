@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
 import { api } from "@/lib/api";
-import { useProfileStore, useWorkflowStore, useProcessingStore } from "@/lib/store";
-import { Button } from "@/components/ui/button";
+import { useProfileStore, useWorkflowStore, useProcessingStore, useKnowledgeStore } from "@/lib/store";
 import { Upload, FileText, Loader2, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -16,13 +15,38 @@ const ACCEPTED_TYPES = {
   ],
 };
 
+interface ProfileSummary {
+  id: string;
+  name: string;
+  status: string;
+  createdAt: string;
+}
+
 export default function PerfilPage() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [uploadedFile, setUploadedFile] = useState<string | null>(null);
+  const [allProfiles, setAllProfiles] = useState<ProfileSummary[]>([]);
+  const [loadingProfiles, setLoadingProfiles] = useState(true);
   const { profile, setProfile, setLoading } = useProfileStore();
   const { setProfileId, markStep } = useWorkflowStore();
   const { addTask, completeTask, failTask } = useProcessingStore();
+  const { knowledge } = useKnowledgeStore();
+
+  // Load all profiles on mount
+  useEffect(() => {
+    const fetchProfiles = async () => {
+      try {
+        const result = await api.get<{ profiles: ProfileSummary[] }>("/api/profile/all");
+        setAllProfiles(result.profiles);
+      } catch {
+        // ignore
+      } finally {
+        setLoadingProfiles(false);
+      }
+    };
+    fetchProfiles();
+  }, []);
 
   const onDrop = useCallback(
     async (acceptedFiles: File[]) => {
@@ -30,7 +54,7 @@ export default function PerfilPage() {
       if (!file) return;
 
       if (file.size > MAX_FILE_SIZE) {
-        setError("Arquivo muito grande. O tamanho máximo é 10MB.");
+        setError("Arquivo muito grande. O tamanho maximo e 10MB.");
         return;
       }
 
@@ -47,6 +71,18 @@ export default function PerfilPage() {
         setProfile(result.profile as never);
         setProfileId(result.profileId);
         markStep("upload");
+
+        // Add to profiles list
+        setAllProfiles((prev) => [
+          {
+            id: result.profileId,
+            name: (result.profile as Record<string, string>).name || file.name,
+            status: "parsed",
+            createdAt: new Date().toISOString(),
+          },
+          ...prev,
+        ]);
+
         // Trigger background company research
         addTask("research", "Pesquisando empresas do seu perfil...");
         api.post(`/api/research/enrich/${result.profileId}`)
@@ -56,14 +92,14 @@ export default function PerfilPage() {
         setError(
           err instanceof Error
             ? err.message
-            : "Não conseguimos processar seu currículo. Tente outro arquivo."
+            : "Nao conseguimos processar seu curriculo. Tente outro arquivo."
         );
       } finally {
         setUploading(false);
         setLoading(false);
       }
     },
-    [setProfile, setLoading, setProfileId, markStep]
+    [setProfile, setLoading, setProfileId, markStep, addTask, completeTask, failTask]
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -78,10 +114,10 @@ export default function PerfilPage() {
       {/* Header */}
       <div className="pt-4">
         <h1 className="text-3xl font-bold tracking-tight text-foreground">
-          Meu Currículo
+          Meu Perfil
         </h1>
         <p className="text-base text-muted-foreground mt-2">
-          Envie seu currículo para começarmos a análise inteligente.
+          Envie curriculos para enriquecer seu perfil. Quanto mais dados, melhor a personalizacao.
         </p>
       </div>
 
@@ -96,7 +132,7 @@ export default function PerfilPage() {
         <div className="px-8 pt-8 pb-2">
           <h2 className="text-lg font-semibold text-foreground">Upload</h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            PDF ou DOCX, máximo 10MB
+            PDF ou DOCX, maximo 10MB. Voce pode enviar multiplos curriculos.
           </p>
         </div>
         <div className="p-8 pt-4">
@@ -118,7 +154,7 @@ export default function PerfilPage() {
                   <div className="absolute inset-0 rounded-full border-2 border-foreground border-t-transparent animate-spin" />
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Processando seu currículo...
+                  Processando seu curriculo...
                 </p>
               </div>
             ) : uploadedFile ? (
@@ -131,7 +167,7 @@ export default function PerfilPage() {
                     {uploadedFile}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Clique ou arraste para substituir
+                    Clique ou arraste para enviar outro
                   </p>
                 </div>
               </div>
@@ -144,7 +180,7 @@ export default function PerfilPage() {
                   <p className="text-sm font-medium text-foreground">
                     {isDragActive
                       ? "Solte o arquivo aqui"
-                      : "Arraste seu currículo ou clique para selecionar"}
+                      : "Arraste seu curriculo ou clique para selecionar"}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
                     PDF ou DOCX
@@ -156,7 +192,89 @@ export default function PerfilPage() {
         </div>
       </div>
 
-      {/* Parsed Profile */}
+      {/* Uploaded Resumes List */}
+      {allProfiles.length > 0 && (
+        <div className="apple-shadow rounded-2xl bg-card overflow-hidden">
+          <div className="px-8 pt-8 pb-2">
+            <h2 className="text-lg font-semibold text-foreground">
+              Curriculos Enviados
+            </h2>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {allProfiles.length} {allProfiles.length === 1 ? "curriculo" : "curriculos"} no seu perfil
+            </p>
+          </div>
+          <div className="px-8 pb-8 pt-4 space-y-2">
+            {loadingProfiles ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              allProfiles.map((p) => (
+                <div
+                  key={p.id}
+                  className="flex items-center gap-3 p-3 rounded-xl bg-secondary/50"
+                >
+                  <div className="h-9 w-9 rounded-lg bg-secondary flex items-center justify-center shrink-0">
+                    <FileText className="h-4 w-4 text-foreground/60" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">
+                      {p.name || "Curriculo"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(p.createdAt).toLocaleDateString("pt-BR")}
+                    </p>
+                  </div>
+                  <span className="text-[10px] font-medium text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">
+                    {p.status === "enriched" ? "Enriquecido" : "Processado"}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Knowledge Summary */}
+      {knowledge && (
+        <div className="apple-shadow rounded-2xl bg-card overflow-hidden">
+          <div className="px-8 pt-8 pb-2">
+            <h2 className="text-lg font-semibold text-foreground">
+              Perfil Consolidado
+            </h2>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Dados unificados de todos os seus curriculos e entrevistas
+            </p>
+          </div>
+          <div className="px-8 pb-8 pt-4 space-y-4">
+            {(knowledge as Record<string, unknown[]>).skills &&
+              ((knowledge as Record<string, string[]>).skills).length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                  Competencias ({((knowledge as Record<string, string[]>).skills).length})
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {((knowledge as Record<string, string[]>).skills).slice(0, 30).map((skill: string) => (
+                    <span
+                      key={skill}
+                      className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-secondary text-foreground/80"
+                    >
+                      {skill}
+                    </span>
+                  ))}
+                  {((knowledge as Record<string, string[]>).skills).length > 30 && (
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-secondary text-muted-foreground">
+                      +{((knowledge as Record<string, string[]>).skills).length - 30} mais
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Parsed Profile Preview */}
       {profile && (
         <div className="apple-shadow rounded-2xl bg-card overflow-hidden">
           <div className="px-8 pt-8 pb-2">
@@ -166,10 +284,10 @@ export default function PerfilPage() {
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-foreground">
-                  Perfil Extraído
+                  Ultimo Upload
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  Revise os dados. Você poderá editar depois.
+                  Dados extraidos do curriculo mais recente
                 </p>
               </div>
             </div>
@@ -195,27 +313,10 @@ export default function PerfilPage() {
                 </p>
               </div>
             )}
-            {profile.skills && profile.skills.length > 0 && (
-              <div>
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2.5">
-                  Competências
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {profile.skills.map((skill: string) => (
-                    <span
-                      key={skill}
-                      className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-secondary text-foreground/80"
-                    >
-                      {skill}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
             {profile.experience && profile.experience.length > 0 && (
               <div>
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
-                  Experiência
+                  Experiencia
                 </p>
                 <div className="space-y-4">
                   {profile.experience.map((exp, i) => (

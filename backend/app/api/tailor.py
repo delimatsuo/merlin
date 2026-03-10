@@ -2,11 +2,12 @@
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 
 from app.auth import AuthenticatedUser, get_current_user
 from app.config import get_settings
 from app.schemas.api import TailorRequest, TailorResponse, RegenerateRequest
-from app.services.claude import rewrite_resume, generate_cover_letter
+from app.services.gemini_ai import rewrite_resume, generate_cover_letter
 from app.services.firestore import FirestoreService
 
 logger = structlog.get_logger()
@@ -19,7 +20,7 @@ async def generate_tailored_resume(
     body: TailorRequest,
     user: AuthenticatedUser = Depends(get_current_user),
 ):
-    """Generate a tailored resume and cover letter using Claude Opus."""
+    """Generate a tailored resume and cover letter."""
     logger.info("tailor_start", uid=user.uid)
 
     fs = FirestoreService()
@@ -52,7 +53,7 @@ async def generate_tailored_resume(
     job_description = application.get("jobDescriptionText", "")
     ats_keywords = application.get("atsKeywords", [])
 
-    # Rewrite resume with Opus
+    # Rewrite resume
     try:
         resume_content = await rewrite_resume(
             profile=enriched_profile,
@@ -67,7 +68,7 @@ async def generate_tailored_resume(
             detail="Erro ao personalizar o currículo. Tente novamente em alguns minutos.",
         )
 
-    # Generate cover letter with Opus
+    # Generate cover letter
     try:
         cover_letter = await generate_cover_letter(
             profile=enriched_profile,
@@ -119,7 +120,7 @@ async def get_tailored_result(
 
     return {
         "resume": result.get("resumeContent", ""),
-        "coverLetter": result.get("coverLetter", ""),
+        "coverLetter": result.get("coverLetterText", ""),
         "atsScore": result.get("atsScore", 0),
     }
 
@@ -133,6 +134,14 @@ async def regenerate_resume(
     logger.info("regenerate_start", uid=user.uid, application_id=body.application_id)
 
     fs = FirestoreService()
+
+    # Check daily usage limit
+    usage = await fs.get_daily_usage(user.uid)
+    if usage >= settings.max_daily_tailor_count:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Você atingiu o limite diário de {settings.max_daily_tailor_count} personalizações. Tente novamente amanhã.",
+        )
 
     application = await fs.get_application(user.uid, body.application_id)
     if not application:
@@ -173,8 +182,103 @@ async def regenerate_resume(
         uid=user.uid,
         application_id=body.application_id,
         resume_content=resume_content,
-        cover_letter=application.get("coverLetter", ""),
+        cover_letter=application.get("coverLetterText", application.get("coverLetter", "")),
         ats_score=application.get("atsScore", 0) or 0,
     )
 
+    # Increment daily usage
+    await fs.increment_daily_usage(user.uid)
+
     return {"status": "regenerated", "resumeContent": resume_content}
+
+
+# --- Version CRUD (Phase 4) ---
+
+
+@router.get("/versions/{application_id}")
+async def list_versions(
+    application_id: str,
+    user: AuthenticatedUser = Depends(get_current_user),
+):
+    """List all versions for an application."""
+    fs = FirestoreService()
+    versions = await fs.list_resume_versions(user.uid, application_id)
+    return {"versions": versions}
+
+
+class UpdateContentRequest(BaseModel):
+    content: str = Field(max_length=20000)
+
+
+@router.put("/version/{application_id}/{version_id}")
+async def update_version_content(
+    application_id: str,
+    version_id: str,
+    body: UpdateContentRequest,
+    user: AuthenticatedUser = Depends(get_current_user),
+):
+    """Update a version's resume content."""
+    fs = FirestoreService()
+
+    version = await fs.get_resume_version(user.uid, application_id, version_id)
+    if not version:
+        raise HTTPException(status_code=404, detail="Versão não encontrada.")
+
+    await fs.update_resume_content(user.uid, application_id, version_id, body.content)
+    return {"status": "updated"}
+
+
+@router.post("/version/{application_id}/{version_id}/copy")
+async def copy_version(
+    application_id: str,
+    version_id: str,
+    user: AuthenticatedUser = Depends(get_current_user),
+):
+    """Duplicate a version with '(cópia)' suffix."""
+    fs = FirestoreService()
+
+    try:
+        new_id = await fs.copy_resume_version(user.uid, application_id, version_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Versão não encontrada.")
+
+    return {"status": "copied", "versionId": new_id}
+
+
+class RenameRequest(BaseModel):
+    name: str = Field(max_length=100, min_length=1)
+
+
+@router.patch("/version/{application_id}/{version_id}/rename")
+async def rename_version(
+    application_id: str,
+    version_id: str,
+    body: RenameRequest,
+    user: AuthenticatedUser = Depends(get_current_user),
+):
+    """Rename a version."""
+    fs = FirestoreService()
+
+    version = await fs.get_resume_version(user.uid, application_id, version_id)
+    if not version:
+        raise HTTPException(status_code=404, detail="Versão não encontrada.")
+
+    await fs.rename_resume_version(user.uid, application_id, version_id, body.name)
+    return {"status": "renamed"}
+
+
+@router.delete("/version/{application_id}/{version_id}")
+async def delete_version(
+    application_id: str,
+    version_id: str,
+    user: AuthenticatedUser = Depends(get_current_user),
+):
+    """Delete a version and its Cloud Storage file."""
+    fs = FirestoreService()
+
+    version = await fs.get_resume_version(user.uid, application_id, version_id)
+    if not version:
+        raise HTTPException(status_code=404, detail="Versão não encontrada.")
+
+    await fs.delete_resume_version(user.uid, application_id, version_id)
+    return {"status": "deleted"}

@@ -2,23 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  FileText,
-  Mic,
-  Briefcase,
-  BarChart3,
-  Download,
-  LayoutDashboard,
-} from "lucide-react";
+import { Briefcase, User, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { href: "/dashboard", label: "Painel", icon: LayoutDashboard },
-  { href: "/dashboard/perfil", label: "Currículo", icon: FileText },
-  { href: "/dashboard/entrevista", label: "Entrevista", icon: Mic },
-  { href: "/dashboard/vaga", label: "Vaga", icon: Briefcase },
-  { href: "/dashboard/analise", label: "Análise", icon: BarChart3 },
-  { href: "/dashboard/resultado", label: "Resultado", icon: Download },
+  { href: "/dashboard", label: "Candidaturas", icon: Briefcase },
+  { href: "/dashboard/perfil", label: "Perfil", icon: User },
+  { href: "/dashboard/vaga", label: "Nova Vaga", icon: Plus },
 ];
 
 export function MobileNav() {
@@ -26,10 +16,13 @@ export function MobileNav() {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 glass border-t border-border/50 md:hidden safe-area-bottom">
-      <div className="grid grid-cols-6">
+      <div className="grid grid-cols-3">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = pathname === item.href;
+          const isActive =
+            item.href === "/dashboard"
+              ? pathname === "/dashboard" || pathname?.startsWith("/dashboard/candidatura")
+              : pathname === item.href;
           return (
             <Link
               key={item.href}

@@ -6,15 +6,18 @@ import { auth } from "@/lib/firebase";
 import { useAuthStore } from "@/lib/store";
 
 export function useAuth() {
-  const { user, loading, setUser, setLoading } = useAuthStore();
+  const { user, loading, setAuth } = useAuthStore();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
-      setLoading(false);
+    if (!auth) {
+      setAuth(null);
+      return;
+    }
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      setAuth(firebaseUser);
     });
     return unsubscribe;
-  }, [setUser, setLoading]);
+  }, [setAuth]);
 
   return { user, loading };
 }

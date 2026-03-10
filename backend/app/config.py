@@ -30,11 +30,18 @@ class Settings(BaseSettings):
     # Timeouts (seconds)
     default_timeout: int = 30
     opus_timeout: int = 60
+    generation_timeout: int = 60
 
-    # Model configuration
+    # AI backend switch: "gemini" or "claude"
+    ai_backend: str = "gemini"
+
+    # Model configuration — Claude (fallback)
     model_opus: str = "claude-opus-4-6"
     model_sonnet: str = "claude-sonnet-4-6"
     model_haiku: str = "claude-haiku-4-5-20251001"
+
+    # Model configuration — Gemini
+    model_gemini: str = "gemini-3.1-pro-preview"
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

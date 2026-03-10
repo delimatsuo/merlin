@@ -7,7 +7,7 @@ from app.auth import AuthenticatedUser, get_current_user
 from app.config import get_settings
 from app.schemas.api import ProfileResponse
 from app.services.parser import parse_resume
-from app.services.claude import structure_resume
+from app.services.gemini_ai import structure_resume
 from app.services.firestore import FirestoreService
 
 logger = structlog.get_logger()
@@ -105,6 +105,14 @@ async def upload_resume(
         structured_data=profile_data,
         file_url=file_url,
     )
+
+    # Merge into knowledge file (fire-and-forget)
+    try:
+        from app.services.knowledge import merge_resume_into_knowledge
+        import asyncio
+        asyncio.create_task(merge_resume_into_knowledge(user.uid, profile_data, profile_id))
+    except Exception as e:
+        logger.warning("knowledge_merge_skipped", uid=user.uid, error=str(e))
 
     logger.info("resume_upload_complete", uid=user.uid, profile_id=profile_id)
 

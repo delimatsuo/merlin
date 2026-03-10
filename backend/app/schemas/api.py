@@ -71,10 +71,19 @@ class SkillMatch(BaseModel):
     evidence: Optional[str] = None
 
 
+class FollowUpDecision(BaseModel):
+    decision: str  # "skip", "text", "voice"
+    questions: list[str] = []
+
+    model_config = {"populate_by_name": True}
+
+
 class JobAnalysisResponse(BaseModel):
     analysis: dict
     skills_matrix: list[SkillMatch] = Field(alias="skillsMatrix", default=[])
     ats_score: Optional[float] = Field(alias="atsScore", default=None)
+    application_id: str = Field(alias="applicationId", default="")
+    follow_up: Optional[FollowUpDecision] = Field(alias="followUp", default=None)
 
     model_config = {"populate_by_name": True}
 
