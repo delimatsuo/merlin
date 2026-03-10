@@ -182,6 +182,8 @@ async def merge_voice_into_knowledge(uid: str, voice_insights: dict) -> None:
 async def merge_comment_into_knowledge(uid: str, comment: str, application_context: str = "") -> None:
     """Merge a user comment into the knowledge file. Fire-and-forget."""
     try:
+        from datetime import datetime, timezone
+
         fs = FirestoreService()
         knowledge = await fs.get_candidate_knowledge(uid) or _empty_knowledge()
 
@@ -194,6 +196,15 @@ async def merge_comment_into_knowledge(uid: str, comment: str, application_conte
         knowledge["insights"] = _deduplicate_insights(
             knowledge.get("insights", []), [new_insight]
         )
+
+        # Update merge metadata for rate limiting
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        merge_meta = knowledge.get("_mergeMeta", {})
+        if merge_meta.get("date") == today:
+            merge_meta["count"] = merge_meta.get("count", 0) + 1
+        else:
+            merge_meta = {"date": today, "count": 1}
+        knowledge["_mergeMeta"] = merge_meta
 
         await fs.save_candidate_knowledge(uid, knowledge)
         logger.info("knowledge_comment_merged", uid=uid)

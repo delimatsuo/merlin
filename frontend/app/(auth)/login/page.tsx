@@ -6,7 +6,6 @@ import Link from "next/link";
 import {
   signInWithEmailAndPassword,
   signInWithPopup,
-  signOut,
 } from "firebase/auth";
 import { auth, googleProvider } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
@@ -20,14 +19,13 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Clear any stale/broken auth state when landing on login page.
-  // This prevents redirect loops from orphaned Firebase sessions.
-  // After a fresh signInWithPopup/signInWithEmail, the handler redirects to dashboard.
+  // If the user is already authenticated, redirect to dashboard
+  // instead of showing the login form. Only sign out on explicit logout action.
   useEffect(() => {
-    if (auth) {
-      signOut(auth).catch(() => {});
+    if (auth?.currentUser) {
+      router.replace("/dashboard");
     }
-  }, []);
+  }, [router]);
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();

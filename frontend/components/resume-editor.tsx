@@ -55,8 +55,10 @@ export function ResumeEditor({
     try {
       await api.put(`/api/tailor/version/${applicationId}/${activeVersion.id}`, {
         content: editContent,
+        field: activeTab === "resume" ? "resumeContent" : "coverLetterText",
       });
-      updateVersion(activeVersion.id, { resumeContent: editContent });
+      const updateField = activeTab === "resume" ? "resumeContent" : "coverLetterText";
+      updateVersion(activeVersion.id, { [updateField]: editContent } as Partial<ResumeVersion>);
       setEditing(false);
     } catch {
       // ignore

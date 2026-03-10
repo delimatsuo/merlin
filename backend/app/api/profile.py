@@ -124,12 +124,10 @@ async def merge_knowledge_insights(
 
     # Rate limit: check daily merge count
     fs = FirestoreService()
-    today_key = f"knowledge_merge_count"
     knowledge = await fs.get_candidate_knowledge(user.uid)
-    # Simple rate limiting via knowledge doc metadata
+    from datetime import datetime, timezone
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     if knowledge:
-        from datetime import datetime, timezone
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         merge_meta = knowledge.get("_mergeMeta", {})
         if merge_meta.get("date") == today and merge_meta.get("count", 0) >= 20:
             raise HTTPException(

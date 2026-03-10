@@ -119,8 +119,17 @@ export default function VagaPage() {
     }
 
     try {
-      // Get profileId from workflow store
-      const { profileId } = useWorkflowStore.getState();
+      // Get profileId from workflow store, fallback to fetching latest profile
+      let { profileId } = useWorkflowStore.getState();
+      if (!profileId) {
+        const profiles = await api.get<{ profiles: { id: string }[] }>("/api/profile/all");
+        profileId = profiles.profiles[0]?.id || "";
+      }
+      if (!profileId) {
+        setError("Nenhum perfil encontrado. Envie seu curriculo primeiro.");
+        setGenerating(false);
+        return;
+      }
       const genResult = await api.post<{
         resumeContent: string;
         coverLetter: string;

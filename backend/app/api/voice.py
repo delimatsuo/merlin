@@ -79,7 +79,12 @@ async def text_to_speech(
         ),
     )
 
-    audio_data = response.candidates[0].content.parts[0].inline_data.data
+    if not response.candidates or not response.candidates[0].content.parts:
+        raise HTTPException(status_code=502, detail="Erro na geração de áudio.")
+    part = response.candidates[0].content.parts[0]
+    if not hasattr(part, "inline_data") or not part.inline_data or not part.inline_data.data:
+        raise HTTPException(status_code=502, detail="Resposta de áudio vazia.")
+    audio_data = part.inline_data.data
 
     # Wrap raw PCM in WAV container for browser playback
     buf = io.BytesIO()
