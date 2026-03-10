@@ -259,7 +259,8 @@ async def rewrite_resume(
         contents=user_content,
         config=types.GenerateContentConfig(
             system_instruction=RESUME_REWRITING_PROMPT,
-            temperature=0.7,
+            temperature=0.85,
+            max_output_tokens=4096,
         ),
     )
 
@@ -268,6 +269,7 @@ async def rewrite_resume(
         "gemini_usage",
         model=settings.model_gemini,
         task="rewrite_resume",
+        prompt_version="v2",
         input_tokens=response.usage_metadata.prompt_token_count,
         output_tokens=response.usage_metadata.candidates_token_count,
     )
@@ -295,7 +297,8 @@ async def generate_cover_letter(
         contents=context,
         config=types.GenerateContentConfig(
             system_instruction=COVER_LETTER_PROMPT,
-            temperature=0.7,
+            temperature=0.85,
+            max_output_tokens=2048,
         ),
     )
 
@@ -304,6 +307,7 @@ async def generate_cover_letter(
         "gemini_usage",
         model=settings.model_gemini,
         task="cover_letter",
+        prompt_version="v2",
         input_tokens=response.usage_metadata.prompt_token_count,
         output_tokens=response.usage_metadata.candidates_token_count,
     )
