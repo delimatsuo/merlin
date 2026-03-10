@@ -1,5 +1,6 @@
 """Document export endpoints."""
 
+from typing import Optional
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -15,6 +16,7 @@ router = APIRouter()
 @router.get("/resume", response_model=ExportResponse)
 async def export_resume(
     application_id: str,
+    version_id: Optional[str] = None,
     user: AuthenticatedUser = Depends(get_current_user),
 ):
     """Generate and return a signed URL for the tailored resume DOCX."""
@@ -27,8 +29,12 @@ async def export_resume(
             detail="Aplicação não encontrada.",
         )
 
-    # Get latest resume version
-    resume = await fs.get_latest_resume(user.uid, application_id)
+    # Get specific version or latest
+    if version_id:
+        resume = await fs.get_resume_version(user.uid, application_id, version_id)
+    else:
+        resume = await fs.get_latest_resume(user.uid, application_id)
+
     if not resume:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -60,6 +66,7 @@ async def export_resume(
 @router.get("/cover-letter", response_model=ExportResponse)
 async def export_cover_letter(
     application_id: str,
+    version_id: Optional[str] = None,
     user: AuthenticatedUser = Depends(get_current_user),
 ):
     """Generate and return a signed URL for the cover letter DOCX."""
@@ -72,7 +79,12 @@ async def export_cover_letter(
             detail="Aplicação não encontrada.",
         )
 
-    resume = await fs.get_latest_resume(user.uid, application_id)
+    # Get specific version or latest
+    if version_id:
+        resume = await fs.get_resume_version(user.uid, application_id, version_id)
+    else:
+        resume = await fs.get_latest_resume(user.uid, application_id)
+
     if not resume:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

@@ -17,6 +17,12 @@ service cloud.firestore {
         }
       }
 
+      // Knowledge subcollection — read: owner, write: backend only
+      match /knowledge/{doc} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow write: if false;
+      }
+
       // Applications subcollection
       match /applications/{applicationId} {
         allow read, write: if request.auth != null && request.auth.uid == uid;

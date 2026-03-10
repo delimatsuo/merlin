@@ -83,6 +83,26 @@ class FirestoreService:
 
         return docs[0] if docs else None
 
+    async def list_all_profiles(self, uid: str) -> list[dict]:
+        """List all profiles for a user, newest first."""
+        query = (
+            self.db.collection("users").document(uid).collection("profiles")
+            .order_by("createdAt", direction=firestore.Query.DESCENDING)
+        )
+        results = []
+        async for doc in query.stream():
+            data = doc.to_dict()
+            data["id"] = doc.id
+            # Return summary fields only
+            results.append({
+                "id": data["id"],
+                "name": data.get("structuredData", {}).get("name", ""),
+                "status": data.get("status", ""),
+                "fileUrl": data.get("fileUrl", ""),
+                "createdAt": data.get("createdAt", ""),
+            })
+        return results
+
     async def update_profile(self, uid: str, profile_id: str, data: dict) -> None:
         """Update profile structured data."""
         doc_ref = self.db.collection("users").document(uid).collection("profiles").document(profile_id)
@@ -107,6 +127,30 @@ class FirestoreService:
         """Delete a profile."""
         doc_ref = self.db.collection("users").document(uid).collection("profiles").document(profile_id)
         await doc_ref.delete()
+
+    # --- Knowledge File Operations ---
+
+    async def get_candidate_knowledge(self, uid: str) -> Optional[dict]:
+        """Get the candidate's knowledge file."""
+        doc_ref = (
+            self.db.collection("users").document(uid)
+            .collection("knowledge").document("current")
+        )
+        doc = await doc_ref.get()
+        if doc.exists:
+            return doc.to_dict()
+        return None
+
+    async def save_candidate_knowledge(self, uid: str, knowledge: dict) -> None:
+        """Save or overwrite the candidate's knowledge file."""
+        now = datetime.now(timezone.utc).isoformat()
+        knowledge["lastUpdated"] = now
+
+        doc_ref = (
+            self.db.collection("users").document(uid)
+            .collection("knowledge").document("current")
+        )
+        await doc_ref.set(knowledge)
 
     # --- Company Cache Operations ---
 
@@ -165,22 +209,39 @@ class FirestoreService:
             "skillsMatrix": skills_matrix,
             "atsScore": ats_score,
             "atsKeywords": ats_keywords,
+            "status": "analyzed",
             "createdAt": now,
         })
 
         return application_id
 
-    async def get_user_applications(self, uid: str) -> list[dict]:
-        """Get all applications for a user, newest first."""
+    async def get_user_applications(self, uid: str, limit: int = 20, start_after: str = "") -> list[dict]:
+        """Get applications for a user, newest first. Cursor-based pagination."""
         query = (
             self.db.collection("users").document(uid).collection("applications")
             .order_by("createdAt", direction=firestore.Query.DESCENDING)
-            .limit(10)
+            .limit(limit)
         )
+
+        if start_after:
+            # Cursor-based pagination
+            cursor_doc = await (
+                self.db.collection("users").document(uid)
+                .collection("applications").document(start_after)
+            ).get()
+            if cursor_doc.exists:
+                query = query.start_after(cursor_doc)
+
         results = []
         async for doc in query.stream():
             data = doc.to_dict()
             data["id"] = doc.id
+            # Count resume versions
+            resumes_ref = doc.reference.collection("resumes")
+            version_count = 0
+            async for _ in resumes_ref.select([]).stream():
+                version_count += 1
+            data["versionCount"] = version_count
             results.append(data)
         return results
 
@@ -197,6 +258,31 @@ class FirestoreService:
             return data
         return None
 
+    async def delete_application(self, uid: str, application_id: str) -> None:
+        """Delete an application with cascade: resumes subcollection + storage files."""
+        app_ref = (
+            self.db.collection("users").document(uid)
+            .collection("applications").document(application_id)
+        )
+
+        # Delete resumes subcollection
+        resumes_ref = app_ref.collection("resumes")
+        async for doc in resumes_ref.stream():
+            # Delete storage file if exists
+            data = doc.to_dict()
+            file_url = data.get("docxFileUrl")
+            if file_url:
+                try:
+                    bucket = storage.bucket()
+                    blob = bucket.blob(file_url)
+                    blob.delete()
+                except Exception:
+                    pass
+            await doc.reference.delete()
+
+        # Delete application doc
+        await app_ref.delete()
+
     # --- Resume Version Operations ---
 
     async def save_tailored_resume(
@@ -211,6 +297,10 @@ class FirestoreService:
         version_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
 
+        # Count existing versions for auto-naming
+        existing = await self.list_resume_versions(uid, application_id)
+        version_number = len(existing) + 1
+
         doc_ref = (
             self.db.collection("users").document(uid)
             .collection("applications").document(application_id)
@@ -220,8 +310,11 @@ class FirestoreService:
             "resumeContent": resume_content,
             "coverLetterText": cover_letter,
             "atsScore": ats_score,
+            "name": f"Versão {version_number}",
+            "type": "resume",
             "docxFileUrl": None,
             "createdAt": now,
+            "updatedAt": now,
         })
 
         return version_id
@@ -242,6 +335,115 @@ class FirestoreService:
             docs.append(data)
 
         return docs[0] if docs else None
+
+    async def list_resume_versions(self, uid: str, application_id: str) -> list[dict]:
+        """List all resume versions for an application, newest first."""
+        query = (
+            self.db.collection("users").document(uid)
+            .collection("applications").document(application_id)
+            .collection("resumes")
+            .order_by("createdAt", direction=firestore.Query.DESCENDING)
+        )
+        results = []
+        async for doc in query.stream():
+            data = doc.to_dict()
+            data["id"] = doc.id
+            # Handle legacy docs without name/type
+            if "name" not in data:
+                data["name"] = f"Versão {len(results) + 1}"
+            if "type" not in data:
+                data["type"] = "resume"
+            results.append(data)
+        return results
+
+    async def get_resume_version(self, uid: str, application_id: str, version_id: str) -> Optional[dict]:
+        """Get a specific resume version."""
+        doc_ref = (
+            self.db.collection("users").document(uid)
+            .collection("applications").document(application_id)
+            .collection("resumes").document(version_id)
+        )
+        doc = await doc_ref.get()
+        if doc.exists:
+            data = doc.to_dict()
+            data["id"] = doc.id
+            if "name" not in data:
+                data["name"] = "Versão"
+            if "type" not in data:
+                data["type"] = "resume"
+            return data
+        return None
+
+    async def update_resume_content(self, uid: str, application_id: str, version_id: str, content: str) -> None:
+        """Update the content of a resume version."""
+        doc_ref = (
+            self.db.collection("users").document(uid)
+            .collection("applications").document(application_id)
+            .collection("resumes").document(version_id)
+        )
+        await doc_ref.update({
+            "resumeContent": content,
+            "updatedAt": datetime.now(timezone.utc).isoformat(),
+        })
+
+    async def copy_resume_version(self, uid: str, application_id: str, version_id: str) -> str:
+        """Duplicate a resume version with '(cópia)' suffix."""
+        original = await self.get_resume_version(uid, application_id, version_id)
+        if not original:
+            raise ValueError("Version not found")
+
+        new_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+
+        doc_ref = (
+            self.db.collection("users").document(uid)
+            .collection("applications").document(application_id)
+            .collection("resumes").document(new_id)
+        )
+        await doc_ref.set({
+            "resumeContent": original.get("resumeContent", ""),
+            "coverLetterText": original.get("coverLetterText", ""),
+            "atsScore": original.get("atsScore", 0),
+            "name": f"{original.get('name', 'Versão')} (cópia)",
+            "type": original.get("type", "resume"),
+            "docxFileUrl": None,
+            "createdAt": now,
+            "updatedAt": now,
+        })
+
+        return new_id
+
+    async def rename_resume_version(self, uid: str, application_id: str, version_id: str, new_name: str) -> None:
+        """Rename a resume version."""
+        doc_ref = (
+            self.db.collection("users").document(uid)
+            .collection("applications").document(application_id)
+            .collection("resumes").document(version_id)
+        )
+        await doc_ref.update({
+            "name": new_name[:100],
+            "updatedAt": datetime.now(timezone.utc).isoformat(),
+        })
+
+    async def delete_resume_version(self, uid: str, application_id: str, version_id: str) -> None:
+        """Delete a resume version and its Cloud Storage file."""
+        doc_ref = (
+            self.db.collection("users").document(uid)
+            .collection("applications").document(application_id)
+            .collection("resumes").document(version_id)
+        )
+        doc = await doc_ref.get()
+        if doc.exists:
+            data = doc.to_dict()
+            file_url = data.get("docxFileUrl")
+            if file_url:
+                try:
+                    bucket = storage.bucket()
+                    blob = bucket.blob(file_url)
+                    blob.delete()
+                except Exception:
+                    pass
+            await doc_ref.delete()
 
     # --- Voice Session Operations ---
 
@@ -377,7 +579,7 @@ class FirestoreService:
 
     async def export_user_data(self, uid: str) -> dict:
         """Export all user data (LGPD right to access)."""
-        data = {"uid": uid, "profiles": [], "applications": [], "voiceSessions": []}
+        data = {"uid": uid, "profiles": [], "applications": [], "voiceSessions": [], "knowledge": None}
 
         # Profiles
         profiles_ref = self.db.collection("users").document(uid).collection("profiles")
@@ -400,6 +602,11 @@ class FirestoreService:
             session["id"] = doc.id
             data["voiceSessions"].append(session)
 
+        # Knowledge file
+        knowledge = await self.get_candidate_knowledge(uid)
+        if knowledge:
+            data["knowledge"] = knowledge
+
         return data
 
     async def delete_all_user_data(self, uid: str) -> None:
@@ -411,6 +618,11 @@ class FirestoreService:
             pii_ref = doc.reference.collection("pii")
             async for pii_doc in pii_ref.stream():
                 await pii_doc.reference.delete()
+            await doc.reference.delete()
+
+        # Delete knowledge subcollection
+        knowledge_ref = self.db.collection("users").document(uid).collection("knowledge")
+        async for doc in knowledge_ref.stream():
             await doc.reference.delete()
 
         # Delete applications and their resumes

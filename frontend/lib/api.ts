@@ -65,6 +65,30 @@ class ApiClient {
     return this.handleResponse<T>(response);
   }
 
+  async put<T>(path: string, body?: unknown): Promise<T> {
+    const response = await this.retryOnce(async () => {
+      const headers = await this.getHeaders();
+      return fetch(`${API_BASE_URL}${path}`, {
+        method: "PUT",
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+    });
+    return this.handleResponse<T>(response);
+  }
+
+  async patch<T>(path: string, body?: unknown): Promise<T> {
+    const response = await this.retryOnce(async () => {
+      const headers = await this.getHeaders();
+      return fetch(`${API_BASE_URL}${path}`, {
+        method: "PATCH",
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+    });
+    return this.handleResponse<T>(response);
+  }
+
   async upload<T>(path: string, file: File): Promise<T> {
     const response = await this.retryOnce(async () => {
       const headers = await this.getAuthHeaders();

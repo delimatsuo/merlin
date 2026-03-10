@@ -17,7 +17,7 @@ from pydantic import BaseModel
 
 from app.auth import AuthenticatedUser, verify_ws_token, get_current_user
 from app.config import get_settings
-from app.services.claude import generate_interview_questions, process_voice_answers
+from app.services.gemini_ai import generate_interview_questions, process_voice_answers
 from app.services.firestore import FirestoreService
 
 logger = structlog.get_logger()
@@ -174,6 +174,16 @@ async def voice_session(websocket: WebSocket):
     fs = FirestoreService()
     session_id = websocket.query_params.get("sessionId", "")
 
+    # Validate session ownership
+    if session_id:
+        session = await fs.get_voice_session(session_id)
+        if not session:
+            await websocket.close(code=4003, reason="Sessão não encontrada.")
+            return
+        if session.get("userId") != user.uid:
+            await websocket.close(code=4003, reason="Acesso negado.")
+            return
+
     try:
         while True:
             data = await websocket.receive_text()
@@ -303,5 +313,13 @@ async def complete_interview(
         )
 
     await fs.update_voice_session_status(session_id, "completed")
+
+    # Merge into knowledge file (fire-and-forget)
+    try:
+        from app.services.knowledge import merge_voice_into_knowledge
+        import asyncio
+        asyncio.create_task(merge_voice_into_knowledge(user.uid, profile_update))
+    except Exception as e:
+        logger.warning("knowledge_voice_merge_skipped", uid=user.uid, error=str(e))
 
     return {"status": "completed", "profileUpdate": profile_update}

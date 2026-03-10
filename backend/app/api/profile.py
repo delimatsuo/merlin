@@ -1,11 +1,13 @@
 """Profile CRUD endpoints."""
 
+import html
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.auth import AuthenticatedUser, get_current_user
 from app.schemas.api import ProfileUpdateRequest
 from app.services.firestore import FirestoreService
+from app.services.knowledge import build_knowledge_from_profile, merge_comment_into_knowledge
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -72,6 +74,88 @@ async def get_current_profile(
         )
 
     return profile
+
+
+@router.get("/all")
+async def list_all_profiles(
+    user: AuthenticatedUser = Depends(get_current_user),
+):
+    """List all uploaded resumes for a user."""
+    fs = FirestoreService()
+    profiles = await fs.list_all_profiles(user.uid)
+    return {"profiles": profiles}
+
+
+@router.get("/knowledge")
+async def get_knowledge(
+    user: AuthenticatedUser = Depends(get_current_user),
+):
+    """Get the candidate's knowledge file. Auto-builds from profile if not exists."""
+    fs = FirestoreService()
+    knowledge = await fs.get_candidate_knowledge(user.uid)
+
+    if knowledge is None:
+        # Auto-build from latest profile (migration for existing users)
+        knowledge = await build_knowledge_from_profile(user.uid)
+
+    return {"knowledge": knowledge}
+
+
+@router.post("/knowledge/merge")
+async def merge_knowledge_insights(
+    body: dict,
+    user: AuthenticatedUser = Depends(get_current_user),
+):
+    """Manually add insights to the knowledge file (comment box)."""
+    insights = body.get("insights", [])
+    application_context = body.get("applicationContext", "")
+
+    if not insights:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Nenhum insight fornecido.",
+        )
+
+    if len(insights) > 5:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Máximo 5 insights por chamada.",
+        )
+
+    # Rate limit: check daily merge count
+    fs = FirestoreService()
+    today_key = f"knowledge_merge_count"
+    knowledge = await fs.get_candidate_knowledge(user.uid)
+    # Simple rate limiting via knowledge doc metadata
+    if knowledge:
+        from datetime import datetime, timezone
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        merge_meta = knowledge.get("_mergeMeta", {})
+        if merge_meta.get("date") == today and merge_meta.get("count", 0) >= 20:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Limite diário de 20 merges atingido.",
+            )
+
+    for insight in insights:
+        if not isinstance(insight, str):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cada insight deve ser uma string.",
+            )
+        if len(insight) > 500:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Máximo 500 caracteres por insight.",
+            )
+
+    # Sanitize HTML
+    sanitized = [html.escape(i.strip()) for i in insights if i.strip()]
+
+    for comment in sanitized:
+        await merge_comment_into_knowledge(user.uid, comment, application_context)
+
+    return {"status": "merged", "count": len(sanitized)}
 
 
 @router.put("/{profile_id}")

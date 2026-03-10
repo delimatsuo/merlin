@@ -13,24 +13,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  FileText,
-  Mic,
   Briefcase,
-  BarChart3,
-  Download,
-  LayoutDashboard,
+  User as UserIcon,
+  Plus,
   LogOut,
   User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { href: "/dashboard", label: "Painel", icon: LayoutDashboard },
-  { href: "/dashboard/perfil", label: "Currículo", icon: FileText },
-  { href: "/dashboard/entrevista", label: "Entrevista", icon: Mic },
-  { href: "/dashboard/vaga", label: "Vaga", icon: Briefcase },
-  { href: "/dashboard/analise", label: "Análise", icon: BarChart3 },
-  { href: "/dashboard/resultado", label: "Resultado", icon: Download },
+  { href: "/dashboard", label: "Candidaturas", icon: Briefcase },
+  { href: "/dashboard/perfil", label: "Meu Perfil", icon: UserIcon },
+  { href: "/dashboard/vaga", label: "Nova Vaga", icon: Plus },
 ];
 
 export function DashboardNav() {
@@ -54,7 +48,10 @@ export function DashboardNav() {
             </Link>
             <div className="hidden md:flex items-center">
               {navItems.map((item) => {
-                const isActive = pathname === item.href;
+                const isActive =
+                  item.href === "/dashboard"
+                    ? pathname === "/dashboard" || pathname?.startsWith("/dashboard/candidatura")
+                    : pathname === item.href;
                 return (
                   <Link
                     key={item.href}

@@ -95,12 +95,8 @@ export default function PrivacidadePage() {
             <div className="space-y-3">
               {[
                 {
-                  name: "Anthropic (Claude AI)",
-                  desc: "Texto do currículo e descrições de vagas para processamento de IA. Não inclui dados pessoais além do que consta no currículo.",
-                },
-                {
-                  name: "Google (Gemini)",
-                  desc: "Áudio da entrevista por voz, processado em tempo real e não armazenado pelo Google.",
+                  name: "Google (Gemini AI)",
+                  desc: "Texto do currículo, descrições de vagas e áudio da entrevista por voz para processamento de IA. Áudio processado em tempo real e não armazenado. Texto processado conforme a política de privacidade da Google Cloud.",
                 },
                 {
                   name: "Brave Search",
