@@ -3,8 +3,6 @@
 import re
 import unicodedata
 from typing import Optional
-from urllib.parse import quote
-
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
@@ -27,6 +25,8 @@ def _safe_filename(name: str) -> str:
     name = re.sub(r'[\u2014\u2013\u2012\u2015]', '-', name)
     # Keep only ASCII letters, digits, hyphens, underscores, spaces
     name = name.encode("ascii", "ignore").decode("ascii")
+    # Strip quotes to prevent Content-Disposition header injection
+    name = name.replace('"', '').replace("'", '')
     # Replace spaces with underscores, collapse multiple separators
     name = re.sub(r'[\s]+', '_', name.strip())
     name = re.sub(r'[-_]{2,}', '-', name)
@@ -46,7 +46,7 @@ async def export_resume(
     if not application:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Aplicacao nao encontrada.",
+            detail="Aplicação não encontrada.",
         )
 
     if version_id:
@@ -57,14 +57,14 @@ async def export_resume(
     if not resume:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Curriculo personalizado nao encontrado. Gere um primeiro.",
+            detail="Currículo personalizado não encontrado. Gere um primeiro.",
         )
 
     resume_content = resume.get("resumeContent", "")
     if not resume_content:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Conteudo do curriculo vazio.",
+            detail="Conteúdo do currículo vazio.",
         )
 
     try:
@@ -100,7 +100,7 @@ async def export_cover_letter(
     if not application:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Aplicacao nao encontrada.",
+            detail="Aplicação não encontrada.",
         )
 
     if version_id:
@@ -111,14 +111,14 @@ async def export_cover_letter(
     if not resume:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Carta de apresentacao nao encontrada. Gere uma primeiro.",
+            detail="Carta de apresentação não encontrada. Gere uma primeiro.",
         )
 
     cover_letter_text = resume.get("coverLetterText", "")
     if not cover_letter_text:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Conteudo da carta vazio.",
+            detail="Conteúdo da carta vazio.",
         )
 
     try:

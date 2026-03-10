@@ -113,15 +113,6 @@ class TailorResponse(BaseModel):
     model_config = {"populate_by_name": True}
 
 
-# --- Export ---
-
-class ExportResponse(BaseModel):
-    url: str
-    expires_at: str = Field(alias="expiresAt")
-
-    model_config = {"populate_by_name": True}
-
-
 # --- Voice ---
 
 class VoiceSessionResponse(BaseModel):

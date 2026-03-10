@@ -196,11 +196,15 @@ async def regenerate_resume(
             detail="Erro ao regenerar. Tente novamente.",
         )
 
+    # Preserve cover letter from the latest existing version
+    latest_version = await fs.get_latest_resume(user.uid, body.application_id)
+    existing_cover_letter = latest_version.get("coverLetterText", "") if latest_version else ""
+
     await fs.save_tailored_resume(
         uid=user.uid,
         application_id=body.application_id,
         resume_content=resume_content,
-        cover_letter=application.get("coverLetterText", application.get("coverLetter", "")),
+        cover_letter=existing_cover_letter,
         ats_score=application.get("atsScore", 0) or 0,
     )
 

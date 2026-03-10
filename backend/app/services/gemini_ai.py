@@ -60,7 +60,7 @@ async def structure_resume(raw_text: str) -> dict:
         config=types.GenerateContentConfig(
             system_instruction=PROFILE_STRUCTURING_PROMPT,
             response_mime_type="application/json",
-            temperature=1.0,
+            temperature=0.2,
         ),
     )
 
@@ -96,7 +96,7 @@ async def analyze_job_description(job_text: str) -> dict:
         config=types.GenerateContentConfig(
             system_instruction=JOB_ANALYSIS_PROMPT,
             response_mime_type="application/json",
-            temperature=1.0,
+            temperature=0.2,
         ),
     )
 
@@ -138,7 +138,7 @@ async def generate_interview_questions(
         config=types.GenerateContentConfig(
             system_instruction=QUESTION_GENERATION_PROMPT,
             response_mime_type="application/json",
-            temperature=1.0,
+            temperature=0.7,
         ),
     )
 
@@ -186,7 +186,7 @@ async def process_voice_answers(questions: list[str], answers: list[str]) -> dic
         config=types.GenerateContentConfig(
             system_instruction=VOICE_PROCESSING_PROMPT,
             response_mime_type="application/json",
-            temperature=1.0,
+            temperature=0.2,
         ),
     )
 
@@ -259,7 +259,7 @@ async def rewrite_resume(
         contents=user_content,
         config=types.GenerateContentConfig(
             system_instruction=RESUME_REWRITING_PROMPT,
-            temperature=1.0,
+            temperature=0.7,
         ),
     )
 
@@ -295,7 +295,7 @@ async def generate_cover_letter(
         contents=context,
         config=types.GenerateContentConfig(
             system_instruction=COVER_LETTER_PROMPT,
-            temperature=1.0,
+            temperature=0.7,
         ),
     )
 
@@ -334,7 +334,7 @@ Technical skills, tools, certifications, methodologies, and industry-specific te
 - Keep keywords as they appear in the JD (preserve language)
 </constraints>""",
             response_mime_type="application/json",
-            temperature=1.0,
+            temperature=0.2,
         ),
     )
 
@@ -377,7 +377,7 @@ async def infer_skills_from_research(experience: list, company_research: dict) -
         config=types.GenerateContentConfig(
             system_instruction=ENRICHMENT_PROMPT,
             response_mime_type="application/json",
-            temperature=1.0,
+            temperature=0.2,
         ),
     )
 
@@ -436,7 +436,7 @@ Generate targeted follow-up questions to fill gaps between the candidate's profi
 
 Return a JSON array of strings.""",
             response_mime_type="application/json",
-            temperature=1.0,
+            temperature=0.7,
         ),
     )
 
@@ -500,7 +500,7 @@ Semantically match candidate skills against job requirements. The input contains
 }
 </schema>""",
             response_mime_type="application/json",
-            temperature=1.0,
+            temperature=0.2,
         ),
     )
 

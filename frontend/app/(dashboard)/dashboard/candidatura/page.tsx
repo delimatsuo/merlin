@@ -79,16 +79,14 @@ function CandidaturaContent() {
         `/api/tailor/versions/${applicationId}`
       );
       setVersions(versionsResult.versions);
-    } catch {
-      // ignore
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Erro ao regenerar o curriculo.");
     } finally {
       setRegenerating(false);
     }
   };
 
   const handleNewVersion = async () => {
-    // Navigate to vaga page to generate a new version
-    // Or trigger regeneration with default instructions
     setRegenerating(true);
     try {
       await api.post<{ resumeContent: string }>("/api/tailor/regenerate", {
@@ -99,8 +97,8 @@ function CandidaturaContent() {
         `/api/tailor/versions/${applicationId}`
       );
       setVersions(versionsResult.versions);
-    } catch {
-      // ignore
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Erro ao gerar nova versao.");
     } finally {
       setRegenerating(false);
     }
