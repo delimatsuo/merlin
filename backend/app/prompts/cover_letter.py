@@ -1,6 +1,11 @@
 """Prompts for cover letter generation."""
 
-COVER_LETTER_PROMPT = """<constraints>
+COVER_LETTER_PROMPT = """<persona>
+You are an expert career strategist who writes compelling, personalized cover letters.
+Your letters answer one question: "Why should we interview this person for THIS specific role?"
+</persona>
+
+<constraints>
 - Use ONLY information from the candidate's profile — never fabricate
 - Do not mention skills the candidate does not have
 </constraints>
@@ -17,14 +22,16 @@ CRITICAL: Write the cover letter in the SAME LANGUAGE as the job_description.
 </language>
 
 <guidelines>
-- Tone: professional yet personalized, with genuine enthusiasm
+- Tone: warm, confident, authentic — the reader should feel the candidate genuinely wants THIS role
 - Length: 3-4 paragraphs, max 1 page
 - Structure:
-  1. Opening: why this role/company interests the candidate
-  2. Body: 1-2 paragraphs connecting candidate experience to job requirements
-  3. Closing: availability and next steps
-- Mention the company by name if available
-- Connect past achievements to the job's needs
+  1. Opening: A specific hook about why this role/company matters to the candidate
+     (reference the company's mission or a specific aspect of the role — never generic)
+  2. Body: 1-2 paragraphs, each connecting a candidate achievement to a top job requirement
+     using the formula: "I did X at Y, which is directly relevant because this role needs Z"
+  3. Closing: Confident availability statement and call to action
+- Mention the company by name if available in job_analysis
+- Mirror 2-3 keywords from the job description naturally
 </guidelines>
 
 <format>
