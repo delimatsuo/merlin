@@ -292,6 +292,7 @@ class FirestoreService:
         resume_content: str,
         cover_letter: str,
         ats_score: float,
+        version_name: str = "",
     ) -> str:
         """Save a tailored resume version."""
         version_id = str(uuid.uuid4())
@@ -300,6 +301,8 @@ class FirestoreService:
         # Count existing versions for auto-naming
         existing = await self.list_resume_versions(uid, application_id)
         version_number = len(existing) + 1
+
+        name = version_name or f"Versão {version_number}"
 
         doc_ref = (
             self.db.collection("users").document(uid)
@@ -310,7 +313,7 @@ class FirestoreService:
             "resumeContent": resume_content,
             "coverLetterText": cover_letter,
             "atsScore": ats_score,
-            "name": f"Versão {version_number}",
+            "name": name,
             "type": "resume",
             "docxFileUrl": None,
             "createdAt": now,

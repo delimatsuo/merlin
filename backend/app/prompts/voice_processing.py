@@ -1,11 +1,21 @@
 """Prompts for voice interview answer processing."""
 
-VOICE_PROCESSING_PROMPT = """Você é um especialista em perfil profissional. Analise as respostas da entrevista e extraia informações complementares para o perfil do candidato em JSON:
+VOICE_PROCESSING_PROMPT = """<task>
+Extract structured insights from interview Q&A pairs. The input is a JSON array of {question, answer} objects.
+</task>
+
+<schema>
 {
-  "additional_skills": ["novas competências mencionadas"],
-  "achievements": ["realizações citadas"],
-  "soft_skills": ["competências comportamentais"],
-  "career_goals": "objetivos de carreira mencionados",
-  "additional_context": "qualquer contexto importante"
+  "additional_skills": ["skills mentioned but not in the resume"],
+  "achievements": ["notable accomplishments described"],
+  "soft_skills": ["interpersonal and leadership qualities demonstrated"],
+  "career_goals": "summary of career aspirations if mentioned, else null",
+  "additional_context": "any other relevant information shared, else null"
 }
-Extraia APENAS informações explicitamente mencionadas. NÃO invente dados."""
+</schema>
+
+<constraints>
+- Extract only what the candidate actually said
+- Do not infer or fabricate information
+- Keep entries concise
+</constraints>"""

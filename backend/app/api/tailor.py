@@ -48,18 +48,24 @@ async def generate_tailored_resume(
             detail="Vaga não encontrada.",
         )
 
-    enriched_profile = profile.get("enrichedProfile") or profile.get("structuredData", {})
+    structured_data = profile.get("structuredData", {})
+    enrichment = profile.get("enrichedProfile") or {}
     job_analysis = application.get("jobAnalysis", {})
     job_description = application.get("jobDescriptionText", "")
     ats_keywords = application.get("atsKeywords", [])
 
+    # Fetch knowledge file for richer context
+    knowledge = await fs.get_candidate_knowledge(user.uid)
+
     # Rewrite resume
     try:
         resume_content = await rewrite_resume(
-            profile=enriched_profile,
+            profile=structured_data,
             job_description=job_description,
             job_analysis=job_analysis,
             ats_keywords=ats_keywords,
+            knowledge=knowledge,
+            enrichment=enrichment,
         )
     except Exception as e:
         logger.error("tailor_resume_error", uid=user.uid, error=str(e))
@@ -71,7 +77,7 @@ async def generate_tailored_resume(
     # Generate cover letter
     try:
         cover_letter = await generate_cover_letter(
-            profile=enriched_profile,
+            profile=structured_data,
             job_description=job_description,
             job_analysis=job_analysis,
         )
@@ -82,6 +88,11 @@ async def generate_tailored_resume(
     # Calculate updated ATS score
     ats_score = application.get("atsScore", 0) or 0
 
+    # Build version name from job analysis
+    title = job_analysis.get("title", "")
+    company = job_analysis.get("company", "")
+    version_name = f"{company} — {title}" if company and title else title or company or ""
+
     # Save result
     await fs.save_tailored_resume(
         uid=user.uid,
@@ -89,6 +100,7 @@ async def generate_tailored_resume(
         resume_content=resume_content,
         cover_letter=cover_letter,
         ats_score=ats_score,
+        version_name=version_name,
     )
 
     # Increment daily usage
@@ -158,18 +170,24 @@ async def regenerate_resume(
             detail="Perfil não encontrado.",
         )
 
-    enriched_profile = profile.get("enrichedProfile") or profile.get("structuredData", {})
+    structured_data = profile.get("structuredData", {})
+    enrichment = profile.get("enrichedProfile") or {}
     job_analysis = application.get("jobAnalysis", {})
     job_description = application.get("jobDescriptionText", "")
     ats_keywords = application.get("atsKeywords", [])
 
+    # Fetch knowledge file for richer context
+    knowledge = await fs.get_candidate_knowledge(user.uid)
+
     try:
         resume_content = await rewrite_resume(
-            profile=enriched_profile,
+            profile=structured_data,
             job_description=job_description,
             job_analysis=job_analysis,
             ats_keywords=ats_keywords,
             additional_instructions=body.instructions,
+            knowledge=knowledge,
+            enrichment=enrichment,
         )
     except Exception as e:
         logger.error("regenerate_error", uid=user.uid, error=str(e))

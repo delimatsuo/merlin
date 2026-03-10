@@ -1,48 +1,49 @@
 """Prompts for resume profile structuring."""
 
-PROFILE_STRUCTURING_PROMPT = """Você é um especialista em análise de currículos brasileiros. Sua tarefa é extrair e estruturar as informações do currículo fornecido em um formato JSON padronizado.
+PROFILE_STRUCTURING_PROMPT = """<constraints>
+- Extract ONLY information explicitly present in the resume text
+- NEVER invent, infer, or add data not in the source
+- Missing information → null or empty array
+- Preserve original Portuguese Brazilian text
+- Normalize dates to "MM/AAAA" format when possible
+</constraints>
 
-REGRAS IMPORTANTES:
-1. Extraia APENAS informações explicitamente presentes no currículo
-2. NUNCA invente, infira ou adicione dados que não estejam no texto
-3. Se uma informação não estiver presente, use null ou lista vazia
-4. Mantenha os textos em português brasileiro conforme o original
-5. Normalize datas para o formato "MM/AAAA" quando possível
+<task>
+Parse the provided resume into this exact JSON schema:
+</task>
 
-Retorne APENAS o JSON no seguinte formato (sem texto adicional):
-
-```json
+<schema>
 {
-  "name": "nome completo",
-  "email": "email se disponível",
-  "phone": "telefone se disponível",
-  "location": "cidade/estado se disponível",
-  "summary": "resumo profissional ou objetivo (se presente no currículo)",
+  "name": "full name",
+  "email": "email or null",
+  "phone": "phone or null",
+  "location": "city/state or null",
+  "summary": "professional summary if present, else null",
   "experience": [
     {
-      "company": "nome da empresa",
-      "role": "cargo/função",
+      "company": "company name",
+      "role": "job title",
       "startDate": "MM/AAAA",
-      "endDate": "MM/AAAA ou null se atual",
-      "description": "descrição das atividades"
+      "endDate": "MM/AAAA or null if current",
+      "description": "activities description"
     }
   ],
   "education": [
     {
-      "institution": "nome da instituição",
-      "degree": "tipo do curso (Graduação, Pós-graduação, MBA, etc.)",
-      "field": "área do curso",
+      "institution": "institution name",
+      "degree": "degree type (Graduação, Pós-graduação, MBA, etc.)",
+      "field": "field of study",
       "startDate": "MM/AAAA",
-      "endDate": "MM/AAAA ou null"
+      "endDate": "MM/AAAA or null"
     }
   ],
-  "skills": ["lista de competências técnicas e ferramentas"],
+  "skills": ["technical skills and tools"],
   "languages": [
     {
-      "language": "idioma",
-      "level": "nível (básico/intermediário/avançado/fluente/nativo)"
+      "language": "language name",
+      "level": "básico/intermediário/avançado/fluente/nativo"
     }
   ],
-  "certifications": ["lista de certificações e cursos"]
+  "certifications": ["certifications and courses"]
 }
-```"""
+</schema>"""

@@ -28,7 +28,13 @@ class ApiClient {
   private async handleResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: "Erro desconhecido" }));
-      throw new Error(error.detail || `Erro ${response.status}`);
+      const detail = error.detail;
+      const message = typeof detail === "string"
+        ? detail
+        : Array.isArray(detail)
+          ? detail.map((d: { msg?: string }) => d.msg || "").join("; ") || `Erro ${response.status}`
+          : `Erro ${response.status}`;
+      throw new Error(message);
     }
     return response.json();
   }
@@ -101,6 +107,24 @@ class ApiClient {
       });
     });
     return this.handleResponse<T>(response);
+  }
+
+  async getBlob(path: string): Promise<Blob> {
+    const response = await this.retryOnce(async () => {
+      const headers = await this.getAuthHeaders();
+      return fetch(`${API_BASE_URL}${path}`, { headers });
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: "Erro desconhecido" }));
+      const detail = error.detail;
+      const message = typeof detail === "string"
+        ? detail
+        : Array.isArray(detail)
+          ? detail.map((d: { msg?: string }) => d.msg || "").join("; ") || `Erro ${response.status}`
+          : `Erro ${response.status}`;
+      throw new Error(message);
+    }
+    return response.blob();
   }
 
   async postBlob(path: string, body?: unknown): Promise<Blob> {

@@ -60,7 +60,7 @@ async def structure_resume(raw_text: str) -> dict:
         config=types.GenerateContentConfig(
             system_instruction=PROFILE_STRUCTURING_PROMPT,
             response_mime_type="application/json",
-            temperature=0.1,
+            temperature=1.0,
         ),
     )
 
@@ -96,7 +96,7 @@ async def analyze_job_description(job_text: str) -> dict:
         config=types.GenerateContentConfig(
             system_instruction=JOB_ANALYSIS_PROMPT,
             response_mime_type="application/json",
-            temperature=0.1,
+            temperature=1.0,
         ),
     )
 
@@ -138,7 +138,7 @@ async def generate_interview_questions(
         config=types.GenerateContentConfig(
             system_instruction=QUESTION_GENERATION_PROMPT,
             response_mime_type="application/json",
-            temperature=0.7,
+            temperature=1.0,
         ),
     )
 
@@ -186,7 +186,7 @@ async def process_voice_answers(questions: list[str], answers: list[str]) -> dic
         config=types.GenerateContentConfig(
             system_instruction=VOICE_PROCESSING_PROMPT,
             response_mime_type="application/json",
-            temperature=0.2,
+            temperature=1.0,
         ),
     )
 
@@ -215,13 +215,35 @@ async def rewrite_resume(
     job_analysis: dict,
     ats_keywords: list[str],
     additional_instructions: Optional[str] = None,
+    knowledge: Optional[dict] = None,
+    enrichment: Optional[dict] = None,
 ) -> str:
     """Rewrite the resume tailored to the job using Gemini."""
     client = _get_client()
     settings = get_settings()
 
+    # Build comprehensive candidate data
+    candidate_data = {"structured_resume": profile}
+    if knowledge:
+        # Include achievements and insights from knowledge file
+        extra = {}
+        if knowledge.get("achievements"):
+            extra["achievements"] = knowledge["achievements"]
+        if knowledge.get("insights"):
+            extra["insights"] = knowledge["insights"]
+        # Supplement skills from knowledge if richer
+        if len(knowledge.get("skills", [])) > len(profile.get("skills", [])):
+            extra["additional_skills"] = knowledge["skills"]
+        if extra:
+            candidate_data["knowledge_supplements"] = extra
+    if enrichment and isinstance(enrichment, dict):
+        # Include inferred skills from company research
+        inferred = enrichment.get("inferred_technical_skills", [])
+        if inferred:
+            candidate_data.setdefault("knowledge_supplements", {})["inferred_skills"] = inferred
+
     context = json.dumps({
-        "profile": profile,
+        "candidate": candidate_data,
         "job_description": _sanitize_input(job_description),
         "job_analysis": job_analysis,
         "ats_keywords": ats_keywords,
@@ -237,7 +259,7 @@ async def rewrite_resume(
         contents=user_content,
         config=types.GenerateContentConfig(
             system_instruction=RESUME_REWRITING_PROMPT,
-            temperature=0.4,
+            temperature=1.0,
         ),
     )
 
@@ -273,7 +295,7 @@ async def generate_cover_letter(
         contents=context,
         config=types.GenerateContentConfig(
             system_instruction=COVER_LETTER_PROMPT,
-            temperature=0.5,
+            temperature=1.0,
         ),
     )
 
@@ -298,12 +320,21 @@ async def extract_ats_keywords(job_description: str) -> list[str]:
         model=settings.model_gemini,
         contents=job_description,
         config=types.GenerateContentConfig(
-            system_instruction="""Extraia as palavras-chave mais importantes para sistemas ATS (Applicant Tracking System) da descrição de vaga fornecida.
-Retorne APENAS uma lista JSON de strings, sem texto adicional.
-Foque em: competências técnicas, ferramentas, certificações, metodologias e termos específicos do setor.
-Máximo 20 palavras-chave, ordenadas por importância.""",
+            system_instruction="""<task>
+Extract the most important ATS (Applicant Tracking System) keywords from the provided job description.
+</task>
+
+<focus>
+Technical skills, tools, certifications, methodologies, and industry-specific terms.
+</focus>
+
+<constraints>
+- Max 20 keywords, ordered by importance
+- Return a JSON array of strings
+- Keep keywords as they appear in the JD (preserve language)
+</constraints>""",
             response_mime_type="application/json",
-            temperature=0.1,
+            temperature=1.0,
         ),
     )
 
@@ -346,7 +377,7 @@ async def infer_skills_from_research(experience: list, company_research: dict) -
         config=types.GenerateContentConfig(
             system_instruction=ENRICHMENT_PROMPT,
             response_mime_type="application/json",
-            temperature=0.3,
+            temperature=1.0,
         ),
     )
 
@@ -386,22 +417,26 @@ async def generate_followup_questions(
         model=settings.model_gemini,
         contents=context,
         config=types.GenerateContentConfig(
-            system_instruction="""Você é um recrutador brasileiro experiente. O candidato está se candidatando a uma vaga e tem lacunas no perfil.
+            system_instruction="""<task>
+Generate targeted follow-up questions to fill gaps between the candidate's profile and the job requirements. The input contains the candidate's knowledge file, job analysis, and list of missing skills.
+</task>
 
-Gere perguntas curtas e diretas para preencher essas lacunas. Foque em:
-1. Experiência prática com as competências faltantes
-2. Projetos ou situações onde usou habilidades similares
-3. Disposição para aprender o que falta
+<constraints>
+- Max 5 questions
+- Each question targets a specific skill gap
+- Questions should be answerable in 1-2 sentences
+- Write in informal professional Brazilian Portuguese
+</constraints>
 
-REGRAS:
-- Máximo 5 perguntas
-- Perguntas devem ser respondíveis por texto (curtas)
-- Português brasileiro informal profissional
-- Cada pergunta deve ser específica para uma lacuna identificada
+<focus>
+1. Practical experience with the missing competencies
+2. Projects or situations using similar skills
+3. Willingness to learn what's missing
+</focus>
 
-Retorne APENAS uma lista JSON de strings.""",
+Return a JSON array of strings.""",
             response_mime_type="application/json",
-            temperature=0.6,
+            temperature=1.0,
         ),
     )
 
@@ -446,22 +481,26 @@ async def semantic_skill_match(
         model=settings.model_gemini,
         contents=context,
         config=types.GenerateContentConfig(
-            system_instruction="""Analise semanticamente as competências do candidato em relação às exigidas pela vaga.
+            system_instruction="""<task>
+Semantically match candidate skills against job requirements. The input contains candidate_skills, required_skills, and candidate_experience.
+</task>
 
-Considere:
-- Sinônimos e variações (ex: "JS" = "JavaScript", "gestão de projetos" = "project management")
-- Competências implícitas na experiência profissional
-- Competências relacionadas (ex: ter React implica JavaScript)
+<matching_rules>
+- Match synonyms and variations (e.g., "JS" = "JavaScript", "gestão de projetos" = "project management")
+- Consider skills implied by work experience
+- Consider related skills (e.g., React implies JavaScript)
+</matching_rules>
 
-Retorne JSON:
+<schema>
 {
-  "matched": [{"skill": "nome exigido", "evidence": "competência do candidato que corresponde"}],
-  "likely": [{"skill": "nome exigido", "evidence": "por que é provável"}],
-  "missing": ["competências realmente ausentes"],
+  "matched": [{"skill": "required skill name", "evidence": "candidate skill or experience that matches"}],
+  "likely": [{"skill": "required skill name", "evidence": "why it's probable"}],
+  "missing": ["skills truly absent from candidate profile"],
   "score": 0-100
-}""",
+}
+</schema>""",
             response_mime_type="application/json",
-            temperature=0.1,
+            temperature=1.0,
         ),
     )
 

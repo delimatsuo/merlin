@@ -46,12 +46,19 @@ function CandidaturaContent() {
   const handleDownload = async (versionId: string, type: "resume" | "cover-letter") => {
     try {
       const endpoint = type === "resume" ? "resume" : "cover-letter";
-      const result = await api.get<{ url: string }>(
+      const blob = await api.getBlob(
         `/api/export/${endpoint}?application_id=${applicationId}&version_id=${versionId}`
       );
-      window.open(result.url, "_blank");
-    } catch {
-      // ignore
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = type === "resume" ? "curriculo.docx" : "carta.docx";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Erro ao baixar o documento.");
     }
   };
 

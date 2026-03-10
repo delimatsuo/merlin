@@ -60,7 +60,7 @@ class ProfileUpdateRequest(BaseModel):
 # --- Job Analysis ---
 
 class JobAnalysisRequest(BaseModel):
-    job_description: str = Field(alias="jobDescription", min_length=50, max_length=5000)
+    job_description: str = Field(alias="jobDescription", min_length=50, max_length=50000)
 
     model_config = {"populate_by_name": True}
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Markdown from "react-markdown";
 import { api } from "@/lib/api";
 import { useVersionStore, type ResumeVersion } from "@/lib/store";
 import { Button } from "@/components/ui/button";
@@ -197,9 +198,9 @@ export function ResumeEditor({
             className="min-h-[500px] rounded-xl bg-secondary border-0 text-sm leading-relaxed font-mono p-5 focus-visible:ring-2 focus-visible:ring-ring"
           />
         ) : (
-          <div className="rounded-2xl bg-secondary/50 p-8 min-h-[400px]">
-            <div className="prose prose-sm max-w-none text-foreground/90 whitespace-pre-wrap leading-relaxed">
-              {content || "Conteudo vazio."}
+          <div className="rounded-2xl bg-white dark:bg-card p-10 min-h-[400px] apple-shadow-sm max-w-[720px] mx-auto">
+            <div className="resume-content">
+              {content ? <Markdown>{content}</Markdown> : "Conteudo vazio."}
             </div>
           </div>
         )}
