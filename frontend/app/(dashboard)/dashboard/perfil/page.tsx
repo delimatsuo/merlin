@@ -4,8 +4,7 @@ import { useState, useCallback, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
 import { api } from "@/lib/api";
 import { useProfileStore, useWorkflowStore, useProcessingStore, useKnowledgeStore } from "@/lib/store";
-import { Button } from "@/components/ui/button";
-import { Upload, FileText, Loader2, CheckCircle2, Trash2 } from "lucide-react";
+import { Upload, FileText, Loader2, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;

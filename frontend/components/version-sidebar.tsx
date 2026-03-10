@@ -49,7 +49,7 @@ export function VersionSidebar({
   const handleCopy = async (versionId: string) => {
     setActionLoading(versionId);
     try {
-      const result = await api.post<{ versionId: string }>(
+      await api.post<{ versionId: string }>(
         `/api/tailor/version/${applicationId}/${versionId}/copy`
       );
       // Reload versions

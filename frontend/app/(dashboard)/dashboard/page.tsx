@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuthStore, useApplicationsListStore, type ApplicationSummary } from "@/lib/store";
 import { useOnboarding } from "@/lib/hooks/useOnboarding";
@@ -38,8 +37,6 @@ function formatDate(iso: string) {
 }
 
 function OnboardingFlow() {
-  const router = useRouter();
-
   return (
     <div className="space-y-10">
       <div className="pt-4">

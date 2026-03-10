@@ -6,30 +6,16 @@ import { api } from "@/lib/api";
 import { useVersionStore, type ResumeVersion } from "@/lib/store";
 import { VersionSidebar } from "@/components/version-sidebar";
 import { ResumeEditor } from "@/components/resume-editor";
-import { Loader2, ArrowLeft, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Loader2, ArrowLeft } from "lucide-react";
 import Link from "next/link";
-
-interface ApplicationDetail {
-  id: string;
-  jobAnalysis: {
-    title?: string;
-    company?: string;
-    [key: string]: unknown;
-  };
-  atsScore: number | null;
-  skillsMatrix: Array<{ skill: string; status: string; evidence?: string | null }>;
-  createdAt: string;
-}
 
 function CandidaturaContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const applicationId = searchParams.get("id") || "";
 
-  const { setVersions, setLoading: setVersionsLoading } = useVersionStore();
+  const { setVersions } = useVersionStore();
 
-  const [application, setApplication] = useState<ApplicationDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
@@ -40,37 +26,6 @@ function CandidaturaContent() {
       return;
     }
 
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        // Fetch application + versions in parallel
-        const [appResult, versionsResult] = await Promise.all([
-          api.get<ApplicationDetail>(`/api/job/analysis/${applicationId}`).catch(() => null),
-          api.get<{ versions: ResumeVersion[] }>(
-            `/api/tailor/versions/${applicationId}`
-          ),
-        ]);
-
-        // If direct analysis endpoint doesn't exist, build from application data
-        if (!appResult) {
-          // Fallback: try to get the latest resume to know versions exist
-        }
-
-        setVersions(versionsResult.versions);
-
-        // Fetch application details separately
-        const appData = await api.get<ApplicationDetail>(
-          `/api/profile/status`
-        ).catch(() => null);
-
-      } catch {
-        // ignore
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    // Simpler approach: just fetch versions directly
     const fetchAll = async () => {
       setLoading(true);
       try {
@@ -108,7 +63,7 @@ function CandidaturaContent() {
   const handleRegenerate = async (instructions: string) => {
     setRegenerating(true);
     try {
-      const result = await api.post<{ resumeContent: string }>("/api/tailor/regenerate", {
+      await api.post<{ resumeContent: string }>("/api/tailor/regenerate", {
         applicationId,
         instructions,
       });
@@ -129,7 +84,7 @@ function CandidaturaContent() {
     // Or trigger regeneration with default instructions
     setRegenerating(true);
     try {
-      const result = await api.post<{ resumeContent: string }>("/api/tailor/regenerate", {
+      await api.post<{ resumeContent: string }>("/api/tailor/regenerate", {
         applicationId,
         instructions: "Gere uma nova versão com abordagem diferente.",
       });

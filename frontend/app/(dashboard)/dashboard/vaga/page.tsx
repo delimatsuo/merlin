@@ -13,7 +13,6 @@ import {
   XCircle,
   AlertCircle,
   Sparkles,
-  Send,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
