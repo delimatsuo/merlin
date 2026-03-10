@@ -260,7 +260,7 @@ async def rewrite_resume(
         config=types.GenerateContentConfig(
             system_instruction=RESUME_REWRITING_PROMPT,
             temperature=0.85,
-            max_output_tokens=4096,
+            max_output_tokens=8192,
         ),
     )
 
@@ -298,7 +298,7 @@ async def generate_cover_letter(
         config=types.GenerateContentConfig(
             system_instruction=COVER_LETTER_PROMPT,
             temperature=0.85,
-            max_output_tokens=2048,
+            max_output_tokens=4096,
         ),
     )
 

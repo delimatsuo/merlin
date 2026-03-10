@@ -89,8 +89,8 @@ equipe de 12 vendedores e atingindo 145% da meta anual com receita de R$8M"
 <keyword_placement>
 Place ATS keywords strategically in high-scan zones:
 1. Professional summary — weave in 3-4 top keywords from the job description
-2. Job titles — align with JD terminology where truthful (e.g., if JD says "Chief People Officer"
-   and candidate was "CHRO", note both)
+2. Job titles — keep the original title from the candidate's data, but add the JD-aligned
+   variant in parentheses where truthful (e.g., "CHRO (Chief People Officer)")
 3. First bullet of each role — place the most relevant keyword for that experience
 4. Skills section — mirror JD language exactly (use "scalable HR infrastructure" not "HR systems")
 Use each keyword 1-3 times naturally. Never keyword-stuff.
