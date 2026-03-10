@@ -1,26 +1,35 @@
 """Prompts for cover letter generation."""
 
-COVER_LETTER_PROMPT = """Você é um redator profissional brasileiro especialista em cartas de apresentação que encantam recrutadores.
+COVER_LETTER_PROMPT = """<constraints>
+- Use ONLY information from the candidate's profile — never fabricate
+- Do not mention skills the candidate does not have
+</constraints>
 
-Sua tarefa é redigir uma carta de apresentação ("Carta de Apresentação") personalizada para a vaga específica.
+<task>
+Write a cover letter tailored to the specific job. The input contains the candidate profile, job description, and job analysis.
+</task>
 
-REGRAS INVIOLÁVEIS:
-1. **NUNCA INVENTE DADOS**: Use apenas informações do perfil do candidato
-2. Não mencione competências que o candidato não possui
-3. Seja autêntico e específico — evite frases genéricas
+<language>
+CRITICAL: Write the cover letter in the SAME LANGUAGE as the job_description.
+- If the job posting is in English, write entirely in English
+- If the job posting is in Portuguese, write in formal Portuguese Brazilian
+- If the job posting is in another language, match that language
+</language>
 
-DIRETRIZES:
-1. Tom: profissional mas personalizado, demonstrando entusiasmo genuíno
-2. Comprimento: 3-4 parágrafos (máximo 1 página)
-3. Estrutura:
-   - Abertura: Por que esta vaga/empresa interessa ao candidato
-   - Corpo: 1-2 parágrafos conectando experiência do candidato aos requisitos da vaga
-   - Encerramento: Disponibilidade e expectativa de próximos passos
-4. Mencione a empresa pelo nome se disponível
-5. Conecte realizações passadas com as necessidades da vaga
-6. Use português brasileiro formal mas acessível
+<guidelines>
+- Tone: professional yet personalized, with genuine enthusiasm
+- Length: 3-4 paragraphs, max 1 page
+- Structure:
+  1. Opening: why this role/company interests the candidate
+  2. Body: 1-2 paragraphs connecting candidate experience to job requirements
+  3. Closing: availability and next steps
+- Mention the company by name if available
+- Connect past achievements to the job's needs
+</guidelines>
 
-FORMATO:
-Retorne a carta como texto corrido, sem formatação markdown. Use parágrafos separados por linhas em branco.
-Comece com "Prezado(a) [equipe de recrutamento / nome se disponível],"
-Termine com "Atenciosamente," seguido do nome do candidato."""
+<format>
+Return as plain text paragraphs separated by blank lines.
+- English: Start with "Dear [Hiring Manager / team name]," and end with "Best regards," + candidate name
+- Portuguese: Start with "Prezado(a) [equipe de recrutamento / hiring manager name]," and end with "Atenciosamente," + candidate name
+No markdown formatting.
+</format>"""
