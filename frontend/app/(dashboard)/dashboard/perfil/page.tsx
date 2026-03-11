@@ -33,7 +33,7 @@ export default function PerfilPage() {
   const { profile, setProfile, setLoading } = useProfileStore();
   const { setProfileId, markStep } = useWorkflowStore();
   const { addTask, completeTask, failTask } = useProcessingStore();
-  const { knowledge } = useKnowledgeStore();
+  const { knowledge, setKnowledge } = useKnowledgeStore();
 
   // Load all profiles on mount
   useEffect(() => {
@@ -56,6 +56,10 @@ export default function PerfilPage() {
       await api.delete(`/api/profile/${profileId}`);
       setAllProfiles((prev) => prev.filter((p) => p.id !== profileId));
       setConfirmDeleteId(null);
+      // Refresh knowledge store after rebuild
+      api.get<{ knowledge: Record<string, unknown> }>("/api/profile/knowledge")
+        .then((res) => setKnowledge(res.knowledge as never))
+        .catch(() => {});
     } catch {
       setError("Erro ao excluir currículo. Tente novamente.");
     } finally {

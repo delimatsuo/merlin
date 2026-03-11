@@ -196,7 +196,7 @@ async def delete_profile(
 
     # Delete original file from Cloud Storage
     file_url = profile.get("fileUrl")
-    if file_url:
+    if file_url and file_url.startswith(f"uploads/{user.uid}/"):
         try:
             from firebase_admin import storage
             bucket = storage.bucket()
@@ -208,9 +208,8 @@ async def delete_profile(
     # Delete Firestore document
     await fs.delete_profile(user.uid, profile_id)
 
-    # Rebuild knowledge file from remaining profiles
-    import asyncio
-    asyncio.create_task(rebuild_knowledge(user.uid))
+    # Rebuild knowledge file from remaining profiles (awaited for data integrity)
+    await rebuild_knowledge(user.uid)
 
     logger.info("profile_deleted", uid=user.uid, profile_id=profile_id)
     return {"status": "deleted"}

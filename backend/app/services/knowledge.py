@@ -346,6 +346,13 @@ async def rebuild_knowledge(uid: str) -> dict:
 
     except Exception as e:
         logger.error("knowledge_rebuild_error", uid=uid, error=str(e))
+        # Persist empty knowledge so stale data doesn't linger
+        try:
+            fs = FirestoreService()
+            empty = _empty_knowledge()
+            await fs.save_candidate_knowledge(uid, empty)
+        except Exception:
+            pass
         return _empty_knowledge()
 
 
