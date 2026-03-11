@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
 import { api } from "@/lib/api";
 import { useProfileStore, useWorkflowStore, useProcessingStore, useKnowledgeStore } from "@/lib/store";
-import { Upload, FileText, Loader2, CheckCircle2 } from "lucide-react";
+import { Upload, FileText, Loader2, CheckCircle2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -28,6 +28,8 @@ export default function PerfilPage() {
   const [uploadedFile, setUploadedFile] = useState<string | null>(null);
   const [allProfiles, setAllProfiles] = useState<ProfileSummary[]>([]);
   const [loadingProfiles, setLoadingProfiles] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const { profile, setProfile, setLoading } = useProfileStore();
   const { setProfileId, markStep } = useWorkflowStore();
   const { addTask, completeTask, failTask } = useProcessingStore();
@@ -47,6 +49,19 @@ export default function PerfilPage() {
     };
     fetchProfiles();
   }, []);
+
+  const handleDelete = async (profileId: string) => {
+    setDeletingId(profileId);
+    try {
+      await api.delete(`/api/profile/${profileId}`);
+      setAllProfiles((prev) => prev.filter((p) => p.id !== profileId));
+      setConfirmDeleteId(null);
+    } catch {
+      setError("Erro ao excluir currículo. Tente novamente.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const onDrop = useCallback(
     async (acceptedFiles: File[]) => {
@@ -228,6 +243,31 @@ export default function PerfilPage() {
                   <span className="text-[10px] font-medium text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">
                     {p.status === "enriched" ? "Enriquecido" : "Processado"}
                   </span>
+                  {confirmDeleteId === p.id ? (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => handleDelete(p.id)}
+                        disabled={deletingId === p.id}
+                        className="text-[10px] font-medium text-white bg-destructive hover:bg-destructive/90 px-2.5 py-1 rounded-full transition-colors disabled:opacity-50"
+                      >
+                        {deletingId === p.id ? "Excluindo..." : "Confirmar"}
+                      </button>
+                      <button
+                        onClick={() => setConfirmDeleteId(null)}
+                        className="text-[10px] font-medium text-muted-foreground hover:text-foreground px-2 py-1 rounded-full transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmDeleteId(p.id)}
+                      className="p-1.5 rounded-lg text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                      title="Excluir currículo"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
               ))
             )}

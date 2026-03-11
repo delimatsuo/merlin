@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.auth import AuthenticatedUser, get_current_user
 from app.schemas.api import ProfileUpdateRequest
 from app.services.firestore import FirestoreService
-from app.services.knowledge import build_knowledge_from_profile, merge_comment_into_knowledge
+from app.services.knowledge import build_knowledge_from_profile, merge_comment_into_knowledge, rebuild_knowledge
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -184,7 +184,7 @@ async def delete_profile(
     profile_id: str,
     user: AuthenticatedUser = Depends(get_current_user),
 ):
-    """Delete a profile and associated data."""
+    """Delete a profile, its Cloud Storage file, and rebuild the knowledge file."""
     fs = FirestoreService()
 
     profile = await fs.get_profile(user.uid, profile_id)
@@ -194,7 +194,23 @@ async def delete_profile(
             detail="Perfil não encontrado.",
         )
 
+    # Delete original file from Cloud Storage
+    file_url = profile.get("fileUrl")
+    if file_url:
+        try:
+            from firebase_admin import storage
+            bucket = storage.bucket()
+            blob = bucket.blob(file_url)
+            blob.delete()
+        except Exception as e:
+            logger.warning("storage_file_delete_error", uid=user.uid, error=str(e))
+
+    # Delete Firestore document
     await fs.delete_profile(user.uid, profile_id)
+
+    # Rebuild knowledge file from remaining profiles
+    import asyncio
+    asyncio.create_task(rebuild_knowledge(user.uid))
 
     logger.info("profile_deleted", uid=user.uid, profile_id=profile_id)
     return {"status": "deleted"}

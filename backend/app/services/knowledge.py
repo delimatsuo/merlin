@@ -257,6 +257,98 @@ async def build_knowledge_from_profile(uid: str) -> dict | None:
         return None
 
 
+async def rebuild_knowledge(uid: str) -> dict:
+    """Rebuild the knowledge file from all remaining profiles. Used after profile deletion."""
+    try:
+        fs = FirestoreService()
+        profiles = await fs.list_all_profiles(uid)
+
+        if not profiles:
+            # No profiles left — reset knowledge to empty
+            knowledge = _empty_knowledge()
+            await fs.save_candidate_knowledge(uid, knowledge)
+            logger.info("knowledge_rebuilt_empty", uid=uid)
+            return knowledge
+
+        # Start fresh and re-merge each profile
+        knowledge = _empty_knowledge()
+
+        for profile_summary in profiles:
+            profile = await fs.get_profile(uid, profile_summary["id"])
+            if not profile:
+                continue
+
+            structured = profile.get("structuredData", {})
+
+            knowledge["skills"] = _deduplicate_skills(
+                knowledge.get("skills", []), structured.get("skills", [])
+            )
+            knowledge["experience"] = _deduplicate_experience(
+                knowledge.get("experience", []), structured.get("experience", [])
+            )
+
+            # Education
+            existing_edu = knowledge.get("education", [])
+            edu_keys = {(e.get("institution", "").lower(), e.get("degree", "").lower()) for e in existing_edu}
+            for edu in structured.get("education", []):
+                key = (edu.get("institution", "").lower(), edu.get("degree", "").lower())
+                if key not in edu_keys:
+                    edu_keys.add(key)
+                    existing_edu.append(edu)
+            knowledge["education"] = existing_edu
+
+            # Languages
+            existing_langs = knowledge.get("languages", [])
+            lang_keys = {l.get("language", "").lower() for l in existing_langs}
+            for lang in structured.get("languages", []):
+                if lang.get("language", "").lower() not in lang_keys:
+                    lang_keys.add(lang.get("language", "").lower())
+                    existing_langs.append(lang)
+            knowledge["languages"] = existing_langs
+
+            # Certifications
+            existing_certs = knowledge.get("certifications", [])
+            cert_keys = {c.lower() for c in existing_certs}
+            for cert in structured.get("certifications", []):
+                if cert.lower() not in cert_keys:
+                    cert_keys.add(cert.lower())
+                    existing_certs.append(cert)
+            knowledge["certifications"] = existing_certs
+
+            knowledge["resumeIds"].append(profile_summary["id"])
+
+            # Include enrichment if available
+            enriched = profile.get("enrichedProfile") or {}
+            if enriched.get("companyResearch"):
+                inferred = enriched["companyResearch"].get("inferred_technical_skills", [])
+                knowledge["skills"] = _deduplicate_skills(knowledge["skills"], inferred)
+
+            # Include voice data if available
+            voice = profile.get("voiceAnswers") or {}
+            if voice:
+                knowledge["skills"] = _deduplicate_skills(
+                    knowledge["skills"], voice.get("additional_skills", [])
+                )
+                for achievement in voice.get("achievements", []):
+                    if achievement not in knowledge.get("achievements", []):
+                        knowledge["achievements"].append(achievement)
+
+        # Preserve existing insights (they come from comments/voice, not resumes)
+        old_knowledge = await fs.get_candidate_knowledge(uid)
+        if old_knowledge:
+            knowledge["insights"] = old_knowledge.get("insights", [])
+            if old_knowledge.get("_mergeMeta"):
+                knowledge["_mergeMeta"] = old_knowledge["_mergeMeta"]
+
+        await fs.save_candidate_knowledge(uid, knowledge)
+        logger.info("knowledge_rebuilt", uid=uid, profile_count=len(profiles))
+        return knowledge
+
+    except Exception as e:
+        logger.error("knowledge_rebuild_error", uid=uid, error=str(e))
+        return _empty_knowledge()
+
+
 def _empty_knowledge() -> dict:
     """Return an empty knowledge file structure."""
     return {
