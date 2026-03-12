@@ -38,6 +38,13 @@ export default function EntrevistaPage() {
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      audioRef.current?.pause();
+    };
+  }, []);
+
   // Check if user has a profile, then fetch questions
   useEffect(() => {
     const init = async () => {
@@ -106,15 +113,25 @@ export default function EntrevistaPage() {
     setError("");
 
     try {
-      // Save each answer
-      for (let i = 0; i < answers.length; i++) {
-        if (answers[i].trim()) {
-          await api.post("/api/voice/text-answer", {
+      // Save all answers in parallel, track failures
+      const answerPromises = answers.map((answer, i) => {
+        if (!answer.trim()) return Promise.resolve({ status: "skipped" as const });
+        return api
+          .post("/api/voice/text-answer", {
             sessionId: session.sessionId,
             questionIndex: i,
-            answer: answers[i].trim(),
-          });
-        }
+            answer: answer.trim(),
+          })
+          .then(() => ({ status: "ok" as const }))
+          .catch(() => ({ status: "failed" as const }));
+      });
+      const results = await Promise.all(answerPromises);
+      const savedCount = results.filter((r) => r.status === "ok").length;
+
+      if (savedCount === 0) {
+        setError("Nenhuma resposta foi salva. Verifique sua conexao e tente novamente.");
+        setSubmitting(false);
+        return;
       }
 
       // Complete the session (processes answers + merges into knowledge)

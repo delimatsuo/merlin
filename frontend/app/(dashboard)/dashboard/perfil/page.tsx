@@ -34,7 +34,7 @@ export default function PerfilPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const { profile, setProfile, setLoading } = useProfileStore();
-  const { setProfileId, markStep, steps } = useWorkflowStore();
+  const { setProfileId, markStep } = useWorkflowStore();
   const { addTask, completeTask, failTask } = useProcessingStore();
   const { knowledge, setKnowledge } = useKnowledgeStore();
   const isFirstUpload = useRef(true);
@@ -116,7 +116,8 @@ export default function PerfilPage() {
           .catch(() => failTask("research", "Pesquisa de empresas falhou"));
 
         // Auto-redirect to interview on first upload
-        if (isFirstUpload.current && !steps.interview) {
+        const interviewDone = useWorkflowStore.getState().steps.interview;
+        if (isFirstUpload.current && !interviewDone) {
           isFirstUpload.current = false;
           router.push("/dashboard/entrevista");
           return;
@@ -132,7 +133,7 @@ export default function PerfilPage() {
         setLoading(false);
       }
     },
-    [setProfile, setLoading, setProfileId, markStep, addTask, completeTask, failTask, steps.interview, router]
+    [setProfile, setLoading, setProfileId, markStep, addTask, completeTask, failTask, router]
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({

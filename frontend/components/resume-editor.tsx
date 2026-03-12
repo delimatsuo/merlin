@@ -82,6 +82,7 @@ export function ResumeEditor({
       );
       await api.put(`/api/tailor/version/${applicationId}/${result.versionId}`, {
         content: editContent,
+        field: activeTab === "resume" ? "resumeContent" : "coverLetterText",
       });
       // Reload versions
       const versionsResult = await api.get<{ versions: ResumeVersion[] }>(
