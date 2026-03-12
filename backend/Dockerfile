@@ -10,9 +10,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY app/ app/
-COPY templates/ templates/
+# Create non-root user BEFORE copying app code
+RUN useradd --no-create-home --shell /bin/false appuser
+
+# Copy with correct ownership so appuser can read
+COPY --chown=appuser:appuser app/ app/
+COPY --chown=appuser:appuser templates/ templates/
+
+USER appuser
 
 # Cloud Run sets PORT environment variable
 ENV PORT=8080

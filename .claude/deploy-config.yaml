@@ -13,12 +13,13 @@ project:
 environments:
   staging:
     branch: "staging"
-    url: "pending"
+    url: "https://staging.merlincv.com"
     gcp_project_id: "merlin-489714"
     health_check: "/health"
     cloud_run_service: "merlin-backend"
     cloud_run_region: "southamerica-east1"
-    firebase_site: "merlin-489714"
+    cloud_run_url: "https://merlin-backend-531233742939.southamerica-east1.run.app"
+    firebase_site: "merlin-489714-staging"
   production:
     branch: "main"
     url: "https://merlincv.com"

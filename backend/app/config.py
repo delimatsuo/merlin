@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     gcp_project_id: str = "merlin-489714"
 
     # CORS
-    allowed_origins: str = "http://localhost:3000,https://merlincv.com,https://www.merlincv.com,https://staging.merlincv.com,https://merlin-489714.web.app,https://merlin-489714.firebaseapp.com"
+    allowed_origins: str = "http://localhost:3000,https://merlincv.com,https://www.merlincv.com,https://staging.merlincv.com,https://merlin-489714.web.app,https://merlin-489714.firebaseapp.com,https://merlin-489714-staging.web.app"
 
     # API Keys (loaded from Secret Manager in production, env vars locally)
     anthropic_api_key: str = ""
@@ -42,6 +42,7 @@ class Settings(BaseSettings):
 
     # Model configuration — Gemini
     model_gemini: str = "gemini-3.1-pro-preview"
+    model_gemini_flash_lite: str = "gemini-3.1-flash-lite-preview"
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 
@@ -72,7 +73,20 @@ def load_secrets_from_gcp() -> None:
                     name = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
                     response = client.access_secret_version(request={"name": name})
                     os.environ[env_name.upper()] = response.payload.data.decode("UTF-8")
-                except Exception:
-                    pass  # Secret may not exist yet
+                except Exception as e:
+                    print(f"WARNING: Failed to load secret {secret_name}: {e}")
         except ImportError:
             pass
+
+
+def validate_secrets():
+    """Call on startup to verify critical secrets are present."""
+    settings = get_settings()
+    missing = []
+    if not settings.gemini_api_key:
+        missing.append("GEMINI_API_KEY")
+    if not settings.anthropic_api_key:
+        missing.append("ANTHROPIC_API_KEY")
+    if missing:
+        import structlog
+        structlog.get_logger().error("missing_secrets", secrets=missing)

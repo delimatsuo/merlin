@@ -1,9 +1,10 @@
-"""Gemini 3.1 Pro AI service — replaces Claude for all AI tasks."""
+"""Tiered AI service — Claude Sonnet 4.6 for writing/reasoning, Gemini Flash-Lite for extraction."""
 
 import json
 import re
 from typing import Optional
 
+import anthropic
 import structlog
 from google import genai
 from google.genai import types
@@ -19,16 +20,33 @@ from app.prompts.enrichment import ENRICHMENT_PROMPT
 
 logger = structlog.get_logger()
 
-_client: genai.Client | None = None
+# ---------------------------------------------------------------------------
+# Clients (lazy singletons)
+# ---------------------------------------------------------------------------
+
+_gemini_client: genai.Client | None = None
+_anthropic_client: anthropic.AsyncAnthropic | None = None
 
 
-def _get_client() -> genai.Client:
-    global _client
-    if _client is None:
+def _get_gemini_client() -> genai.Client:
+    global _gemini_client
+    if _gemini_client is None:
         settings = get_settings()
-        _client = genai.Client(api_key=settings.gemini_api_key)
-    return _client
+        _gemini_client = genai.Client(api_key=settings.gemini_api_key)
+    return _gemini_client
 
+
+def _get_anthropic_client() -> anthropic.AsyncAnthropic:
+    global _anthropic_client
+    if _anthropic_client is None:
+        settings = get_settings()
+        _anthropic_client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    return _anthropic_client
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 def _sanitize_input(text: str) -> str:
     """Strip control characters and zero-width characters from user input."""
@@ -48,29 +66,84 @@ def _parse_json_response(content: str) -> dict | list | None:
         return None
 
 
-async def structure_resume(raw_text: str) -> dict:
-    """Structure raw resume text into a profile using Gemini."""
-    client = _get_client()
+async def _call_sonnet(
+    system: str,
+    user_content: str,
+    task: str,
+    max_tokens: int = 4096,
+    temperature: float = 1.0,
+) -> str:
+    """Call Claude Sonnet 4.6 and return the text response."""
+    client = _get_anthropic_client()
     settings = get_settings()
-    raw_text = _sanitize_input(raw_text)
+
+    user_content = _sanitize_input(user_content)
+
+    response = await client.messages.create(
+        model=settings.model_sonnet,
+        max_tokens=max_tokens,
+        system=system,
+        messages=[{"role": "user", "content": f"<user_input>\n{user_content}\n</user_input>"}],
+        temperature=temperature,
+    )
+
+    content = response.content[0].text
+    logger.info(
+        "ai_usage",
+        model=settings.model_sonnet,
+        tier="writing_reasoning",
+        task=task,
+        input_tokens=response.usage.input_tokens,
+        output_tokens=response.usage.output_tokens,
+    )
+    return content
+
+
+async def _call_flash_lite(
+    system: str,
+    user_content: str,
+    task: str,
+    temperature: float = 0.2,
+    response_mime_type: str = "application/json",
+) -> str:
+    """Call Gemini 3.1 Flash-Lite and return the text response."""
+    client = _get_gemini_client()
+    settings = get_settings()
+
+    user_content = _sanitize_input(user_content)
 
     response = await client.aio.models.generate_content(
-        model=settings.model_gemini,
-        contents=raw_text,
+        model=settings.model_gemini_flash_lite,
+        contents=f"<user_input>\n{user_content}\n</user_input>",
         config=types.GenerateContentConfig(
-            system_instruction=PROFILE_STRUCTURING_PROMPT,
-            response_mime_type="application/json",
-            temperature=0.2,
+            system_instruction=system,
+            response_mime_type=response_mime_type,
+            temperature=temperature,
         ),
     )
 
     content = response.text
     logger.info(
-        "gemini_usage",
-        model=settings.model_gemini,
-        task="structure_resume",
+        "ai_usage",
+        model=settings.model_gemini_flash_lite,
+        tier="extraction",
+        task=task,
         input_tokens=response.usage_metadata.prompt_token_count,
         output_tokens=response.usage_metadata.candidates_token_count,
+    )
+    return content
+
+
+# ===========================================================================
+# EXTRACTION TIER — Gemini 3.1 Flash-Lite
+# ===========================================================================
+
+async def structure_resume(raw_text: str) -> dict:
+    """Structure raw resume text into a profile."""
+    content = await _call_flash_lite(
+        system=PROFILE_STRUCTURING_PROMPT,
+        user_content=raw_text,
+        task="structure_resume",
     )
 
     result = _parse_json_response(content)
@@ -84,29 +157,119 @@ async def structure_resume(raw_text: str) -> dict:
         return {"raw_text": raw_text, "parse_error": True}
 
 
-async def analyze_job_description(job_text: str) -> dict:
-    """Analyze a job description using Gemini."""
-    client = _get_client()
-    settings = get_settings()
-    job_text = _sanitize_input(job_text)
+async def extract_ats_keywords(job_description: str) -> list[str]:
+    """Extract ATS-relevant keywords from job description."""
+    content = await _call_flash_lite(
+        system="""<task>
+Extract the most important ATS (Applicant Tracking System) keywords from the provided job description.
+</task>
 
-    response = await client.aio.models.generate_content(
-        model=settings.model_gemini,
-        contents=job_text,
-        config=types.GenerateContentConfig(
-            system_instruction=JOB_ANALYSIS_PROMPT,
-            response_mime_type="application/json",
-            temperature=0.2,
-        ),
+<focus>
+Technical skills, tools, certifications, methodologies, and industry-specific terms.
+</focus>
+
+<constraints>
+- Max 20 keywords, ordered by importance
+- Return a JSON array of strings
+- Keep keywords as they appear in the JD (preserve language)
+</constraints>""",
+        user_content=job_description,
+        task="ats_keywords",
     )
 
-    content = response.text
-    logger.info(
-        "gemini_usage",
-        model=settings.model_gemini,
+    result = _parse_json_response(content)
+    if result and isinstance(result, list):
+        return result[:20]
+
+    try:
+        keywords = json.loads(content)
+        if isinstance(keywords, list):
+            return keywords[:20]
+        return []
+    except json.JSONDecodeError:
+        keywords = [k.strip().strip('"\'') for k in re.split(r'[,\n]', content) if k.strip()]
+        return keywords[:20]
+
+
+async def infer_skills_from_research(experience: list, company_research: dict) -> dict:
+    """Infer additional skills from company research."""
+    context = json.dumps({
+        "candidate_experience": experience,
+        "company_research": company_research,
+    }, ensure_ascii=False, indent=2)
+
+    content = await _call_flash_lite(
+        system=ENRICHMENT_PROMPT,
+        user_content=context,
+        task="company_enrichment",
+    )
+
+    result = _parse_json_response(content)
+    if result and isinstance(result, dict):
+        return result
+
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        return {"raw": content}
+
+
+async def semantic_skill_match(
+    candidate_skills: list[str],
+    required_skills: list[str],
+    candidate_experience: list[dict] | None = None,
+) -> dict:
+    """Semantic skill matching."""
+    context = json.dumps({
+        "candidate_skills": candidate_skills,
+        "required_skills": required_skills,
+        "candidate_experience": candidate_experience or [],
+    }, ensure_ascii=False, indent=2)
+
+    content = await _call_flash_lite(
+        system="""<task>
+Semantically match candidate skills against job requirements. The input contains candidate_skills, required_skills, and candidate_experience.
+</task>
+
+<matching_rules>
+- Match synonyms and variations (e.g., "JS" = "JavaScript", "gestão de projetos" = "project management")
+- Consider skills implied by work experience
+- Consider related skills (e.g., React implies JavaScript)
+</matching_rules>
+
+<schema>
+{
+  "matched": [{"skill": "required skill name", "evidence": "candidate skill or experience that matches"}],
+  "likely": [{"skill": "required skill name", "evidence": "why it's probable"}],
+  "missing": ["skills truly absent from candidate profile"],
+  "score": 0-100
+}
+</schema>""",
+        user_content=context,
+        task="semantic_skill_match",
+    )
+
+    result = _parse_json_response(content)
+    if result and isinstance(result, dict):
+        return result
+
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        return {"matched": [], "likely": [], "missing": required_skills, "score": 0}
+
+
+# ===========================================================================
+# WRITING + REASONING TIER — Claude Sonnet 4.6
+# ===========================================================================
+
+async def analyze_job_description(job_text: str) -> dict:
+    """Analyze a job description."""
+    content = await _call_sonnet(
+        system=JOB_ANALYSIS_PROMPT,
+        user_content=job_text,
         task="analyze_job",
-        input_tokens=response.usage_metadata.prompt_token_count,
-        output_tokens=response.usage_metadata.candidates_token_count,
+        max_tokens=2048,
     )
 
     result = _parse_json_response(content)
@@ -123,32 +286,17 @@ async def analyze_job_description(job_text: str) -> dict:
 async def generate_interview_questions(
     structured_data: dict, enriched_data: dict
 ) -> list[str]:
-    """Generate targeted interview questions using Gemini."""
-    client = _get_client()
-    settings = get_settings()
-
+    """Generate targeted interview questions."""
     context = json.dumps({
         "structured_profile": structured_data,
         "enriched_profile": enriched_data,
     }, ensure_ascii=False, indent=2)
 
-    response = await client.aio.models.generate_content(
-        model=settings.model_gemini,
-        contents=context,
-        config=types.GenerateContentConfig(
-            system_instruction=QUESTION_GENERATION_PROMPT,
-            response_mime_type="application/json",
-            temperature=0.7,
-        ),
-    )
-
-    content = response.text
-    logger.info(
-        "gemini_usage",
-        model=settings.model_gemini,
+    content = await _call_sonnet(
+        system=QUESTION_GENERATION_PROMPT,
+        user_content=context,
         task="generate_questions",
-        input_tokens=response.usage_metadata.prompt_token_count,
-        output_tokens=response.usage_metadata.candidates_token_count,
+        max_tokens=1024,
     )
 
     result = _parse_json_response(content)
@@ -169,10 +317,7 @@ async def generate_interview_questions(
 
 
 async def process_voice_answers(questions: list[str], answers: list[str]) -> dict:
-    """Process voice interview answers into profile updates using Gemini."""
-    client = _get_client()
-    settings = get_settings()
-
+    """Process voice interview answers into profile updates."""
     qa_pairs = []
     for i, q in enumerate(questions):
         a = answers[i] if i < len(answers) else ""
@@ -180,23 +325,11 @@ async def process_voice_answers(questions: list[str], answers: list[str]) -> dic
 
     context = json.dumps(qa_pairs, ensure_ascii=False, indent=2)
 
-    response = await client.aio.models.generate_content(
-        model=settings.model_gemini,
-        contents=context,
-        config=types.GenerateContentConfig(
-            system_instruction=VOICE_PROCESSING_PROMPT,
-            response_mime_type="application/json",
-            temperature=0.2,
-        ),
-    )
-
-    content = response.text
-    logger.info(
-        "gemini_usage",
-        model=settings.model_gemini,
+    content = await _call_sonnet(
+        system=VOICE_PROCESSING_PROMPT,
+        user_content=context,
         task="process_voice",
-        input_tokens=response.usage_metadata.prompt_token_count,
-        output_tokens=response.usage_metadata.candidates_token_count,
+        max_tokens=2048,
     )
 
     result = _parse_json_response(content)
@@ -218,60 +351,40 @@ async def rewrite_resume(
     knowledge: Optional[dict] = None,
     enrichment: Optional[dict] = None,
 ) -> str:
-    """Rewrite the resume tailored to the job using Gemini."""
-    client = _get_client()
-    settings = get_settings()
-
+    """Rewrite the resume tailored to the job."""
     # Build comprehensive candidate data
     candidate_data = {"structured_resume": profile}
     if knowledge:
-        # Include achievements and insights from knowledge file
         extra = {}
         if knowledge.get("achievements"):
             extra["achievements"] = knowledge["achievements"]
         if knowledge.get("insights"):
             extra["insights"] = knowledge["insights"]
-        # Supplement skills from knowledge if richer
         if len(knowledge.get("skills", [])) > len(profile.get("skills", [])):
             extra["additional_skills"] = knowledge["skills"]
         if extra:
             candidate_data["knowledge_supplements"] = extra
     if enrichment and isinstance(enrichment, dict):
-        # Include inferred skills from company research
         inferred = enrichment.get("inferred_technical_skills", [])
         if inferred:
             candidate_data.setdefault("knowledge_supplements", {})["inferred_skills"] = inferred
 
     context = json.dumps({
         "candidate": candidate_data,
-        "job_description": _sanitize_input(job_description),
+        "job_description": job_description,
         "job_analysis": job_analysis,
         "ats_keywords": ats_keywords,
     }, ensure_ascii=False, indent=2)
 
     user_content = context
     if additional_instructions:
-        additional_instructions = _sanitize_input(additional_instructions)
         user_content += f"\n\nInstrução adicional do candidato: {additional_instructions}"
 
-    response = await client.aio.models.generate_content(
-        model=settings.model_gemini,
-        contents=user_content,
-        config=types.GenerateContentConfig(
-            system_instruction=RESUME_REWRITING_PROMPT,
-            temperature=0.85,
-            max_output_tokens=8192,
-        ),
-    )
-
-    content = response.text
-    logger.info(
-        "gemini_usage",
-        model=settings.model_gemini,
+    content = await _call_sonnet(
+        system=RESUME_REWRITING_PROMPT,
+        user_content=user_content,
         task="rewrite_resume",
-        prompt_version="v2",
-        input_tokens=response.usage_metadata.prompt_token_count,
-        output_tokens=response.usage_metadata.candidates_token_count,
+        max_tokens=8192,
     )
 
     return content
@@ -282,146 +395,35 @@ async def generate_cover_letter(
     job_description: str,
     job_analysis: dict,
 ) -> str:
-    """Generate a cover letter using Gemini."""
-    client = _get_client()
-    settings = get_settings()
-
+    """Generate a cover letter."""
     context = json.dumps({
         "profile": profile,
-        "job_description": _sanitize_input(job_description),
+        "job_description": job_description,
         "job_analysis": job_analysis,
     }, ensure_ascii=False, indent=2)
 
-    response = await client.aio.models.generate_content(
-        model=settings.model_gemini,
-        contents=context,
-        config=types.GenerateContentConfig(
-            system_instruction=COVER_LETTER_PROMPT,
-            temperature=0.85,
-            max_output_tokens=4096,
-        ),
-    )
-
-    content = response.text
-    logger.info(
-        "gemini_usage",
-        model=settings.model_gemini,
+    content = await _call_sonnet(
+        system=COVER_LETTER_PROMPT,
+        user_content=context,
         task="cover_letter",
-        prompt_version="v2",
-        input_tokens=response.usage_metadata.prompt_token_count,
-        output_tokens=response.usage_metadata.candidates_token_count,
+        max_tokens=4096,
     )
 
     return content
-
-
-async def extract_ats_keywords(job_description: str) -> list[str]:
-    """Extract ATS-relevant keywords from job description using Gemini."""
-    client = _get_client()
-    settings = get_settings()
-
-    response = await client.aio.models.generate_content(
-        model=settings.model_gemini,
-        contents=job_description,
-        config=types.GenerateContentConfig(
-            system_instruction="""<task>
-Extract the most important ATS (Applicant Tracking System) keywords from the provided job description.
-</task>
-
-<focus>
-Technical skills, tools, certifications, methodologies, and industry-specific terms.
-</focus>
-
-<constraints>
-- Max 20 keywords, ordered by importance
-- Return a JSON array of strings
-- Keep keywords as they appear in the JD (preserve language)
-</constraints>""",
-            response_mime_type="application/json",
-            temperature=0.2,
-        ),
-    )
-
-    content = response.text
-    logger.info(
-        "gemini_usage",
-        model=settings.model_gemini,
-        task="ats_keywords",
-        input_tokens=response.usage_metadata.prompt_token_count,
-        output_tokens=response.usage_metadata.candidates_token_count,
-    )
-
-    result = _parse_json_response(content)
-    if result and isinstance(result, list):
-        return result[:20]
-
-    try:
-        keywords = json.loads(content)
-        if isinstance(keywords, list):
-            return keywords[:20]
-        return []
-    except json.JSONDecodeError:
-        keywords = [k.strip().strip('"\'') for k in re.split(r'[,\n]', content) if k.strip()]
-        return keywords[:20]
-
-
-async def infer_skills_from_research(experience: list, company_research: dict) -> dict:
-    """Infer additional skills from company research using Gemini."""
-    client = _get_client()
-    settings = get_settings()
-
-    context = json.dumps({
-        "candidate_experience": experience,
-        "company_research": company_research,
-    }, ensure_ascii=False, indent=2)
-
-    response = await client.aio.models.generate_content(
-        model=settings.model_gemini,
-        contents=context,
-        config=types.GenerateContentConfig(
-            system_instruction=ENRICHMENT_PROMPT,
-            response_mime_type="application/json",
-            temperature=0.2,
-        ),
-    )
-
-    content = response.text
-    logger.info(
-        "gemini_usage",
-        model=settings.model_gemini,
-        task="company_enrichment",
-        input_tokens=response.usage_metadata.prompt_token_count,
-        output_tokens=response.usage_metadata.candidates_token_count,
-    )
-
-    result = _parse_json_response(content)
-    if result and isinstance(result, dict):
-        return result
-
-    try:
-        return json.loads(content)
-    except json.JSONDecodeError:
-        return {"raw": content}
 
 
 async def generate_followup_questions(
     knowledge: dict, job_analysis: dict, missing_skills: list[str]
 ) -> list[str]:
     """Generate targeted follow-up questions based on knowledge gaps."""
-    client = _get_client()
-    settings = get_settings()
-
     context = json.dumps({
         "candidate_knowledge": knowledge,
         "job_analysis": job_analysis,
         "missing_skills": missing_skills,
     }, ensure_ascii=False, indent=2)
 
-    response = await client.aio.models.generate_content(
-        model=settings.model_gemini,
-        contents=context,
-        config=types.GenerateContentConfig(
-            system_instruction="""<task>
+    content = await _call_sonnet(
+        system="""<task>
 Generate targeted follow-up questions to fill gaps between the candidate's profile and the job requirements. The input contains the candidate's knowledge file, job analysis, and list of missing skills.
 </task>
 
@@ -439,18 +441,9 @@ Generate targeted follow-up questions to fill gaps between the candidate's profi
 </focus>
 
 Return a JSON array of strings.""",
-            response_mime_type="application/json",
-            temperature=0.7,
-        ),
-    )
-
-    content = response.text
-    logger.info(
-        "gemini_usage",
-        model=settings.model_gemini,
+        user_content=context,
         task="followup_questions",
-        input_tokens=response.usage_metadata.prompt_token_count,
-        output_tokens=response.usage_metadata.candidates_token_count,
+        max_tokens=1024,
     )
 
     result = _parse_json_response(content)
@@ -464,64 +457,3 @@ Return a JSON array of strings.""",
         return []
     except json.JSONDecodeError:
         return []
-
-
-async def semantic_skill_match(
-    candidate_skills: list[str],
-    required_skills: list[str],
-    candidate_experience: list[dict] | None = None,
-) -> dict:
-    """Use Gemini for semantic skill matching instead of exact string comparison."""
-    client = _get_client()
-    settings = get_settings()
-
-    context = json.dumps({
-        "candidate_skills": candidate_skills,
-        "required_skills": required_skills,
-        "candidate_experience": candidate_experience or [],
-    }, ensure_ascii=False, indent=2)
-
-    response = await client.aio.models.generate_content(
-        model=settings.model_gemini,
-        contents=context,
-        config=types.GenerateContentConfig(
-            system_instruction="""<task>
-Semantically match candidate skills against job requirements. The input contains candidate_skills, required_skills, and candidate_experience.
-</task>
-
-<matching_rules>
-- Match synonyms and variations (e.g., "JS" = "JavaScript", "gestão de projetos" = "project management")
-- Consider skills implied by work experience
-- Consider related skills (e.g., React implies JavaScript)
-</matching_rules>
-
-<schema>
-{
-  "matched": [{"skill": "required skill name", "evidence": "candidate skill or experience that matches"}],
-  "likely": [{"skill": "required skill name", "evidence": "why it's probable"}],
-  "missing": ["skills truly absent from candidate profile"],
-  "score": 0-100
-}
-</schema>""",
-            response_mime_type="application/json",
-            temperature=0.2,
-        ),
-    )
-
-    content = response.text
-    logger.info(
-        "gemini_usage",
-        model=settings.model_gemini,
-        task="semantic_skill_match",
-        input_tokens=response.usage_metadata.prompt_token_count,
-        output_tokens=response.usage_metadata.candidates_token_count,
-    )
-
-    result = _parse_json_response(content)
-    if result and isinstance(result, dict):
-        return result
-
-    try:
-        return json.loads(content)
-    except json.JSONDecodeError:
-        return {"matched": [], "likely": [], "missing": required_skills, "score": 0}
