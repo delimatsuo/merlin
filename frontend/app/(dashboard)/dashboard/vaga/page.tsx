@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
+  AlertTriangle,
   Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -49,6 +50,7 @@ export default function VagaPage() {
 
   // Analysis results (inline)
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [disclaimerAccepted, setDisclaimerAccepted] = useState(false);
 
   // Follow-up text answers
   const [textAnswers, setTextAnswers] = useState<string[]>([]);
@@ -233,6 +235,7 @@ export default function VagaPage() {
                     setJobDescription("");
                     setComment("");
                     setTextAnswers([]);
+                    setDisclaimerAccepted(false);
                   }}
                   className="h-9 px-4 rounded-full text-xs"
                 >
@@ -365,11 +368,84 @@ export default function VagaPage() {
             </div>
           </div>
 
+          {/* AI Disclaimer */}
+          <div className="rounded-2xl border border-yellow-500/20 bg-yellow-500/5 overflow-hidden">
+            <div className="px-8 pt-7 pb-2">
+              <div className="flex items-start gap-4">
+                <div className="h-10 w-10 rounded-xl bg-yellow-500/10 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="h-5 w-5 text-yellow-600" />
+                </div>
+                <div>
+                  <h2 className="text-base font-semibold text-foreground">
+                    Aviso Importante — Uso Experimental de IA
+                  </h2>
+                  <p className="text-sm text-foreground/70 mt-0.5">
+                    Leia com atencao antes de gerar o documento.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="px-8 pb-7 pt-4 space-y-4">
+              <div className="space-y-3 text-sm text-foreground/80 leading-relaxed">
+                <p>
+                  Os curriculos e cartas de apresentacao gerados pelo Merlin utilizam
+                  inteligencia artificial (IA) em carater <strong>experimental</strong>.
+                  A IA pode apresentar <strong>&quot;alucinacoes&quot;</strong> — isto
+                  significa que o sistema pode <strong>inventar fatos, experiencias,
+                  datas, empresas, cargos ou qualificacoes que nunca existiram</strong> no
+                  seu historico profissional.
+                </p>
+                <p>
+                  <strong>Voce e inteiramente responsavel</strong> por revisar, validar e
+                  corrigir todo o conteudo gerado antes de envia-lo a qualquer empregador
+                  ou utilizá-lo em qualquer processo seletivo. Enviar um curriculo com
+                  informacoes falsas pode ter consequencias legais e profissionais graves.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  A Ella Executive Search Ltda nao se responsabiliza pelo conteudo dos
+                  documentos gerados, por oportunidades perdidas, ou por quaisquer danos
+                  decorrentes do uso de informacoes imprecisas produzidas pela IA.
+                </p>
+              </div>
+              <label
+                htmlFor="disclaimer-accept"
+                className="flex items-start gap-3 cursor-pointer group pt-1"
+              >
+                <div className="relative mt-0.5">
+                  <input
+                    type="checkbox"
+                    id="disclaimer-accept"
+                    checked={disclaimerAccepted}
+                    onChange={(e) => setDisclaimerAccepted(e.target.checked)}
+                    className="peer sr-only"
+                  />
+                  <div className="h-5 w-5 rounded-md border-2 border-yellow-600/30 peer-checked:border-foreground peer-checked:bg-foreground transition-all duration-200" />
+                  <svg
+                    className="absolute inset-0 h-5 w-5 text-background opacity-0 peer-checked:opacity-100 transition-opacity duration-200 p-0.5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={3}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                </div>
+                <span className="text-sm font-medium text-foreground leading-relaxed">
+                  Entendo que o conteudo gerado por IA pode conter erros e informacoes
+                  fictícias. Comprometo-me a revisar integralmente o documento antes de
+                  qualquer uso.
+                </span>
+              </label>
+            </div>
+          </div>
+
           {/* Generate button */}
           <div className="flex justify-end">
             <Button
               onClick={handleGenerate}
-              disabled={generating}
+              disabled={generating || !disclaimerAccepted}
               className="h-12 px-8 rounded-full text-sm font-semibold"
             >
               {generating ? (
