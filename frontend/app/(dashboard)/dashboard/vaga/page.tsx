@@ -105,12 +105,17 @@ export default function VagaPage() {
       }
     }
 
-    // Save text answers as comments if provided
-    for (const answer of textAnswers) {
-      if (answer.trim()) {
+    // Save follow-up answers with question context into knowledge
+    const questions = result.followUp?.questions || [];
+    for (let i = 0; i < textAnswers.length; i++) {
+      const answer = textAnswers[i]?.trim();
+      if (answer) {
         try {
+          const questionContext = questions[i] || "";
           await api.post(`/api/applications/${result.applicationId}/comment`, {
-            comment: answer.trim(),
+            comment: questionContext
+              ? `Pergunta: ${questionContext}\nResposta: ${answer}`
+              : answer,
           });
         } catch {
           // non-blocking

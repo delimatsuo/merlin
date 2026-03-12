@@ -4,7 +4,8 @@ import { useState, useCallback, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
 import { api } from "@/lib/api";
 import { useProfileStore, useWorkflowStore, useProcessingStore, useKnowledgeStore } from "@/lib/store";
-import { Upload, FileText, Loader2, CheckCircle2, Trash2 } from "lucide-react";
+import { Upload, FileText, Loader2, CheckCircle2, Trash2, ArrowRight } from "lucide-react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -175,6 +176,9 @@ export default function PerfilPage() {
                 <p className="text-sm text-muted-foreground">
                   Processando seu curriculo...
                 </p>
+                <p className="text-xs text-muted-foreground/60 mt-1">
+                  Isso pode levar de 30 a 60 segundos
+                </p>
               </div>
             ) : uploadedFile ? (
               <div className="flex flex-col items-center gap-3">
@@ -210,6 +214,22 @@ export default function PerfilPage() {
           </div>
         </div>
       </div>
+
+      {/* Next Step CTA */}
+      {allProfiles.length > 0 && (
+        <Link
+          href="/dashboard/vaga"
+          className="flex items-center justify-between gap-4 px-8 py-5 rounded-2xl bg-foreground text-background hover:opacity-90 transition-opacity"
+        >
+          <div>
+            <p className="text-sm font-semibold">Próximo passo</p>
+            <p className="text-xs opacity-70 mt-0.5">
+              Cole uma vaga para gerar seu curriculo personalizado
+            </p>
+          </div>
+          <ArrowRight className="h-5 w-5 shrink-0" />
+        </Link>
+      )}
 
       {/* Uploaded Resumes List */}
       {allProfiles.length > 0 && (

@@ -120,28 +120,21 @@ async def analyze_job(
             skills_matrix.append({"skill": skill, "status": "missing", "evidence": None})
         ats_score = 0
 
-    # Smart follow-up decision
+    # Always generate follow-up questions — even high-match candidates
+    # may have context about specific JD requirements not in their resume
     if ats_score is not None:
         missing_skills = [s["skill"] for s in skills_matrix if s["status"] == "missing"]
+        gap_skills = missing_skills
 
-        if ats_score >= 80:
-            follow_up = FollowUpDecision(decision="skip", questions=[])
-        elif ats_score >= 60:
-            try:
-                questions = await generate_followup_questions(
-                    knowledge or {}, analysis, missing_skills
-                )
-                follow_up = FollowUpDecision(decision="text", questions=questions[:3])
-            except Exception:
-                follow_up = FollowUpDecision(decision="text", questions=[])
-        else:
-            try:
-                questions = await generate_followup_questions(
-                    knowledge or {}, analysis, missing_skills
-                )
-                follow_up = FollowUpDecision(decision="voice", questions=questions[:5])
-            except Exception:
-                follow_up = FollowUpDecision(decision="voice", questions=[])
+        max_questions = 3 if ats_score >= 80 else 5
+        try:
+            questions = await generate_followup_questions(
+                knowledge or {}, analysis, gap_skills
+            )
+            follow_up = FollowUpDecision(decision="text", questions=questions[:max_questions])
+        except Exception as e:
+            logger.warning("followup_generation_error", error=str(e))
+            follow_up = FollowUpDecision(decision="text", questions=[])
 
     # Save application to Firestore
     application_id = await fs.save_application(
