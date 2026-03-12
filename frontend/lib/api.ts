@@ -47,6 +47,17 @@ class ApiClient {
     return response.json();
   }
 
+  private sanitizeError(detail: unknown, status: number): string {
+    if (typeof detail === "string" && detail.length < 200 && !detail.includes("Traceback")) {
+      return detail;
+    }
+    if (status === 429) {
+      return typeof detail === "string" ? detail : "Muitas requisicoes. Aguarde um momento.";
+    }
+    if (status >= 500) return "Erro interno. Tente novamente em alguns minutos.";
+    return `Erro ${status}. Tente novamente.`;
+  }
+
   private async retryOnce(fn: () => Promise<Response>): Promise<Response> {
     const response = await fn();
     if (response.status === 401) {
@@ -124,13 +135,7 @@ class ApiClient {
     });
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: "Erro desconhecido" }));
-      const detail = error.detail;
-      const message = typeof detail === "string"
-        ? detail
-        : Array.isArray(detail)
-          ? detail.map((d: { msg?: string }) => d.msg || "").join("; ") || `Erro ${response.status}`
-          : `Erro ${response.status}`;
-      throw new Error(message);
+      throw new Error(this.sanitizeError(error.detail, response.status));
     }
     return response.blob();
   }
@@ -146,7 +151,7 @@ class ApiClient {
     });
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: "Erro desconhecido" }));
-      throw new Error(error.detail || `Erro ${response.status}`);
+      throw new Error(this.sanitizeError(error.detail, response.status));
     }
     return response.blob();
   }

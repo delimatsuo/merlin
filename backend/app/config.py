@@ -90,3 +90,4 @@ def validate_secrets():
     if missing:
         import structlog
         structlog.get_logger().error("missing_secrets", secrets=missing)
+        raise SystemExit(f"FATAL: Missing required secrets: {', '.join(missing)}")

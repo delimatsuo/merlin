@@ -130,13 +130,13 @@ async def transcribe_audio(
         model="chirp_2",
     )
 
-    request = cloud_speech.RecognizeRequest(
+    recognize_request = cloud_speech.RecognizeRequest(
         recognizer=f"projects/{settings.gcp_project_id}/locations/us-central1/recognizers/_",
         config=config,
         content=audio_content,
     )
 
-    response = await asyncio.to_thread(client.recognize, request=request)
+    response = await asyncio.to_thread(client.recognize, request=recognize_request)
 
     transcript = ""
     for result in response.results:
