@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useDropzone } from "react-dropzone";
+import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useProfileStore, useWorkflowStore, useProcessingStore, useKnowledgeStore } from "@/lib/store";
 import { Upload, FileText, Loader2, CheckCircle2, Trash2, ArrowRight } from "lucide-react";
@@ -24,6 +25,7 @@ interface ProfileSummary {
 }
 
 export default function PerfilPage() {
+  const router = useRouter();
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [uploadedFile, setUploadedFile] = useState<string | null>(null);
@@ -35,6 +37,7 @@ export default function PerfilPage() {
   const { setProfileId, markStep } = useWorkflowStore();
   const { addTask, completeTask, failTask } = useProcessingStore();
   const { knowledge, setKnowledge } = useKnowledgeStore();
+  const isFirstUpload = useRef(true);
 
   // Load all profiles on mount
   useEffect(() => {
@@ -42,6 +45,9 @@ export default function PerfilPage() {
       try {
         const result = await api.get<{ profiles: ProfileSummary[] }>("/api/profile/all");
         setAllProfiles(result.profiles);
+        if (result.profiles.length > 0) {
+          isFirstUpload.current = false;
+        }
       } catch {
         // ignore
       } finally {
@@ -108,6 +114,14 @@ export default function PerfilPage() {
         api.post(`/api/research/enrich/${result.profileId}`)
           .then(() => completeTask("research"))
           .catch(() => failTask("research", "Pesquisa de empresas falhou"));
+
+        // Auto-redirect to interview on first upload
+        const interviewDone = useWorkflowStore.getState().steps.interview;
+        if (isFirstUpload.current && !interviewDone) {
+          isFirstUpload.current = false;
+          router.push("/dashboard/entrevista");
+          return;
+        }
       } catch (err) {
         setError(
           err instanceof Error
@@ -119,7 +133,7 @@ export default function PerfilPage() {
         setLoading(false);
       }
     },
-    [setProfile, setLoading, setProfileId, markStep, addTask, completeTask, failTask]
+    [setProfile, setLoading, setProfileId, markStep, addTask, completeTask, failTask, router]
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({

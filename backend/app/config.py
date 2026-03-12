@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     gcp_project_id: str = "merlin-489714"
 
     # CORS
-    allowed_origins: str = "http://localhost:3000,https://merlincv.com,https://www.merlincv.com,https://merlin-489714.web.app,https://merlin-489714.firebaseapp.com"
+    allowed_origins: str = "http://localhost:3000,https://merlincv.com,https://www.merlincv.com,https://staging.merlincv.com,https://merlin-489714.web.app,https://merlin-489714.firebaseapp.com"
 
     # API Keys (loaded from Secret Manager in production, env vars locally)
     anthropic_api_key: str = ""
@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     max_file_size_mb: int = 10
     max_resume_chars: int = 15000
     max_job_description_chars: int = 5000
-    max_daily_tailor_count: int = 5
+    max_daily_tailor_count: int = int(os.environ.get("TAILOR_DAILY_LIMIT", "10"))
 
     # Timeouts (seconds)
     default_timeout: int = 30

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useVersionStore, type ResumeVersion } from "@/lib/store";
 import { VersionSidebar } from "@/components/version-sidebar";
@@ -19,6 +20,7 @@ function CandidaturaContent() {
   const [loading, setLoading] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     if (!applicationId) {
@@ -44,6 +46,7 @@ function CandidaturaContent() {
   }, [applicationId, router, setVersions]);
 
   const handleDownload = async (versionId: string, type: "resume" | "cover-letter") => {
+    setDownloading(true);
     try {
       const endpoint = type === "resume" ? "resume" : "cover-letter";
       const blob = await api.getBlob(
@@ -57,14 +60,16 @@ function CandidaturaContent() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      toast.success("Download concluido");
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Erro ao baixar o documento.");
+      toast.error(e instanceof Error ? e.message : "Erro ao baixar o documento.");
+    } finally {
+      setDownloading(false);
     }
   };
 
   const handleEdit = (versionId: string) => {
     useVersionStore.getState().setActiveVersion(versionId);
-    // The editor component handles edit mode
   };
 
   const handleRegenerate = async (instructions: string) => {
@@ -74,13 +79,13 @@ function CandidaturaContent() {
         applicationId,
         instructions,
       });
-      // Reload versions
       const versionsResult = await api.get<{ versions: ResumeVersion[] }>(
         `/api/tailor/versions/${applicationId}`
       );
       setVersions(versionsResult.versions);
+      toast.success("Nova versao gerada");
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Erro ao regenerar o curriculo.");
+      toast.error(e instanceof Error ? e.message : "Erro ao regenerar o curriculo.");
     } finally {
       setRegenerating(false);
     }
@@ -97,8 +102,9 @@ function CandidaturaContent() {
         `/api/tailor/versions/${applicationId}`
       );
       setVersions(versionsResult.versions);
+      toast.success("Nova versao gerada");
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Erro ao gerar nova versao.");
+      toast.error(e instanceof Error ? e.message : "Erro ao gerar nova versao.");
     } finally {
       setRegenerating(false);
     }
@@ -144,6 +150,7 @@ function CandidaturaContent() {
           onDownload={handleDownload}
           onRegenerate={handleRegenerate}
           regenerating={regenerating}
+          downloading={downloading}
         />
       </div>
     </div>

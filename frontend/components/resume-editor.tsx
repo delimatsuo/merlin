@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Markdown from "react-markdown";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useVersionStore, type ResumeVersion } from "@/lib/store";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ interface ResumeEditorProps {
   onDownload: (versionId: string, type: "resume" | "cover-letter") => void;
   onRegenerate: (instructions: string) => void;
   regenerating: boolean;
+  downloading: boolean;
 }
 
 export function ResumeEditor({
@@ -30,6 +32,7 @@ export function ResumeEditor({
   onDownload,
   onRegenerate,
   regenerating,
+  downloading,
 }: ResumeEditorProps) {
   const { versions, activeVersionId, updateVersion } = useVersionStore();
   const [activeTab, setActiveTab] = useState<"resume" | "cover-letter">("resume");
@@ -61,8 +64,9 @@ export function ResumeEditor({
       const updateField = activeTab === "resume" ? "resumeContent" : "coverLetterText";
       updateVersion(activeVersion.id, { [updateField]: editContent } as Partial<ResumeVersion>);
       setEditing(false);
-    } catch {
-      // ignore
+      toast.success("Alteracoes salvas");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao salvar.");
     } finally {
       setSaving(false);
     }
@@ -78,6 +82,7 @@ export function ResumeEditor({
       );
       await api.put(`/api/tailor/version/${applicationId}/${result.versionId}`, {
         content: editContent,
+        field: activeTab === "resume" ? "resumeContent" : "coverLetterText",
       });
       // Reload versions
       const versionsResult = await api.get<{ versions: ResumeVersion[] }>(
@@ -85,8 +90,9 @@ export function ResumeEditor({
       );
       useVersionStore.getState().setVersions(versionsResult.versions);
       setEditing(false);
-    } catch {
-      // ignore
+      toast.success("Nova versao criada");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao salvar nova versao.");
     } finally {
       setSaving(false);
     }
@@ -100,7 +106,7 @@ export function ResumeEditor({
           <button
             onClick={() => { setActiveTab("resume"); setEditing(false); }}
             className={cn(
-              "flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium transition-all",
+              "flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium transition-all active:scale-[0.97] active:opacity-80",
               activeTab === "resume"
                 ? "bg-card apple-shadow-sm text-foreground"
                 : "text-muted-foreground hover:text-foreground"
@@ -112,7 +118,7 @@ export function ResumeEditor({
           <button
             onClick={() => { setActiveTab("cover-letter"); setEditing(false); }}
             className={cn(
-              "flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium transition-all",
+              "flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium transition-all active:scale-[0.97] active:opacity-80",
               activeTab === "cover-letter"
                 ? "bg-card apple-shadow-sm text-foreground"
                 : "text-muted-foreground hover:text-foreground"
@@ -172,9 +178,15 @@ export function ResumeEditor({
                     onClick={() =>
                       onDownload(activeVersion.id, activeTab === "resume" ? "resume" : "cover-letter")
                     }
+                    disabled={downloading}
                     className="h-8 rounded-lg text-xs"
                   >
-                    <Download className="mr-1 h-3 w-3" /> Baixar .docx
+                    {downloading ? (
+                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                    ) : (
+                      <Download className="mr-1 h-3 w-3" />
+                    )}
+                    {downloading ? "Baixando..." : "Baixar .docx"}
                   </Button>
                 </>
               )}
