@@ -29,11 +29,19 @@ class ApiClient {
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: "Erro desconhecido" }));
       const detail = error.detail;
-      const message = typeof detail === "string"
-        ? detail
-        : Array.isArray(detail)
-          ? detail.map((d: { msg?: string }) => d.msg || "").join("; ") || `Erro ${response.status}`
-          : `Erro ${response.status}`;
+      // Only expose user-friendly messages; hide internal/stack trace details
+      let message: string;
+      if (typeof detail === "string" && detail.length < 200 && !detail.includes("Traceback")) {
+        message = detail;
+      } else if (response.status === 429) {
+        message = typeof detail === "string" ? detail : "Muitas requisicoes. Aguarde um momento.";
+      } else if (response.status === 413) {
+        message = "Arquivo muito grande.";
+      } else if (response.status >= 500) {
+        message = "Erro interno. Tente novamente em alguns minutos.";
+      } else {
+        message = `Erro ${response.status}. Tente novamente.`;
+      }
       throw new Error(message);
     }
     return response.json();
