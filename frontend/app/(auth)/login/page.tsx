@@ -162,12 +162,21 @@ export default function LoginPage() {
               Cadastre-se
             </Link>
           </p>
-          <Link
-            href="/privacidade"
-            className="text-xs text-muted-foreground/70 hover:text-muted-foreground transition-colors"
-          >
-            Política de Privacidade
-          </Link>
+          <div className="flex items-center justify-center gap-3">
+            <Link
+              href="/privacidade"
+              className="text-xs text-muted-foreground/70 hover:text-muted-foreground transition-colors"
+            >
+              Privacidade
+            </Link>
+            <span className="text-muted-foreground/30">·</span>
+            <Link
+              href="/termos"
+              className="text-xs text-muted-foreground/70 hover:text-muted-foreground transition-colors"
+            >
+              Termos de Uso
+            </Link>
+          </div>
         </div>
       </div>
     </div>

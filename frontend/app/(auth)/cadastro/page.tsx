@@ -209,9 +209,17 @@ export default function CadastroPage() {
                   className="text-foreground font-medium underline underline-offset-2"
                   target="_blank"
                 >
-                  Política de Privacidade
+                  Politica de Privacidade
                 </Link>{" "}
-                e autorizo o tratamento dos meus dados conforme a LGPD.
+                e os{" "}
+                <Link
+                  href="/termos"
+                  className="text-foreground font-medium underline underline-offset-2"
+                  target="_blank"
+                >
+                  Termos de Uso
+                </Link>
+                , e autorizo o tratamento dos meus dados conforme a LGPD.
               </span>
             </label>
             <Button

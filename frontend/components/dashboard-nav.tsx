@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useAuthStore } from "@/lib/store";
@@ -18,6 +19,7 @@ import {
   Plus,
   LogOut,
   User,
+  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +31,7 @@ const navItems = [
 
 export function DashboardNav() {
   const pathname = usePathname();
+  const router = useRouter();
   const { user } = useAuthStore();
 
   const handleSignOut = async () => {
@@ -91,6 +94,13 @@ export function DashboardNav() {
                 <DropdownMenuItem className="rounded-lg text-xs py-2.5 px-3 font-medium cursor-default">
                   <User className="mr-2.5 h-3.5 w-3.5 text-muted-foreground" />
                   {user?.displayName || user?.email}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => router.push("/dashboard/configuracoes")}
+                  className="rounded-lg text-xs py-2.5 px-3 cursor-pointer"
+                >
+                  <Settings className="mr-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                  Configuracoes
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={handleSignOut}
