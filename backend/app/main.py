@@ -7,8 +7,11 @@ import firebase_admin
 import structlog
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
-from app.config import get_settings, load_secrets_from_gcp
+from app.config import get_settings, load_secrets_from_gcp, validate_secrets
 
 # Load secrets from GCP Secret Manager if in production
 load_secrets_from_gcp()
@@ -38,21 +41,31 @@ structlog.configure(
 
 logger = structlog.get_logger()
 
+# Rate limiter — keyed by IP, with per-user override via auth token
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=["200/minute"],
+    storage_uri="memory://",
+)
+
 app = FastAPI(
     title="Merlin API",
     description="API para personalização de currículos com IA",
     version="0.1.0",
 )
 
-# CORS
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# CORS — explicit methods and headers
 origins = settings.allowed_origins.split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["Content-Disposition"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "X-Correlation-ID"],
+    expose_headers=["Content-Disposition", "X-Correlation-ID"],
 )
 
 
@@ -64,6 +77,7 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(self), geolocation=()"
     return response
 
 
@@ -80,9 +94,10 @@ async def correlation_id_middleware(request: Request, call_next):
 
 # Health check
 @app.get("/health")
-async def health_check():
+@limiter.limit("10/minute")
+async def health_check(request: Request):
     """Health check endpoint for Cloud Run."""
-    return {"status": "healthy", "service": "merlin-api"}
+    return {"status": "healthy"}
 
 
 # Import and include routers
@@ -107,6 +122,7 @@ app.include_router(applications_router, prefix="/api/applications", tags=["appli
 
 @app.on_event("startup")
 async def startup_event():
+    validate_secrets()
     logger.info("merlin_api_started", version="0.1.0")
 
 

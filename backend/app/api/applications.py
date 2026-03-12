@@ -3,13 +3,19 @@
 import html
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 
 from app.auth import AuthenticatedUser, get_current_user
+from app.services.audit import log_data_access
 from app.services.firestore import FirestoreService
 from app.services.knowledge import merge_comment_into_knowledge
 
 logger = structlog.get_logger()
 router = APIRouter()
+
+
+class CommentRequest(BaseModel):
+    comment: str = Field(min_length=1, max_length=1000)
 
 
 @router.get("")
@@ -65,6 +71,7 @@ async def delete_application(
 
     await fs.delete_application(user.uid, application_id)
 
+    log_data_access(user.uid, "delete_application", "application", resource_id=application_id)
     logger.info("application_deleted", uid=user.uid, application_id=application_id)
     return {"status": "deleted"}
 
@@ -72,23 +79,11 @@ async def delete_application(
 @router.post("/{application_id}/comment")
 async def add_application_comment(
     application_id: str,
-    body: dict,
+    body: CommentRequest,
     user: AuthenticatedUser = Depends(get_current_user),
 ):
     """Save a user comment and merge into knowledge file."""
-    comment = body.get("comment", "").strip()
-
-    if not comment:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Comentário vazio.",
-        )
-
-    if len(comment) > 1000:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Máximo 1000 caracteres.",
-        )
+    comment = body.comment.strip()
 
     # Verify application exists and belongs to user
     fs = FirestoreService()

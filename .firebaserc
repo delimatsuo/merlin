@@ -1,5 +1,18 @@
 {
   "projects": {
     "default": "merlin-489714"
-  }
+  },
+  "targets": {
+    "merlin-489714": {
+      "hosting": {
+        "production": [
+          "merlin-489714"
+        ],
+        "staging": [
+          "merlin-489714-staging"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

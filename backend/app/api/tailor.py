@@ -1,22 +1,28 @@
 """Resume tailoring endpoints."""
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.auth import AuthenticatedUser, get_current_user
 from app.config import get_settings
 from app.schemas.api import TailorRequest, TailorResponse, RegenerateRequest
+from app.services.audit import log_data_access
 from app.services.gemini_ai import rewrite_resume, generate_cover_letter
 from app.services.firestore import FirestoreService
 
 logger = structlog.get_logger()
 router = APIRouter()
 settings = get_settings()
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("/generate", response_model=TailorResponse)
+@limiter.limit("10/minute")
 async def generate_tailored_resume(
+    request: Request,
     body: TailorRequest,
     user: AuthenticatedUser = Depends(get_current_user),
 ):
@@ -106,6 +112,7 @@ async def generate_tailored_resume(
     # Increment daily usage
     await fs.increment_daily_usage(user.uid)
 
+    log_data_access(user.uid, "ai_generate_resume", "application", resource_id=body.application_id)
     logger.info("tailor_complete", uid=user.uid)
 
     return TailorResponse(
@@ -138,7 +145,9 @@ async def get_tailored_result(
 
 
 @router.post("/regenerate")
+@limiter.limit("10/minute")
 async def regenerate_resume(
+    request: Request,
     body: RegenerateRequest,
     user: AuthenticatedUser = Depends(get_current_user),
 ):
@@ -211,6 +220,7 @@ async def regenerate_resume(
     # Increment daily usage
     await fs.increment_daily_usage(user.uid)
 
+    log_data_access(user.uid, "ai_regenerate_resume", "application", resource_id=body.application_id)
     return {"status": "regenerated", "resumeContent": resume_content}
 
 

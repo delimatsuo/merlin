@@ -3,14 +3,21 @@
 import html
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 
 from app.auth import AuthenticatedUser, get_current_user
 from app.schemas.api import ProfileUpdateRequest
+from app.services.audit import log_data_access
 from app.services.firestore import FirestoreService
 from app.services.knowledge import build_knowledge_from_profile, merge_comment_into_knowledge, rebuild_knowledge
 
 logger = structlog.get_logger()
 router = APIRouter()
+
+
+class MergeInsightsRequest(BaseModel):
+    insights: list[str] = Field(max_length=5)
+    applicationContext: str = ""
 
 
 @router.get("/status")
@@ -98,17 +105,18 @@ async def get_knowledge(
         # Auto-build from latest profile (migration for existing users)
         knowledge = await build_knowledge_from_profile(user.uid)
 
+    log_data_access(user.uid, "read_knowledge", "knowledge")
     return {"knowledge": knowledge}
 
 
 @router.post("/knowledge/merge")
 async def merge_knowledge_insights(
-    body: dict,
+    body: MergeInsightsRequest,
     user: AuthenticatedUser = Depends(get_current_user),
 ):
     """Manually add insights to the knowledge file (comment box)."""
-    insights = body.get("insights", [])
-    application_context = body.get("applicationContext", "")
+    insights = body.insights
+    application_context = body.applicationContext
 
     if not insights:
         raise HTTPException(
@@ -211,6 +219,7 @@ async def delete_profile(
     # Rebuild knowledge file from remaining profiles (awaited for data integrity)
     await rebuild_knowledge(user.uid)
 
+    log_data_access(user.uid, "delete_profile", "profile", resource_id=profile_id)
     logger.info("profile_deleted", uid=user.uid, profile_id=profile_id)
     return {"status": "deleted"}
 
@@ -222,6 +231,7 @@ async def export_user_data(
     """Export all user data as JSON (LGPD right to access)."""
     fs = FirestoreService()
     data = await fs.export_user_data(user.uid)
+    log_data_access(user.uid, "export_data", "user_data")
     return data
 
 
@@ -247,5 +257,6 @@ async def delete_account(
             detail="Erro ao excluir conta. Tente novamente.",
         )
 
+    log_data_access(user.uid, "delete_account", "account")
     logger.info("account_deleted", uid=user.uid)
     return {"status": "deleted", "message": "Conta e todos os dados foram excluídos."}

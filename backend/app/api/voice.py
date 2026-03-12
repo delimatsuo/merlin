@@ -6,8 +6,10 @@ import json
 import wave
 
 import structlog
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import Response
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from google import genai
 from google.genai import types
 from google.api_core.client_options import ClientOptions
@@ -17,11 +19,13 @@ from pydantic import BaseModel
 
 from app.auth import AuthenticatedUser, verify_ws_token, get_current_user
 from app.config import get_settings
+from app.services.audit import log_data_access
 from app.services.gemini_ai import generate_interview_questions, process_voice_answers
 from app.services.firestore import FirestoreService
 
 logger = structlog.get_logger()
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 _genai_client: genai.Client | None = None
 _speech_client: SpeechClient | None = None
@@ -51,7 +55,9 @@ class TTSRequest(BaseModel):
 
 
 @router.post("/tts")
+@limiter.limit("30/minute")
 async def text_to_speech(
+    request: Request,
     body: TTSRequest,
     user: AuthenticatedUser = Depends(get_current_user),
 ):
@@ -102,7 +108,9 @@ async def text_to_speech(
 
 
 @router.post("/transcribe")
+@limiter.limit("20/minute")
 async def transcribe_audio(
+    request: Request,
     audio: UploadFile = File(...),
     user: AuthenticatedUser = Depends(get_current_user),
 ):
@@ -122,13 +130,13 @@ async def transcribe_audio(
         model="chirp_2",
     )
 
-    request = cloud_speech.RecognizeRequest(
+    recognize_request = cloud_speech.RecognizeRequest(
         recognizer=f"projects/{settings.gcp_project_id}/locations/us-central1/recognizers/_",
         config=config,
         content=audio_content,
     )
 
-    response = await asyncio.to_thread(client.recognize, request=request)
+    response = await asyncio.to_thread(client.recognize, request=recognize_request)
 
     transcript = ""
     for result in response.results:
@@ -245,15 +253,21 @@ async def voice_session(websocket: WebSocket):
             pass
 
 
+class TextAnswerRequest(BaseModel):
+    sessionId: str
+    questionIndex: int
+    answer: str
+
+
 @router.post("/text-answer")
 async def submit_text_answer(
-    body: dict,
+    body: TextAnswerRequest,
     user: AuthenticatedUser = Depends(get_current_user),
 ):
     """Submit a text answer to an interview question (fallback for voice)."""
-    session_id = body.get("sessionId", "")
-    question_index = body.get("questionIndex", 0)
-    answer_text = body.get("answer", "")
+    session_id = body.sessionId
+    question_index = body.questionIndex
+    answer_text = body.answer
 
     if not session_id or not answer_text:
         raise HTTPException(
@@ -327,4 +341,5 @@ async def complete_interview(
     except Exception as e:
         logger.warning("knowledge_voice_merge_skipped", uid=user.uid, error=str(e))
 
+    log_data_access(user.uid, "complete_interview", "voice_session", resource_id=session_id)
     return {"status": "completed", "profileUpdate": profile_update}
