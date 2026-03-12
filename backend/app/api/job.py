@@ -124,8 +124,7 @@ async def analyze_job(
     # may have context about specific JD requirements not in their resume
     if ats_score is not None:
         missing_skills = [s["skill"] for s in skills_matrix if s["status"] == "missing"]
-        likely_skills = [s["skill"] for s in skills_matrix if s["status"] == "likely"]
-        gap_skills = missing_skills + likely_skills
+        gap_skills = missing_skills
 
         max_questions = 3 if ats_score >= 80 else 5
         try:
@@ -133,7 +132,8 @@ async def analyze_job(
                 knowledge or {}, analysis, gap_skills
             )
             follow_up = FollowUpDecision(decision="text", questions=questions[:max_questions])
-        except Exception:
+        except Exception as e:
+            logger.warning("followup_generation_error", error=str(e))
             follow_up = FollowUpDecision(decision="text", questions=[])
 
     # Save application to Firestore

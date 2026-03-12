@@ -222,7 +222,7 @@ export default function PerfilPage() {
           className="flex items-center justify-between gap-4 px-8 py-5 rounded-2xl bg-foreground text-background hover:opacity-90 transition-opacity"
         >
           <div>
-            <p className="text-sm font-semibold">Proximo passo</p>
+            <p className="text-sm font-semibold">Próximo passo</p>
             <p className="text-xs opacity-70 mt-0.5">
               Cole uma vaga para gerar seu curriculo personalizado
             </p>
