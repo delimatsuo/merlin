@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { useVersionStore, type ResumeVersion } from "@/lib/store";
 import { Button } from "@/components/ui/button";
@@ -57,8 +58,9 @@ export function VersionSidebar({
         `/api/tailor/versions/${applicationId}`
       );
       useVersionStore.getState().setVersions(versionsResult.versions);
-    } catch {
-      // ignore
+      toast.success("Versao copiada");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao copiar versao.");
     } finally {
       setActionLoading(null);
     }
@@ -74,8 +76,8 @@ export function VersionSidebar({
         name: renameValue.trim(),
       });
       updateVersion(versionId, { name: renameValue.trim() });
-    } catch {
-      // ignore
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao renomear.");
     }
     setRenaming(null);
   };
@@ -85,8 +87,9 @@ export function VersionSidebar({
     try {
       await api.delete(`/api/tailor/version/${applicationId}/${versionId}`);
       removeVersion(versionId);
-    } catch {
-      // ignore
+      toast.success("Versao excluida");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao excluir versao.");
     } finally {
       setActionLoading(null);
     }
@@ -126,8 +129,8 @@ export function VersionSidebar({
             className={cn(
               "rounded-lg p-3 cursor-pointer transition-colors group",
               version.id === activeVersionId
-                ? "bg-foreground/5"
-                : "hover:bg-foreground/[0.02]"
+                ? "bg-primary/10 ring-1 ring-primary/20"
+                : "hover:bg-foreground/[0.03]"
             )}
             onClick={() => setActiveVersion(version.id)}
           >
