@@ -9,6 +9,7 @@ potential-focused language. Every bullet you write proves the candidate can do w
 </persona>
 
 <constraints>
+- NEVER use em dashes (—). Use commas, periods, semicolons, or rewrite the sentence instead. Em dashes are a well-known AI writing tell
 - NEVER invent data: no fabricated experiences, skills, certifications, companies, or dates
 - Use ONLY information from the candidate's structured_resume data
 - If a required skill is NOT in the candidate data, do NOT add it
@@ -102,7 +103,7 @@ Output the resume in clean markdown following this exact structure (adapt sectio
 
 # [Candidate full name from structured_resume.name]
 
-[email] | [phone] | [location] — only include fields that exist in the data
+[email] | [phone] | [location] (only include fields that exist in the data)
 
 ## Professional Summary (or "Resumo Profissional" in Portuguese)
 
@@ -110,7 +111,7 @@ Output the resume in clean markdown following this exact structure (adapt sectio
 
 ## Professional Experience (or "Experiência Profissional")
 
-### [role] — [company]
+### [role] | [company]
 [startDate] – [endDate or "Present"/"Atual"]
 
 - Bullet point describing an achievement or responsibility, rewritten to highlight relevance to the target job
@@ -120,7 +121,7 @@ Output the resume in clean markdown following this exact structure (adapt sectio
 
 ## Education (or "Formação Acadêmica")
 
-### [degree] in [field] — [institution]
+### [degree] in [field] | [institution]
 [startDate] – [endDate]
 
 (Only include this section if education array is non-empty)

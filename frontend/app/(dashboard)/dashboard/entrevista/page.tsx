@@ -53,13 +53,17 @@ export default function EntrevistaPage() {
   const [transcribing, setTranscribing] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
 
+  // TTS preload cache: questionIndex -> blob URL
+  const ttsCacheRef = useRef<Map<number, string>>(new Map());
+  const preloadingRef = useRef(false);
+
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Cleanup audio & mic on unmount
+  // Cleanup audio, mic, and TTS cache on unmount
   useEffect(() => {
     return () => {
       audioRef.current?.pause();
@@ -68,6 +72,9 @@ export default function EntrevistaPage() {
       }
       streamRef.current?.getTracks().forEach((t) => t.stop());
       if (timerRef.current) clearInterval(timerRef.current);
+      // Revoke all cached blob URLs
+      ttsCacheRef.current.forEach((url) => URL.revokeObjectURL(url));
+      ttsCacheRef.current.clear();
     };
   }, []);
 
@@ -109,6 +116,38 @@ export default function EntrevistaPage() {
     init();
   }, []);
 
+  // Preload TTS audio for all questions after session loads
+  useEffect(() => {
+    if (!session || preloadingRef.current) return;
+    preloadingRef.current = true;
+
+    // Preload first 2 questions immediately (likely needed soon),
+    // then the rest sequentially to avoid hammering the API
+    const preloadQuestion = async (index: number) => {
+      if (ttsCacheRef.current.has(index)) return;
+      try {
+        const blob = await api.postBlob("/api/voice/tts", {
+          text: session.questions[index],
+        });
+        const url = URL.createObjectURL(blob);
+        ttsCacheRef.current.set(index, url);
+      } catch {
+        // Non-blocking — will fall back to on-demand fetch
+      }
+    };
+
+    const preloadAll = async () => {
+      // First two in parallel for fastest availability
+      await Promise.all([preloadQuestion(0), session.questions.length > 1 ? preloadQuestion(1) : Promise.resolve()]);
+      // Rest sequentially
+      for (let i = 2; i < session.questions.length; i++) {
+        await preloadQuestion(i);
+      }
+    };
+
+    preloadAll();
+  }, [session]);
+
   // In voice mode, auto-play TTS when question changes
   useEffect(() => {
     if (mode === "voice" && session && !loading) {
@@ -126,19 +165,26 @@ export default function EntrevistaPage() {
     }
 
     try {
-      setLoadingTTS(true);
-      const blob = await api.postBlob("/api/voice/tts", { text });
-      const url = URL.createObjectURL(blob);
+      // Check preload cache first
+      const cachedUrl = ttsCacheRef.current.get(currentIndex);
+      let url: string;
+      if (cachedUrl) {
+        url = cachedUrl;
+      } else {
+        setLoadingTTS(true);
+        const blob = await api.postBlob("/api/voice/tts", { text });
+        url = URL.createObjectURL(blob);
+        ttsCacheRef.current.set(currentIndex, url);
+      }
+
       const audio = new Audio(url);
       audioRef.current = audio;
       audio.onended = () => {
         setPlayingTTS(false);
-        URL.revokeObjectURL(url);
       };
       audio.onerror = () => {
         setPlayingTTS(false);
         setLoadingTTS(false);
-        URL.revokeObjectURL(url);
       };
       setLoadingTTS(false);
       setPlayingTTS(true);
