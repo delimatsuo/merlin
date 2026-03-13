@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     max_file_size_mb: int = 10
     max_resume_chars: int = 15000
     max_job_description_chars: int = 5000
-    max_daily_tailor_count: int = int(os.environ.get("TAILOR_DAILY_LIMIT", "10"))
+    max_daily_tailor_count: int = int(os.environ.get("TAILOR_DAILY_LIMIT", "5"))
 
     # Timeouts (seconds)
     default_timeout: int = 30

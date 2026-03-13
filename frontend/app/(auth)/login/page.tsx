@@ -177,6 +177,17 @@ export default function LoginPage() {
               Termos de Uso
             </Link>
           </div>
+          <p className="text-xs text-muted-foreground/50 mt-4">
+            por{" "}
+            <a
+              href="https://ellaexecutivesearch.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-muted-foreground/70 hover:text-muted-foreground transition-colors"
+            >
+              Ella Executive Search
+            </a>
+          </p>
         </div>
       </div>
     </div>
