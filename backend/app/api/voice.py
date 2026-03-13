@@ -63,7 +63,7 @@ async def text_to_speech(
             speech_config=types.SpeechConfig(
                 voice_config=types.VoiceConfig(
                     prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                        voice_name="Sulafat",
+                        voice_name="Orus",
                     )
                 )
             ),
