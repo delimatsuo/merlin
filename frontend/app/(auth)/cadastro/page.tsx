@@ -235,7 +235,7 @@ export default function CadastroPage() {
         {/* Footer */}
         <div className="text-center mt-8 space-y-3">
           <p className="text-sm text-muted-foreground">
-            Ja tem conta?{" "}
+            Já tem conta?{" "}
             <Link
               href="/login"
               className="text-foreground font-medium hover:underline underline-offset-4"

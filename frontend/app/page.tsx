@@ -1,3 +1,7 @@
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   FileText,
@@ -6,8 +10,17 @@ import {
   MessageSquareText,
   ArrowRight,
 } from "lucide-react";
+import { auth } from "@/lib/firebase";
 
 export default function LandingPage() {
+  const router = useRouter();
+
+  // Redirect authenticated users to dashboard
+  useEffect(() => {
+    if (auth?.currentUser) {
+      router.replace("/dashboard");
+    }
+  }, [router]);
   return (
     <div className="min-h-screen bg-background">
       {/* Nav */}
