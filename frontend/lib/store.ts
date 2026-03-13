@@ -243,6 +243,90 @@ export const useApplicationsListStore = create<ApplicationsListState>((set) => (
   setNextCursor: (nextCursor) => set({ nextCursor }),
 }));
 
+// --- Admin Store ---
+
+export interface AdminStats {
+  totalUsers: number;
+  generationsToday: number;
+  generationsMonth: number;
+  signupsMonth: number;
+}
+
+export interface AdminUser {
+  uid: string;
+  email: string;
+  name: string;
+  createdAt: string;
+  profileCount: number;
+  applicationCount: number;
+  generationCount: number;
+}
+
+export interface AdminDailyPoint {
+  date: string;
+  count: number;
+}
+
+export interface AdminGeneration {
+  id: string;
+  uid: string;
+  userEmail: string;
+  company: string;
+  createdAt: string;
+}
+
+export interface AdminSettingsData {
+  daily_limit: number;
+  tts_enabled: boolean;
+  interview_enabled: boolean;
+  cover_letter_enabled: boolean;
+}
+
+interface AdminState {
+  isAdmin: boolean | null; // null = not checked yet
+  stats: AdminStats | null;
+  dailyChart: AdminDailyPoint[];
+  recentGenerations: AdminGeneration[];
+  users: AdminUser[];
+  usersCursor: string;
+  usersHasMore: boolean;
+  settings: AdminSettingsData | null;
+  loading: boolean;
+  setIsAdmin: (v: boolean) => void;
+  setStats: (s: AdminStats) => void;
+  setDailyChart: (d: AdminDailyPoint[]) => void;
+  setRecentGenerations: (g: AdminGeneration[]) => void;
+  setUsers: (u: AdminUser[]) => void;
+  appendUsers: (u: AdminUser[]) => void;
+  setUsersCursor: (c: string) => void;
+  setUsersHasMore: (h: boolean) => void;
+  setSettings: (s: AdminSettingsData) => void;
+  setLoading: (l: boolean) => void;
+}
+
+export const useAdminStore = create<AdminState>((set) => ({
+  isAdmin: null,
+  stats: null,
+  dailyChart: [],
+  recentGenerations: [],
+  users: [],
+  usersCursor: "",
+  usersHasMore: false,
+  settings: null,
+  loading: false,
+  setIsAdmin: (isAdmin) => set({ isAdmin }),
+  setStats: (stats) => set({ stats }),
+  setDailyChart: (dailyChart) => set({ dailyChart }),
+  setRecentGenerations: (recentGenerations) => set({ recentGenerations }),
+  setUsers: (users) => set({ users }),
+  appendUsers: (users) =>
+    set((state) => ({ users: [...state.users, ...users] })),
+  setUsersCursor: (usersCursor) => set({ usersCursor }),
+  setUsersHasMore: (usersHasMore) => set({ usersHasMore }),
+  setSettings: (settings) => set({ settings }),
+  setLoading: (loading) => set({ loading }),
+}));
+
 // --- Version Store ---
 
 export interface ResumeVersion {

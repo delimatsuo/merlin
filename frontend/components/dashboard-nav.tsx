@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import { useAuthStore } from "@/lib/store";
+import { useAuthStore, useAdminStore } from "@/lib/store";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -20,8 +20,11 @@ import {
   LogOut,
   User,
   Settings,
+  Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api";
+import { useEffect } from "react";
 
 const navItems = [
   { href: "/dashboard", label: "Candidaturas", icon: Briefcase },
@@ -33,6 +36,16 @@ export function DashboardNav() {
   const pathname = usePathname();
   const router = useRouter();
   const { user } = useAuthStore();
+  const { isAdmin, setIsAdmin } = useAdminStore();
+
+  // Check admin status once on mount
+  useEffect(() => {
+    if (!user || isAdmin !== null) return;
+    api
+      .get("/api/admin/stats")
+      .then(() => setIsAdmin(true))
+      .catch(() => setIsAdmin(false));
+  }, [user, isAdmin]);
 
   const handleSignOut = async () => {
     await signOut(auth);
@@ -70,6 +83,19 @@ export function DashboardNav() {
                   </Link>
                 );
               })}
+              {isAdmin && (
+                <Link
+                  href="/admin"
+                  className={cn(
+                    "px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200",
+                    pathname?.startsWith("/admin")
+                      ? "bg-foreground text-background"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  Admin
+                </Link>
+              )}
             </div>
           </div>
           <div className="flex items-center">

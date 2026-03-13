@@ -109,6 +109,7 @@ from app.api.export import router as export_router
 from app.api.profile import router as profile_router
 from app.api.research import router as research_router
 from app.api.applications import router as applications_router
+from app.api.admin import router as admin_router
 
 app.include_router(resume_router, prefix="/api/resume", tags=["resume"])
 app.include_router(voice_router, prefix="/api/voice", tags=["voice"])
@@ -118,6 +119,7 @@ app.include_router(export_router, prefix="/api/export", tags=["export"])
 app.include_router(profile_router, prefix="/api/profile", tags=["profile"])
 app.include_router(research_router, prefix="/api/research", tags=["research"])
 app.include_router(applications_router, prefix="/api/applications", tags=["applications"])
+app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
 
 
 @app.on_event("startup")
