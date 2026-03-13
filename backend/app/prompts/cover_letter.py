@@ -15,10 +15,11 @@ Write a cover letter tailored to the specific job. The input contains the candid
 </task>
 
 <language>
-CRITICAL: Write the cover letter in the SAME LANGUAGE as the job_description.
-- If the job posting is in English, write entirely in English
-- If the job posting is in Portuguese, write in formal Portuguese Brazilian
-- If the job posting is in another language, match that language
+CRITICAL: Write the cover letter in the language specified by job_analysis.language.
+- "en" → write entirely in English
+- "pt-BR" → write in formal Brazilian Portuguese
+- Other codes → match that language
+If job_analysis.language is missing, detect from the job_description text.
 </language>
 
 <guidelines>

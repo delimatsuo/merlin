@@ -50,7 +50,7 @@ const nextConfig: NextConfig = {
               "img-src 'self' data: https://*.googleusercontent.com",
               "font-src 'self'",
               `connect-src ${connectSrc}`,
-              "frame-src https://accounts.google.com https://merlin-489714.firebaseapp.com https://merlin-489714.web.app",
+              "frame-src https://accounts.google.com https://merlincv.com https://merlin-489714.firebaseapp.com https://merlin-489714.web.app https://merlin-489714-staging.web.app",
               "media-src 'self' blob:",
             ].join("; "),
           },

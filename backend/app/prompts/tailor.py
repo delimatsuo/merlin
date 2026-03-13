@@ -32,11 +32,12 @@ The input JSON has this structure:
 </task>
 
 <language>
-CRITICAL: Write the resume in the SAME LANGUAGE as the job_description.
-- If the job posting is in English, write the entire resume in English (section headers, bullet points, summary — everything)
-- If the job posting is in Portuguese, write in Portuguese Brazilian
-- If the job posting is in another language, match that language
-The candidate's profile data may be in a different language than the job posting — translate the content to match the job posting language.
+CRITICAL: Write the resume in the language specified by job_analysis.language.
+- "en" → write the entire resume in English (section headers, bullet points, summary — everything)
+- "pt-BR" → write in Brazilian Portuguese
+- Other codes → match that language
+If job_analysis.language is missing, detect from the job_description text.
+The candidate's profile data may be in a different language — translate all content to match the target language.
 </language>
 
 <strategy>

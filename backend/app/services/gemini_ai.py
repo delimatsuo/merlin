@@ -431,7 +431,7 @@ Generate targeted follow-up questions to fill gaps between the candidate's profi
 - Max 5 questions
 - Each question targets a specific skill gap
 - Questions should be answerable in 1-2 sentences
-- Write in informal professional Brazilian Portuguese
+- Write in the language specified by job_analysis.language ("en" for English, "pt-BR" for Brazilian Portuguese). If missing, default to Brazilian Portuguese.
 </constraints>
 
 <focus>

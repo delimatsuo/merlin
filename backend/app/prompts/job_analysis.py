@@ -14,7 +14,8 @@ Analyze the job description and extract structured information.
   "responsibilities": ["key responsibilities"],
   "culture_signals": ["signals about company culture"],
   "industry": "industry sector",
-  "location": "location or remote"
+  "location": "location or remote",
+  "language": "en | pt-BR — the language the job description is written in"
 }
 </schema>
 
@@ -22,4 +23,5 @@ Analyze the job description and extract structured information.
 - Extract only what is stated or strongly implied in the text
 - Keep skill names as they appear in the JD (preserve original language)
 - Separate required vs preferred skills based on language cues ("must have" vs "nice to have", "obrigatório" vs "desejável")
+- Detect the language of the job description text: use "en" for English, "pt-BR" for Brazilian Portuguese, or the appropriate BCP-47 code for other languages
 </constraints>"""

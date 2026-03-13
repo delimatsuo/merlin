@@ -16,4 +16,3 @@ pydantic-settings==2.7.1
 websockets==14.1
 slowapi==0.1.9
 google-genai==1.14.0
-google-cloud-speech==2.30.0

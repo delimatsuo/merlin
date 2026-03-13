@@ -19,10 +19,13 @@ import {
   Keyboard,
   AudioLines,
   RotateCcw,
+  Pause,
+  Play,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type InterviewMode = "choose" | "text" | "voice";
+type RecordingState = "idle" | "recording" | "paused";
 
 interface InterviewSession {
   sessionId: string;
@@ -44,23 +47,46 @@ export default function EntrevistaPage() {
   const [completed, setCompleted] = useState(false);
 
   // Audio state
+  const [loadingTTS, setLoadingTTS] = useState(false);
   const [playingTTS, setPlayingTTS] = useState(false);
-  const [recording, setRecording] = useState(false);
+  const [recordingState, setRecordingState] = useState<RecordingState>("idle");
   const [transcribing, setTranscribing] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Cleanup audio & mic on unmount
   useEffect(() => {
     return () => {
       audioRef.current?.pause();
-      mediaRecorderRef.current?.stop();
+      if (mediaRecorderRef.current?.state !== "inactive") {
+        mediaRecorderRef.current?.stop();
+      }
       streamRef.current?.getTracks().forEach((t) => t.stop());
+      if (timerRef.current) clearInterval(timerRef.current);
     };
   }, []);
+
+  // Recording timer
+  useEffect(() => {
+    if (recordingState === "recording") {
+      timerRef.current = setInterval(() => {
+        setRecordingSeconds((s) => s + 1);
+      }, 1000);
+    } else {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [recordingState]);
 
   // Fetch questions
   useEffect(() => {
@@ -92,14 +118,15 @@ export default function EntrevistaPage() {
   }, [currentIndex, mode, session?.sessionId]);
 
   const handlePlayTTS = async (text: string) => {
-    if (playingTTS) {
+    if (playingTTS || loadingTTS) {
       audioRef.current?.pause();
       setPlayingTTS(false);
+      setLoadingTTS(false);
       return;
     }
 
     try {
-      setPlayingTTS(true);
+      setLoadingTTS(true);
       const blob = await api.postBlob("/api/voice/tts", { text });
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
@@ -110,19 +137,36 @@ export default function EntrevistaPage() {
       };
       audio.onerror = () => {
         setPlayingTTS(false);
+        setLoadingTTS(false);
         URL.revokeObjectURL(url);
       };
+      setLoadingTTS(false);
+      setPlayingTTS(true);
       await audio.play();
     } catch {
       setPlayingTTS(false);
+      setLoadingTTS(false);
     }
   };
 
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
+
   const startRecording = useCallback(async () => {
+    if (typeof MediaRecorder === "undefined") {
+      setError("Seu navegador nao suporta gravacao de audio. Use o modo texto.");
+      return;
+    }
+
     try {
+      setError("");
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       chunksRef.current = [];
+      setRecordingSeconds(0);
 
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
@@ -141,35 +185,38 @@ export default function EntrevistaPage() {
         streamRef.current = null;
 
         const audioBlob = new Blob(chunksRef.current, { type: "audio/webm" });
-        if (audioBlob.size < 100) return;
+        if (audioBlob.size < 100) {
+          setRecordingState("idle");
+          return;
+        }
 
         // Transcribe
         setTranscribing(true);
         try {
-          const res = await api.postAudio(
-            "/api/voice/transcribe",
-            audioBlob
-          );
+          const res = await api.postAudio("/api/voice/transcribe", audioBlob);
           if (res.transcript) {
             setAnswers((prev) => {
               const updated = [...prev];
-              // Append to existing answer if any
               const existing = updated[currentIndex]?.trim();
               updated[currentIndex] = existing
                 ? `${existing} ${res.transcript}`
                 : res.transcript;
               return updated;
             });
+          } else {
+            setError("Nao foi possivel transcrever o audio. Tente novamente ou digite sua resposta.");
           }
         } catch {
           setError("Erro ao transcrever audio. Tente novamente ou digite sua resposta.");
         } finally {
           setTranscribing(false);
+          setRecordingState("idle");
         }
       };
 
-      mediaRecorder.start(250); // collect chunks every 250ms
-      setRecording(true);
+      // Collect chunks every 1 second (better for longer recordings)
+      mediaRecorder.start(1000);
+      setRecordingState("recording");
     } catch {
       setError(
         "Nao foi possivel acessar o microfone. Verifique as permissoes do navegador."
@@ -177,23 +224,62 @@ export default function EntrevistaPage() {
     }
   }, [currentIndex]);
 
-  const stopRecording = useCallback(() => {
+  const pauseRecording = useCallback(() => {
     if (mediaRecorderRef.current?.state === "recording") {
-      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current.pause();
+      setRecordingState("paused");
     }
-    setRecording(false);
   }, []);
+
+  const resumeRecording = useCallback(() => {
+    if (mediaRecorderRef.current?.state === "paused") {
+      mediaRecorderRef.current.resume();
+      setRecordingState("recording");
+    }
+  }, []);
+
+  const stopRecording = useCallback(() => {
+    if (
+      mediaRecorderRef.current?.state === "recording" ||
+      mediaRecorderRef.current?.state === "paused"
+    ) {
+      mediaRecorderRef.current.stop();
+      // Don't set idle here — onstop handler will handle state transition after transcription
+    }
+  }, []);
+
+  const restartRecording = useCallback(() => {
+    // Stop current, clear chunks, start fresh
+    if (
+      mediaRecorderRef.current?.state === "recording" ||
+      mediaRecorderRef.current?.state === "paused"
+    ) {
+      // Override onstop to NOT transcribe — instead restart recording
+      mediaRecorderRef.current.onstop = () => {
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        setRecordingState("idle");
+        setRecordingSeconds(0);
+        startRecording();
+      };
+      mediaRecorderRef.current.stop();
+    } else {
+      setRecordingState("idle");
+      setRecordingSeconds(0);
+      startRecording();
+    }
+  }, [startRecording]);
 
   const handleNext = () => {
     if (!session) return;
-    if (recording) stopRecording();
+    if (recordingState !== "idle") stopRecording();
     if (currentIndex < session.questions.length - 1) {
       setCurrentIndex(currentIndex + 1);
     }
   };
 
   const handlePrev = () => {
-    if (recording) stopRecording();
+    if (recordingState !== "idle") stopRecording();
     if (currentIndex > 0) {
       setCurrentIndex(currentIndex - 1);
     }
@@ -201,7 +287,7 @@ export default function EntrevistaPage() {
 
   const handleSubmit = async () => {
     if (!session) return;
-    if (recording) stopRecording();
+    if (recordingState !== "idle") stopRecording();
     setSubmitting(true);
     setError("");
 
@@ -252,6 +338,7 @@ export default function EntrevistaPage() {
 
   const answeredCount = answers.filter((a) => a.trim().length > 0).length;
   const totalQuestions = session?.questions.length || 0;
+  const isRecording = recordingState !== "idle";
 
   // ---------- LOADING ----------
   if (loading) {
@@ -382,7 +469,10 @@ export default function EntrevistaPage() {
           </p>
         </div>
         <button
-          onClick={() => setMode(mode === "voice" ? "text" : "voice")}
+          onClick={() => {
+            if (isRecording) stopRecording();
+            setMode(mode === "voice" ? "text" : "voice");
+          }}
           className="shrink-0 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-full bg-secondary"
           title={mode === "voice" ? "Mudar para texto" : "Mudar para voz"}
         >
@@ -421,6 +511,16 @@ export default function EntrevistaPage() {
         </span>
       </div>
 
+      {/* TTS Loading Banner (voice mode) */}
+      {mode === "voice" && loadingTTS && (
+        <div className="flex items-center gap-3 rounded-xl bg-secondary/50 px-5 py-3">
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          <span className="text-sm text-muted-foreground">
+            Gerando audio da pergunta...
+          </span>
+        </div>
+      )}
+
       {/* Question Card */}
       <div className="apple-shadow rounded-2xl bg-card overflow-hidden">
         <div className="p-8">
@@ -437,84 +537,138 @@ export default function EntrevistaPage() {
                 {currentQuestion}
               </p>
             </div>
-            <button
-              onClick={() => handlePlayTTS(currentQuestion)}
-              className={cn(
-                "shrink-0 h-9 w-9 rounded-lg flex items-center justify-center transition-colors",
-                playingTTS
-                  ? "bg-foreground/10 text-foreground"
-                  : "text-muted-foreground/50 hover:text-foreground hover:bg-secondary"
-              )}
-              title={playingTTS ? "Parar audio" : "Ouvir pergunta"}
-            >
-              {playingTTS ? (
-                <VolumeX className="h-4 w-4" />
-              ) : (
-                <Volume2 className="h-4 w-4" />
-              )}
-            </button>
+            {/* Only show TTS button in text mode — voice mode auto-plays */}
+            {mode === "text" && (
+              <button
+                onClick={() => handlePlayTTS(currentQuestion)}
+                disabled={loadingTTS}
+                className={cn(
+                  "shrink-0 h-9 w-9 rounded-lg flex items-center justify-center transition-colors",
+                  playingTTS || loadingTTS
+                    ? "bg-foreground/10 text-foreground"
+                    : "text-muted-foreground/50 hover:text-foreground hover:bg-secondary"
+                )}
+                title={playingTTS ? "Parar audio" : "Ouvir pergunta"}
+              >
+                {loadingTTS ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : playingTTS ? (
+                  <VolumeX className="h-4 w-4" />
+                ) : (
+                  <Volume2 className="h-4 w-4" />
+                )}
+              </button>
+            )}
           </div>
 
           {/* Voice Recording Controls */}
           {mode === "voice" && (
             <div className="mb-4">
-              <div className="flex items-center gap-3">
-                {!recording ? (
+              {recordingState === "idle" && !transcribing ? (
+                <div className="flex items-center gap-3">
                   <Button
                     onClick={startRecording}
-                    disabled={transcribing}
                     variant="outline"
                     className="h-12 px-6 rounded-full text-sm gap-2"
                   >
-                    {transcribing ? (
+                    <Mic className="h-4 w-4" />
+                    {answers[currentIndex]?.trim()
+                      ? "Gravar Mais"
+                      : "Gravar Resposta"}
+                  </Button>
+
+                  {answers[currentIndex]?.trim() && (
+                    <button
+                      onClick={() => {
+                        setAnswers((prev) => {
+                          const updated = [...prev];
+                          updated[currentIndex] = "";
+                          return updated;
+                        });
+                      }}
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                      Limpar
+                    </button>
+                  )}
+                </div>
+              ) : transcribing ? (
+                <div className="flex items-center gap-3 py-2">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">
+                    Transcrevendo sua resposta...
+                  </span>
+                </div>
+              ) : (
+                /* Recording or Paused */
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    {recordingState === "recording" ? (
                       <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Transcrevendo...
+                        <Button
+                          onClick={pauseRecording}
+                          variant="outline"
+                          className="h-12 px-5 rounded-full text-sm gap-2"
+                        >
+                          <Pause className="h-4 w-4" />
+                          Pausar
+                        </Button>
+                        <Button
+                          onClick={stopRecording}
+                          className="h-12 px-5 rounded-full text-sm gap-2"
+                        >
+                          <MicOff className="h-4 w-4" />
+                          Submeter
+                        </Button>
                       </>
                     ) : (
+                      /* Paused */
                       <>
-                        <Mic className="h-4 w-4" />
-                        Gravar Resposta
+                        <Button
+                          onClick={resumeRecording}
+                          variant="outline"
+                          className="h-12 px-5 rounded-full text-sm gap-2"
+                        >
+                          <Play className="h-4 w-4" />
+                          Continuar
+                        </Button>
+                        <Button
+                          onClick={stopRecording}
+                          className="h-12 px-5 rounded-full text-sm gap-2"
+                        >
+                          <MicOff className="h-4 w-4" />
+                          Submeter
+                        </Button>
                       </>
                     )}
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={stopRecording}
-                    variant="destructive"
-                    className="h-12 px-6 rounded-full text-sm gap-2 animate-pulse"
-                  >
-                    <MicOff className="h-4 w-4" />
-                    Parar Gravacao
-                  </Button>
-                )}
+                    <button
+                      onClick={restartRecording}
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1 ml-1"
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                      Recomecar
+                    </button>
+                  </div>
 
-                {answers[currentIndex]?.trim() && !recording && !transcribing && (
-                  <button
-                    onClick={() => {
-                      setAnswers((prev) => {
-                        const updated = [...prev];
-                        updated[currentIndex] = "";
-                        return updated;
-                      });
-                    }}
-                    className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-                  >
-                    <RotateCcw className="h-3 w-3" />
-                    Limpar
-                  </button>
-                )}
-              </div>
-
-              {recording && (
-                <div className="flex items-center gap-2 mt-3">
-                  <span className="relative flex h-2.5 w-2.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    Gravando... fale sua resposta
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="relative flex h-2.5 w-2.5">
+                      {recordingState === "recording" ? (
+                        <>
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
+                        </>
+                      ) : (
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-yellow-500" />
+                      )}
+                    </span>
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {recordingState === "recording"
+                        ? "Gravando"
+                        : "Pausado"}{" "}
+                      — {formatTime(recordingSeconds)}
+                    </span>
+                  </div>
                 </div>
               )}
             </div>
@@ -550,7 +704,7 @@ export default function EntrevistaPage() {
         <Button
           variant="outline"
           onClick={handlePrev}
-          disabled={currentIndex === 0 || recording}
+          disabled={currentIndex === 0 || isRecording}
           className="h-10 px-5 rounded-full text-sm"
         >
           <ArrowLeft className="mr-1.5 h-4 w-4" />
@@ -564,7 +718,7 @@ export default function EntrevistaPage() {
         {currentIndex < totalQuestions - 1 ? (
           <Button
             onClick={handleNext}
-            disabled={recording}
+            disabled={isRecording}
             className="h-10 px-5 rounded-full text-sm font-semibold"
           >
             Proxima
@@ -573,7 +727,7 @@ export default function EntrevistaPage() {
         ) : (
           <Button
             onClick={handleSubmit}
-            disabled={submitting || answeredCount === 0 || recording}
+            disabled={submitting || answeredCount === 0 || isRecording}
             className="h-10 px-6 rounded-full text-sm font-semibold"
           >
             {submitting ? (
