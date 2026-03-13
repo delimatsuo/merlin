@@ -21,6 +21,7 @@ if (firebaseConfig.apiKey) {
 
 export const auth: Auth = app ? getAuth(app) : (null as unknown as Auth);
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: "select_account" });
 export const db: Firestore = app ? getFirestore(app) : (null as unknown as Firestore);
 export const storage: FirebaseStorage = app ? getStorage(app) : (null as unknown as FirebaseStorage);
 export default app;
