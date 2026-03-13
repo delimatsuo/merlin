@@ -233,7 +233,7 @@ export default function CadastroPage() {
         </div>
 
         {/* Footer */}
-        <div className="text-center mt-8">
+        <div className="text-center mt-8 space-y-3">
           <p className="text-sm text-muted-foreground">
             Já tem conta?{" "}
             <Link
@@ -242,6 +242,17 @@ export default function CadastroPage() {
             >
               Entrar
             </Link>
+          </p>
+          <p className="text-xs text-muted-foreground/50">
+            por{" "}
+            <a
+              href="https://ellaexecutivesearch.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-muted-foreground/70 hover:text-muted-foreground transition-colors"
+            >
+              Ella Executive Search
+            </a>
           </p>
         </div>
       </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useApplicationStore, useWorkflowStore } from "@/lib/store";
@@ -46,7 +46,14 @@ export default function VagaPage() {
     setFollowUp,
     setTailoredResume,
     setCoverLetter,
+  reset,
   } = useApplicationStore();
+
+  // Reset store on fresh navigation so user gets a clean form
+  useEffect(() => {
+    reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Analysis results (inline)
   const [result, setResult] = useState<AnalysisResult | null>(null);
