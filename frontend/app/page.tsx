@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { onAuthStateChanged } from "firebase/auth";
 import Link from "next/link";
 import {
   FileText,
@@ -17,9 +18,11 @@ export default function LandingPage() {
 
   // Redirect authenticated users to dashboard
   useEffect(() => {
-    if (auth?.currentUser) {
-      router.replace("/dashboard");
-    }
+    if (!auth) return;
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) router.replace("/dashboard");
+    });
+    return unsubscribe;
   }, [router]);
   return (
     <div className="min-h-screen bg-background">
@@ -47,27 +50,27 @@ export default function LandingPage() {
       {/* Hero */}
       <section className="px-6 md:px-12 pt-20 pb-24 max-w-3xl mx-auto text-center">
         <h1 className="text-5xl md:text-6xl font-bold tracking-tight text-foreground leading-[1.1]">
-          Seu curriculo sob
+          Seu currículo sob
           <br />
           medida com IA
         </h1>
         <p className="mt-6 text-lg text-muted-foreground max-w-xl mx-auto leading-relaxed">
           O Merlin analisa a vaga, identifica o que o recrutador procura, e
-          reescreve seu curriculo para maximizar suas chances — tudo em minutos.
+          reescreve seu currículo para maximizar suas chances — tudo em minutos.
         </p>
         <div className="mt-10 flex items-center justify-center gap-4">
           <Link
             href="/cadastro"
             className="h-12 px-8 inline-flex items-center justify-center rounded-full bg-foreground text-background text-sm font-semibold hover:opacity-90 transition-opacity"
           >
-            Comecar agora
+            Começar agora
             <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
           <Link
             href="/login"
             className="h-12 px-8 inline-flex items-center justify-center rounded-full border border-border text-foreground text-sm font-semibold hover:bg-secondary transition-colors"
           >
-            Ja tenho conta
+            Já tenho conta
           </Link>
         </div>
       </section>
@@ -83,7 +86,7 @@ export default function LandingPage() {
               <FileText className="h-5 w-5 text-foreground" />
             </div>
             <h3 className="text-sm font-semibold text-foreground">
-              1. Envie seu curriculo
+              1. Envie seu currículo
             </h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
               Upload do seu PDF ou DOCX. A IA estrutura seus dados automaticamente.
@@ -94,10 +97,10 @@ export default function LandingPage() {
               <MessageSquareText className="h-5 w-5 text-foreground" />
             </div>
             <h3 className="text-sm font-semibold text-foreground">
-              2. Entrevista rapida
+              2. Entrevista rápida
             </h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Responda perguntas sobre sua experiencia para enriquecer o perfil.
+              Responda perguntas sobre sua experiência para enriquecer o perfil.
             </p>
           </div>
           <div className="text-center space-y-3">
@@ -108,7 +111,7 @@ export default function LandingPage() {
               3. Cole a vaga
             </h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Cole a descricao da vaga e receba uma analise completa com score ATS.
+              Cole a descrição da vaga e receba uma análise completa com score ATS.
             </p>
           </div>
           <div className="text-center space-y-3">
@@ -116,10 +119,10 @@ export default function LandingPage() {
               <Sparkles className="h-5 w-5 text-foreground" />
             </div>
             <h3 className="text-sm font-semibold text-foreground">
-              4. Curriculo pronto
+              4. Currículo pronto
             </h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Receba curriculo e carta de apresentacao personalizados para a vaga.
+              Receba currículo e carta de apresentação personalizados para a vaga.
             </p>
           </div>
         </div>
@@ -133,16 +136,16 @@ export default function LandingPage() {
               Otimizado para ATS
             </h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Keywords estrategicas posicionadas nos pontos de maior scan dos
-              sistemas de triagem automatica.
+              Keywords estratégicas posicionadas nos pontos de maior scan dos
+              sistemas de triagem automática.
             </p>
           </div>
           <div className="apple-shadow rounded-2xl bg-card p-7 space-y-3">
             <h3 className="text-sm font-semibold text-foreground">
-              Bilingue PT-BR / EN
+              Bilíngue PT-BR / EN
             </h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Detecta o idioma da vaga e gera o curriculo na lingua correta
+              Detecta o idioma da vaga e gera o currículo na língua correta
               automaticamente.
             </p>
           </div>
@@ -151,7 +154,7 @@ export default function LandingPage() {
               Seus dados protegidos
             </h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Infraestrutura Google Cloud, autenticacao Firebase, e conformidade
+              Infraestrutura Google Cloud, autenticação Firebase, e conformidade
               com a LGPD.
             </p>
           </div>
@@ -161,10 +164,10 @@ export default function LandingPage() {
       {/* CTA */}
       <section className="px-6 md:px-12 py-20 max-w-3xl mx-auto text-center">
         <h2 className="text-3xl font-bold tracking-tight text-foreground">
-          Pronto para personalizar seu curriculo?
+          Pronto para personalizar seu currículo?
         </h2>
         <p className="mt-4 text-base text-muted-foreground">
-          Crie sua conta gratuita e gere seu primeiro curriculo em minutos.
+          Crie sua conta gratuita e gere seu primeiro currículo em minutos.
         </p>
         <Link
           href="/cadastro"
