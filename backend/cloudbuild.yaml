@@ -14,7 +14,7 @@ steps:
     args:
       - 'run'
       - 'deploy'
-      - 'merlin-api'
+      - 'merlin-backend'
       - '--image'
       - 'gcr.io/$PROJECT_ID/merlin-api:$COMMIT_SHA'
       - '--region'

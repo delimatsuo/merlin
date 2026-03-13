@@ -12,9 +12,6 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from google import genai
 from google.genai import types
-from google.api_core.client_options import ClientOptions
-from google.cloud.speech_v2 import SpeechClient
-from google.cloud.speech_v2.types import cloud_speech
 from pydantic import BaseModel
 
 from app.auth import AuthenticatedUser, verify_ws_token, get_current_user
@@ -28,7 +25,6 @@ router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 
 _genai_client: genai.Client | None = None
-_speech_client: SpeechClient | None = None
 
 
 def _get_genai_client() -> genai.Client:
@@ -37,17 +33,6 @@ def _get_genai_client() -> genai.Client:
         settings = get_settings()
         _genai_client = genai.Client(api_key=settings.gemini_api_key)
     return _genai_client
-
-
-def _get_speech_client() -> SpeechClient:
-    global _speech_client
-    if _speech_client is None:
-        _speech_client = SpeechClient(
-            client_options=ClientOptions(
-                api_endpoint="us-central1-speech.googleapis.com",
-            )
-        )
-    return _speech_client
 
 
 class TTSRequest(BaseModel):
@@ -114,36 +99,63 @@ async def transcribe_audio(
     audio: UploadFile = File(...),
     user: AuthenticatedUser = Depends(get_current_user),
 ):
-    """Transcribe audio using Google Cloud Speech-to-Text Chirp 2 (multilingual)."""
+    """Transcribe audio using Gemini 2.5 Flash."""
     audio_content = await audio.read()
-    if len(audio_content) > 10 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="Audio muito grande (max 10MB).")
+    if len(audio_content) > 25 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Audio muito grande (max 25MB).")
     if len(audio_content) < 100:
         raise HTTPException(status_code=400, detail="Audio vazio.")
 
-    settings = get_settings()
-    client = _get_speech_client()
+    content_type = audio.content_type or "audio/webm"
 
-    config = cloud_speech.RecognitionConfig(
-        auto_decoding_config=cloud_speech.AutoDetectDecodingConfig(),
-        language_codes=["pt-BR", "en-US"],
-        model="chirp_2",
+    # Gemini doesn't support webm audio — convert to ogg (same opus codec, supported container)
+    if "webm" in content_type:
+        audio_content = await asyncio.to_thread(_convert_webm_to_ogg, audio_content)
+        content_type = "audio/ogg"
+
+    client = _get_genai_client()
+
+    response = await client.aio.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=[
+            types.Content(parts=[
+                types.Part.from_bytes(data=audio_content, mime_type=content_type),
+                types.Part.from_text(
+                    text="Transcreva este áudio fielmente, palavra por palavra. "
+                    "Retorne APENAS a transcrição, sem comentários ou formatação."
+                ),
+            ]),
+        ],
     )
 
-    recognize_request = cloud_speech.RecognizeRequest(
-        recognizer=f"projects/{settings.gcp_project_id}/locations/us-central1/recognizers/_",
-        config=config,
-        content=audio_content,
-    )
+    transcript = response.text.strip() if response.text else ""
+    return {"transcript": transcript}
 
-    response = await asyncio.to_thread(client.recognize, request=recognize_request)
 
-    transcript = ""
-    for result in response.results:
-        if result.alternatives:
-            transcript += result.alternatives[0].transcript + " "
+def _convert_webm_to_ogg(audio_data: bytes) -> bytes:
+    """Convert webm/opus audio to ogg/opus using ffmpeg."""
+    import subprocess
+    import tempfile
+    import os
 
-    return {"transcript": transcript.strip()}
+    with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as inp:
+        inp.write(audio_data)
+        inp_path = inp.name
+
+    out_path = inp_path.replace(".webm", ".ogg")
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", inp_path, "-c:a", "copy", out_path],
+            capture_output=True, check=True, timeout=30,
+        )
+        with open(out_path, "rb") as f:
+            return f.read()
+    finally:
+        for p in (inp_path, out_path):
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
 
 
 @router.post("/questions")
