@@ -5,8 +5,10 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import structlog
-from firebase_admin import firestore, storage, get_app
+from firebase_admin import auth as firebase_auth, firestore, storage, get_app
+from google.cloud.firestore_v1 import async_transactional
 from google.cloud.firestore_v1.async_client import AsyncClient
+from google.cloud.firestore_v1.base_query import FieldFilter
 
 logger = structlog.get_logger()
 
@@ -39,10 +41,16 @@ class FirestoreService:
         raw_text: str,
         structured_data: dict,
         file_url: str = "",
+        user_email: str = "",
+        user_name: str = "",
     ) -> str:
         """Save a parsed resume profile."""
         profile_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
+
+        # Ensure user doc exists with email/name for admin queries
+        if user_email or user_name:
+            await self.ensure_user_doc(uid, email=user_email, name=user_name)
 
         doc_ref = self.db.collection("users").document(uid).collection("profiles").document(profile_id)
         await doc_ref.set({
@@ -55,6 +63,9 @@ class FirestoreService:
             "createdAt": now,
             "updatedAt": now,
         })
+
+        # Increment denormalized counter
+        await self._increment_user_stat(uid, "profileCount", 1)
 
         return profile_id
 
@@ -127,6 +138,7 @@ class FirestoreService:
         """Delete a profile."""
         doc_ref = self.db.collection("users").document(uid).collection("profiles").document(profile_id)
         await doc_ref.delete()
+        await self._increment_user_stat(uid, "profileCount", -1)
 
     # --- Knowledge File Operations ---
 
@@ -213,6 +225,8 @@ class FirestoreService:
             "createdAt": now,
         })
 
+        await self._increment_user_stat(uid, "applicationCount", 1)
+
         return application_id
 
     async def get_user_applications(self, uid: str, limit: int = 20, start_after: str = "") -> list[dict]:
@@ -282,6 +296,7 @@ class FirestoreService:
 
         # Delete application doc
         await app_ref.delete()
+        await self._increment_user_stat(uid, "applicationCount", -1)
 
     # --- Resume Version Operations ---
 
@@ -518,8 +533,16 @@ class FirestoreService:
 
         return 0
 
+    async def ensure_user_doc(self, uid: str, email: str = "", name: str = "") -> None:
+        """Ensure user doc exists with email/name for admin queries."""
+        doc_ref = self.db.collection("users").document(uid)
+        await doc_ref.set(
+            {"email": email, "name": name, "createdAt": datetime.now(timezone.utc).isoformat()},
+            merge=True,
+        )
+
     async def increment_daily_usage(self, uid: str) -> None:
-        """Increment daily usage counter."""
+        """Increment daily usage counter and platform stats."""
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         doc_ref = self.db.collection("users").document(uid)
         doc = await doc_ref.get()
@@ -539,6 +562,12 @@ class FirestoreService:
                 "dailyUsage": {"tailorCount": 1, "date": today},
                 "createdAt": datetime.now(timezone.utc).isoformat(),
             })
+
+        # Increment denormalized generation counter on user
+        await self._increment_user_stat(uid, "generationCount", 1)
+
+        # Increment platform-wide daily stats
+        await self._increment_platform_stat(today, "generationCount")
 
     # --- File Operations ---
 
@@ -655,3 +684,247 @@ class FirestoreService:
                 blob.delete()
         except Exception as e:
             logger.error("storage_cleanup_error", uid=uid, error=str(e))
+
+    # --- Denormalized Counter Helpers ---
+
+    async def _increment_user_stat(self, uid: str, field: str, delta: int) -> None:
+        """Atomically increment a stats field on user doc."""
+        try:
+            user_ref = self.db.collection("users").document(uid)
+            await user_ref.set(
+                {"stats": {field: firestore.Increment(delta)}},
+                merge=True,
+            )
+        except Exception as e:
+            logger.warning("stat_increment_error", uid=uid, field=field, error=str(e))
+
+    async def _increment_platform_stat(self, date: str, field: str) -> None:
+        """Atomically increment a platform-wide daily stat."""
+        try:
+            doc_ref = self.db.collection("platformStats").document(date)
+            await doc_ref.set(
+                {field: firestore.Increment(1)},
+                merge=True,
+            )
+        except Exception as e:
+            logger.warning("platform_stat_error", date=date, field=field, error=str(e))
+
+    async def increment_platform_signup(self) -> None:
+        """Increment daily signup counter."""
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        await self._increment_platform_stat(today, "signupCount")
+
+    # --- Generation Activity Log ---
+
+    async def log_generation(self, uid: str, user_email: str, company: str) -> None:
+        """Write to top-level generationLog for admin dashboard."""
+        try:
+            doc_id = str(uuid.uuid4())
+            await self.db.collection("generationLog").document(doc_id).set({
+                "uid": uid,
+                "userEmail": user_email,
+                "company": company,
+                "createdAt": datetime.now(timezone.utc).isoformat(),
+            })
+        except Exception as e:
+            logger.warning("generation_log_error", error=str(e))
+
+    # --- Admin Query Methods ---
+
+    async def get_all_users(self, limit: int = 50, cursor: str = "") -> list[dict]:
+        """Paginated user list reading denormalized stats."""
+        query = (
+            self.db.collection("users")
+            .order_by("createdAt", direction=firestore.Query.DESCENDING)
+            .limit(limit)
+        )
+
+        if cursor:
+            cursor_doc = await self.db.collection("users").document(cursor).get()
+            if cursor_doc.exists:
+                query = query.start_after(cursor_doc)
+
+        results = []
+        async for doc in query.stream():
+            data = doc.to_dict()
+            stats = data.get("stats", {})
+            results.append({
+                "uid": doc.id,
+                "email": data.get("email", ""),
+                "name": data.get("name", ""),
+                "createdAt": data.get("createdAt", ""),
+                "profileCount": stats.get("profileCount", 0),
+                "applicationCount": stats.get("applicationCount", 0),
+                "generationCount": stats.get("generationCount", 0),
+            })
+        return results
+
+    async def get_user_detail(self, uid: str) -> Optional[dict]:
+        """User doc + profiles + applications (for admin drill-down)."""
+        user_ref = self.db.collection("users").document(uid)
+        user_doc = await user_ref.get()
+        if not user_doc.exists:
+            return None
+
+        data = user_doc.to_dict()
+        data["uid"] = uid
+
+        # Profiles summary
+        profiles = []
+        async for doc in user_ref.collection("profiles").order_by("createdAt", direction=firestore.Query.DESCENDING).stream():
+            p = doc.to_dict()
+            profiles.append({
+                "id": doc.id,
+                "name": p.get("structuredData", {}).get("name", ""),
+                "status": p.get("status", ""),
+                "createdAt": p.get("createdAt", ""),
+            })
+        data["profiles"] = profiles
+
+        # Applications summary
+        applications = []
+        async for doc in user_ref.collection("applications").order_by("createdAt", direction=firestore.Query.DESCENDING).stream():
+            a = doc.to_dict()
+            analysis = a.get("jobAnalysis", {})
+            applications.append({
+                "id": doc.id,
+                "title": analysis.get("title", ""),
+                "company": analysis.get("company", ""),
+                "status": a.get("status", ""),
+                "createdAt": a.get("createdAt", ""),
+            })
+        data["applications"] = applications
+
+        return data
+
+    async def get_platform_stats(self) -> dict:
+        """Current platform stats for admin dashboard."""
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+        # Today's stats
+        today_ref = self.db.collection("platformStats").document(today)
+        today_doc = await today_ref.get()
+        today_data = today_doc.to_dict() if today_doc.exists else {}
+
+        # Count total users (read all user docs — acceptable for small user base)
+        total_users = 0
+        async for _ in self.db.collection("users").select([]).stream():
+            total_users += 1
+
+        # This month's stats
+        month_prefix = today[:7]  # YYYY-MM
+        month_generations = 0
+        month_signups = 0
+        for day in range(1, 32):
+            date_str = f"{month_prefix}-{day:02d}"
+            doc = await self.db.collection("platformStats").document(date_str).get()
+            if doc.exists:
+                d = doc.to_dict()
+                month_generations += d.get("generationCount", 0)
+                month_signups += d.get("signupCount", 0)
+
+        return {
+            "totalUsers": total_users,
+            "generationsToday": today_data.get("generationCount", 0),
+            "generationsMonth": month_generations,
+            "signupsMonth": month_signups,
+        }
+
+    async def get_daily_generation_stats(self, days: int = 30) -> list[dict]:
+        """Daily generation counts for the last N days."""
+        today = datetime.now(timezone.utc)
+        results = []
+        for i in range(days - 1, -1, -1):
+            date = (today - timedelta(days=i)).strftime("%Y-%m-%d")
+            doc = await self.db.collection("platformStats").document(date).get()
+            count = 0
+            if doc.exists:
+                count = doc.to_dict().get("generationCount", 0)
+            results.append({"date": date, "count": count})
+        return results
+
+    async def get_recent_generations(self, limit: int = 20) -> list[dict]:
+        """Recent generation log entries."""
+        query = (
+            self.db.collection("generationLog")
+            .order_by("createdAt", direction=firestore.Query.DESCENDING)
+            .limit(limit)
+        )
+        results = []
+        async for doc in query.stream():
+            data = doc.to_dict()
+            data["id"] = doc.id
+            results.append(data)
+        return results
+
+    async def disable_user(self, uid: str) -> None:
+        """Disable a Firebase user and revoke their tokens."""
+        firebase_auth.update_user(uid, disabled=True)
+        firebase_auth.revoke_refresh_tokens(uid)
+
+    async def enable_user(self, uid: str) -> None:
+        """Re-enable a Firebase user."""
+        firebase_auth.update_user(uid, disabled=False)
+
+    async def search_users_by_email(self, email_prefix: str, limit: int = 20) -> list[dict]:
+        """Search users by email prefix using Firestore range query."""
+        end = email_prefix + "\uf8ff"
+        query = (
+            self.db.collection("users")
+            .where(filter=FieldFilter("email", ">=", email_prefix))
+            .where(filter=FieldFilter("email", "<", end))
+            .limit(limit)
+        )
+        results = []
+        async for doc in query.stream():
+            data = doc.to_dict()
+            stats = data.get("stats", {})
+            results.append({
+                "uid": doc.id,
+                "email": data.get("email", ""),
+                "name": data.get("name", ""),
+                "createdAt": data.get("createdAt", ""),
+                "profileCount": stats.get("profileCount", 0),
+                "applicationCount": stats.get("applicationCount", 0),
+                "generationCount": stats.get("generationCount", 0),
+            })
+        return results
+
+    async def backfill_user_stats(self) -> int:
+        """One-time backfill: count subcollections and write stats + email for all users."""
+        count = 0
+        async for user_doc in self.db.collection("users").stream():
+            uid = user_doc.id
+            profile_count = 0
+            async for _ in self.db.collection("users").document(uid).collection("profiles").select([]).stream():
+                profile_count += 1
+
+            app_count = 0
+            gen_count = 0
+            async for app_doc in self.db.collection("users").document(uid).collection("applications").select([]).stream():
+                app_count += 1
+                async for _ in app_doc.reference.collection("resumes").select([]).stream():
+                    gen_count += 1
+
+            update_data: dict = {
+                "stats": {
+                    "profileCount": profile_count,
+                    "applicationCount": app_count,
+                    "generationCount": gen_count,
+                }
+            }
+
+            # Backfill email/name from Firebase Auth if missing
+            existing = user_doc.to_dict()
+            if not existing.get("email"):
+                try:
+                    fb_user = firebase_auth.get_user(uid)
+                    update_data["email"] = fb_user.email or ""
+                    update_data["name"] = fb_user.display_name or ""
+                except Exception:
+                    pass
+
+            await self.db.collection("users").document(uid).set(update_data, merge=True)
+            count += 1
+
+        return count

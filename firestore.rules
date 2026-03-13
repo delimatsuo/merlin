@@ -48,6 +48,26 @@ service cloud.firestore {
       allow write: if false; // Only backend service account via Admin SDK
     }
 
+    // Platform stats — backend-only via Admin SDK
+    match /platformStats/{date} {
+      allow read, write: if false;
+    }
+
+    // Generation log — backend-only via Admin SDK
+    match /generationLog/{id} {
+      allow read, write: if false;
+    }
+
+    // Admin settings — backend-only via Admin SDK
+    match /admin/{doc} {
+      allow read, write: if false;
+    }
+
+    // Admin audit log — backend-only via Admin SDK
+    match /adminAuditLog/{id} {
+      allow read, write: if false;
+    }
+
     // Default deny
     match /{document=**} {
       allow read, write: if false;

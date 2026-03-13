@@ -6,16 +6,20 @@ import structlog
 from fastapi import HTTPException, Request, WebSocket, status
 from firebase_admin import auth as firebase_auth
 
+from app.config import get_settings
+
 logger = structlog.get_logger()
 
 
 class AuthenticatedUser:
     """Represents an authenticated Firebase user."""
 
-    def __init__(self, uid: str, email: Optional[str] = None, name: Optional[str] = None):
+    def __init__(self, uid: str, email: Optional[str] = None, name: Optional[str] = None,
+                 email_verified: bool = False):
         self.uid = uid
         self.email = email
         self.name = name
+        self.email_verified = email_verified
 
 
 async def get_current_user(request: Request) -> AuthenticatedUser:
@@ -35,6 +39,7 @@ async def get_current_user(request: Request) -> AuthenticatedUser:
             uid=decoded_token["uid"],
             email=decoded_token.get("email"),
             name=decoded_token.get("name"),
+            email_verified=decoded_token.get("email_verified", False),
         )
     except firebase_auth.ExpiredIdTokenError:
         raise HTTPException(
@@ -52,6 +57,28 @@ async def get_current_user(request: Request) -> AuthenticatedUser:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Erro de autenticação.",
         )
+
+
+async def get_admin_user(request: Request) -> AuthenticatedUser:
+    """Verify user is an authenticated admin with verified email."""
+    user = await get_current_user(request)
+
+    if not user.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email não verificado.",
+        )
+
+    settings = get_settings()
+    admin_emails = [e.strip().lower() for e in settings.admin_emails.split(",") if e.strip()]
+
+    if not user.email or user.email.lower() not in admin_emails:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso restrito a administradores.",
+        )
+
+    return user
 
 
 async def verify_ws_token(websocket: WebSocket) -> Optional[AuthenticatedUser]:
