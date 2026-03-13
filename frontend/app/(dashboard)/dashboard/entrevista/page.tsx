@@ -244,8 +244,8 @@ export default function EntrevistaPage() {
       mediaRecorderRef.current?.state === "paused"
     ) {
       mediaRecorderRef.current.stop();
+      // Don't set idle here — onstop handler will handle state transition after transcription
     }
-    setRecordingState("idle");
   }, []);
 
   const restartRecording = useCallback(() => {
@@ -254,17 +254,20 @@ export default function EntrevistaPage() {
       mediaRecorderRef.current?.state === "recording" ||
       mediaRecorderRef.current?.state === "paused"
     ) {
-      // Override onstop to NOT transcribe
+      // Override onstop to NOT transcribe — instead restart recording
       mediaRecorderRef.current.onstop = () => {
         streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
+        setRecordingState("idle");
+        setRecordingSeconds(0);
+        startRecording();
       };
       mediaRecorderRef.current.stop();
+    } else {
+      setRecordingState("idle");
+      setRecordingSeconds(0);
+      startRecording();
     }
-    setRecordingState("idle");
-    setRecordingSeconds(0);
-    // Start new recording after a tick
-    setTimeout(() => startRecording(), 100);
   }, [startRecording]);
 
   const handleNext = () => {

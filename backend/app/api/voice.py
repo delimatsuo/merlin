@@ -109,24 +109,32 @@ async def transcribe_audio(
     content_type = audio.content_type or "audio/webm"
 
     # Gemini doesn't support webm audio — convert to ogg (same opus codec, supported container)
-    if "webm" in content_type:
-        audio_content = await asyncio.to_thread(_convert_webm_to_ogg, audio_content)
+    if content_type.startswith("audio/webm"):
+        try:
+            audio_content = await asyncio.to_thread(_convert_webm_to_ogg, audio_content)
+        except Exception as e:
+            logger.error("webm_to_ogg_failed", error=str(e))
+            raise HTTPException(status_code=502, detail="Erro ao processar audio. Tente novamente.")
         content_type = "audio/ogg"
 
     client = _get_genai_client()
 
-    response = await client.aio.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=[
-            types.Content(parts=[
-                types.Part.from_bytes(data=audio_content, mime_type=content_type),
-                types.Part.from_text(
-                    text="Transcreva este áudio fielmente, palavra por palavra. "
-                    "Retorne APENAS a transcrição, sem comentários ou formatação."
-                ),
-            ]),
-        ],
-    )
+    try:
+        response = await client.aio.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[
+                types.Content(parts=[
+                    types.Part.from_bytes(data=audio_content, mime_type=content_type),
+                    types.Part.from_text(
+                        text="Transcreva este áudio fielmente, palavra por palavra. "
+                        "Retorne APENAS a transcrição, sem comentários ou formatação."
+                    ),
+                ]),
+            ],
+        )
+    except Exception as e:
+        logger.error("transcription_failed", error=str(e))
+        raise HTTPException(status_code=502, detail="Erro na transcrição. Tente novamente.")
 
     transcript = response.text.strip() if response.text else ""
     return {"transcript": transcript}
@@ -142,7 +150,7 @@ def _convert_webm_to_ogg(audio_data: bytes) -> bytes:
         inp.write(audio_data)
         inp_path = inp.name
 
-    out_path = inp_path.replace(".webm", ".ogg")
+    out_path = inp_path + ".ogg"
     try:
         subprocess.run(
             ["ffmpeg", "-y", "-i", inp_path, "-c:a", "copy", out_path],
