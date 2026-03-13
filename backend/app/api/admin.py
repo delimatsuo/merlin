@@ -15,6 +15,16 @@ router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 
 
+@router.get("/check")
+@limiter.limit("30/minute")
+async def check_admin(
+    request: Request,
+    admin: AuthenticatedUser = Depends(get_admin_user),
+):
+    """Lightweight admin check — returns 200 if admin, 403 if not."""
+    return {"isAdmin": True}
+
+
 @router.get("/stats")
 @limiter.limit("20/minute")
 async def get_stats(

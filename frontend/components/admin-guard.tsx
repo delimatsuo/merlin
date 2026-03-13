@@ -19,9 +19,13 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // If already checked, skip
-    if (isAdmin !== null) {
-      if (!isAdmin) router.replace("/dashboard");
+    // If already verified admin, load stats if needed
+    if (isAdmin === true) {
+      setChecking(false);
+      return;
+    }
+    if (isAdmin === false) {
+      router.replace("/dashboard");
       setChecking(false);
       return;
     }
@@ -29,22 +33,32 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     (async () => {
       try {
-        const data = await api.get<{
-          stats: Record<string, number>;
-          dailyChart: { date: string; count: number }[];
-          recentGenerations: {
-            id: string;
-            uid: string;
-            userEmail: string;
-            company: string;
-            createdAt: string;
-          }[];
-        }>("/api/admin/stats");
+        // Step 1: lightweight admin check
+        await api.get("/api/admin/check");
         if (cancelled) return;
         setIsAdmin(true);
-        setStats(data.stats as any);
-        setDailyChart(data.dailyChart);
-        setRecentGenerations(data.recentGenerations);
+
+        // Step 2: load stats for the dashboard (non-blocking for guard)
+        try {
+          const data = await api.get<{
+            stats: Record<string, number>;
+            dailyChart: { date: string; count: number }[];
+            recentGenerations: {
+              id: string;
+              uid: string;
+              userEmail: string;
+              company: string;
+              createdAt: string;
+            }[];
+          }>("/api/admin/stats");
+          if (!cancelled) {
+            setStats(data.stats as any);
+            setDailyChart(data.dailyChart);
+            setRecentGenerations(data.recentGenerations);
+          }
+        } catch {
+          // Stats load failure is non-fatal
+        }
       } catch {
         if (cancelled) return;
         setIsAdmin(false);

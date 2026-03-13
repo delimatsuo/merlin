@@ -38,13 +38,27 @@ export function DashboardNav() {
   const { user } = useAuthStore();
   const { isAdmin, setIsAdmin } = useAdminStore();
 
-  // Check admin status once on mount
+  // Check admin status once on mount (lightweight endpoint, retry once on network error)
   useEffect(() => {
     if (!user || isAdmin !== null) return;
-    api
-      .get("/api/admin/stats")
-      .then(() => setIsAdmin(true))
-      .catch(() => setIsAdmin(false));
+    let cancelled = false;
+    const check = async (attempt = 0) => {
+      try {
+        await api.get("/api/admin/check");
+        if (!cancelled) setIsAdmin(true);
+      } catch {
+        if (!cancelled) {
+          if (attempt === 0) {
+            // Retry once after 2s (handles cold start)
+            setTimeout(() => check(1), 2000);
+          } else {
+            setIsAdmin(false);
+          }
+        }
+      }
+    };
+    check();
+    return () => { cancelled = true; };
   }, [user, isAdmin]);
 
   const handleSignOut = async () => {
