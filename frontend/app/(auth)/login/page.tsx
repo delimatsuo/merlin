@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -18,6 +18,14 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // If the user is already authenticated, redirect to dashboard
+  // instead of showing the login form. Only sign out on explicit logout action.
+  useEffect(() => {
+    if (auth?.currentUser) {
+      router.replace("/dashboard");
+    }
+  }, [router]);
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,9 +59,11 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Header */}
         <div className="text-center mb-10">
-          <h1 className="text-4xl font-bold tracking-tight text-foreground mb-2">
-            Merlin
-          </h1>
+          <Link href="/" className="inline-block">
+            <h1 className="text-4xl font-bold tracking-tight text-foreground mb-2">
+              Merlin
+            </h1>
+          </Link>
           <p className="text-base text-muted-foreground">
             Currículo sob medida com IA
           </p>
@@ -154,12 +164,32 @@ export default function LoginPage() {
               Cadastre-se
             </Link>
           </p>
-          <Link
-            href="/privacidade"
-            className="text-xs text-muted-foreground/70 hover:text-muted-foreground transition-colors"
-          >
-            Política de Privacidade
-          </Link>
+          <div className="flex items-center justify-center gap-3">
+            <Link
+              href="/privacidade"
+              className="text-xs text-muted-foreground/70 hover:text-muted-foreground transition-colors"
+            >
+              Privacidade
+            </Link>
+            <span className="text-muted-foreground/30">·</span>
+            <Link
+              href="/termos"
+              className="text-xs text-muted-foreground/70 hover:text-muted-foreground transition-colors"
+            >
+              Termos de Uso
+            </Link>
+          </div>
+          <p className="text-xs text-muted-foreground/50 mt-4">
+            por{" "}
+            <a
+              href="https://ellaexecutivesearch.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-muted-foreground/70 hover:text-muted-foreground transition-colors"
+            >
+              Ella Executive Search
+            </a>
+          </p>
         </div>
       </div>
     </div>

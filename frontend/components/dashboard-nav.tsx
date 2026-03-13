@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useAuthStore } from "@/lib/store";
@@ -13,28 +14,24 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  FileText,
-  Mic,
   Briefcase,
-  BarChart3,
-  Download,
-  LayoutDashboard,
+  User as UserIcon,
+  Plus,
   LogOut,
   User,
+  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { href: "/dashboard", label: "Painel", icon: LayoutDashboard },
-  { href: "/dashboard/perfil", label: "Currículo", icon: FileText },
-  { href: "/dashboard/entrevista", label: "Entrevista", icon: Mic },
-  { href: "/dashboard/vaga", label: "Vaga", icon: Briefcase },
-  { href: "/dashboard/analise", label: "Análise", icon: BarChart3 },
-  { href: "/dashboard/resultado", label: "Resultado", icon: Download },
+  { href: "/dashboard", label: "Candidaturas", icon: Briefcase },
+  { href: "/dashboard/perfil", label: "Meu Perfil", icon: UserIcon },
+  { href: "/dashboard/vaga", label: "Nova Vaga", icon: Plus },
 ];
 
 export function DashboardNav() {
   const pathname = usePathname();
+  const router = useRouter();
   const { user } = useAuthStore();
 
   const handleSignOut = async () => {
@@ -54,7 +51,10 @@ export function DashboardNav() {
             </Link>
             <div className="hidden md:flex items-center">
               {navItems.map((item) => {
-                const isActive = pathname === item.href;
+                const isActive =
+                  item.href === "/dashboard"
+                    ? pathname === "/dashboard" || pathname?.startsWith("/dashboard/candidatura")
+                    : pathname === item.href;
                 return (
                   <Link
                     key={item.href}
@@ -94,6 +94,13 @@ export function DashboardNav() {
                 <DropdownMenuItem className="rounded-lg text-xs py-2.5 px-3 font-medium cursor-default">
                   <User className="mr-2.5 h-3.5 w-3.5 text-muted-foreground" />
                   {user?.displayName || user?.email}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => router.push("/dashboard/configuracoes")}
+                  className="rounded-lg text-xs py-2.5 px-3 cursor-pointer"
+                >
+                  <Settings className="mr-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                  Configuracoes
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={handleSignOut}

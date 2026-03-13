@@ -60,7 +60,7 @@ class ProfileUpdateRequest(BaseModel):
 # --- Job Analysis ---
 
 class JobAnalysisRequest(BaseModel):
-    job_description: str = Field(alias="jobDescription", min_length=50, max_length=5000)
+    job_description: str = Field(alias="jobDescription", min_length=50, max_length=50000)
 
     model_config = {"populate_by_name": True}
 
@@ -71,10 +71,19 @@ class SkillMatch(BaseModel):
     evidence: Optional[str] = None
 
 
+class FollowUpDecision(BaseModel):
+    decision: str  # "skip", "text", "voice"
+    questions: list[str] = []
+
+    model_config = {"populate_by_name": True}
+
+
 class JobAnalysisResponse(BaseModel):
     analysis: dict
     skills_matrix: list[SkillMatch] = Field(alias="skillsMatrix", default=[])
     ats_score: Optional[float] = Field(alias="atsScore", default=None)
+    application_id: str = Field(alias="applicationId", default="")
+    follow_up: Optional[FollowUpDecision] = Field(alias="followUp", default=None)
 
     model_config = {"populate_by_name": True}
 
@@ -100,15 +109,6 @@ class TailorResponse(BaseModel):
     cover_letter: str = Field(alias="coverLetter")
     ats_score: float = Field(alias="atsScore")
     version: int = 1
-
-    model_config = {"populate_by_name": True}
-
-
-# --- Export ---
-
-class ExportResponse(BaseModel):
-    url: str
-    expires_at: str = Field(alias="expiresAt")
 
     model_config = {"populate_by_name": True}
 
