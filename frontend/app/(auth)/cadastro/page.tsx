@@ -71,9 +71,14 @@ export default function CadastroPage() {
       <div className="w-full max-w-sm">
         {/* Header */}
         <div className="text-center mb-10">
-          <h1 className="text-4xl font-bold tracking-tight text-foreground mb-2">
+          <Link href="/" className="inline-block">
+            <h1 className="text-4xl font-bold tracking-tight text-foreground mb-2 hover:opacity-80 transition-opacity">
+              Merlin
+            </h1>
+          </Link>
+          <h2 className="text-2xl font-bold tracking-tight text-foreground mb-2">
             Criar conta
-          </h1>
+          </h2>
           <p className="text-base text-muted-foreground">
             Comece a personalizar seu currículo
           </p>
@@ -169,10 +174,10 @@ export default function CadastroPage() {
               <Input
                 id="password"
                 type="password"
-                placeholder="Mínimo 6 caracteres"
+                placeholder="Mínimo 8 caracteres"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                minLength={6}
+                minLength={8}
                 required
                 className="h-12 rounded-xl bg-secondary border-0 text-sm placeholder:text-muted-foreground/50 focus-visible:ring-2 focus-visible:ring-ring"
               />

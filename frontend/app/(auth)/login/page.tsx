@@ -59,9 +59,11 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Header */}
         <div className="text-center mb-10">
-          <h1 className="text-4xl font-bold tracking-tight text-foreground mb-2">
-            Merlin
-          </h1>
+          <Link href="/" className="inline-block">
+            <h1 className="text-4xl font-bold tracking-tight text-foreground mb-2">
+              Merlin
+            </h1>
+          </Link>
           <p className="text-base text-muted-foreground">
             Currículo sob medida com IA
           </p>
