@@ -55,7 +55,6 @@ export default function EntrevistaPage() {
 
   // TTS preload cache: questionIndex -> blob URL
   const ttsCacheRef = useRef<Map<number, string>>(new Map());
-  const preloadingRef = useRef(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -116,13 +115,12 @@ export default function EntrevistaPage() {
     init();
   }, []);
 
-  // Preload TTS audio for all questions after session loads
+  // Preload TTS audio for all questions when voice mode is selected
   useEffect(() => {
-    if (!session || preloadingRef.current) return;
-    preloadingRef.current = true;
+    if (!session || mode !== "voice") return;
+    // Use the cache itself as the idempotency guard
+    if (ttsCacheRef.current.size > 0) return;
 
-    // Preload first 2 questions immediately (likely needed soon),
-    // then the rest sequentially to avoid hammering the API
     const preloadQuestion = async (index: number) => {
       if (ttsCacheRef.current.has(index)) return;
       try {
@@ -132,31 +130,33 @@ export default function EntrevistaPage() {
         const url = URL.createObjectURL(blob);
         ttsCacheRef.current.set(index, url);
       } catch {
-        // Non-blocking — will fall back to on-demand fetch
+        // Non-blocking: falls back to on-demand fetch
       }
     };
 
     const preloadAll = async () => {
       // First two in parallel for fastest availability
-      await Promise.all([preloadQuestion(0), session.questions.length > 1 ? preloadQuestion(1) : Promise.resolve()]);
-      // Rest sequentially
+      const first = [preloadQuestion(0)];
+      if (session.questions.length > 1) first.push(preloadQuestion(1));
+      await Promise.all(first);
+      // Rest sequentially to avoid hammering the API
       for (let i = 2; i < session.questions.length; i++) {
         await preloadQuestion(i);
       }
     };
 
     preloadAll();
-  }, [session]);
+  }, [session, mode]);
 
   // In voice mode, auto-play TTS when question changes
   useEffect(() => {
     if (mode === "voice" && session && !loading) {
-      handlePlayTTS(session.questions[currentIndex]);
+      handlePlayTTS(session.questions[currentIndex], currentIndex);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, mode, session?.sessionId]);
 
-  const handlePlayTTS = async (text: string) => {
+  const handlePlayTTS = async (text: string, questionIndex = currentIndex) => {
     if (playingTTS || loadingTTS) {
       audioRef.current?.pause();
       setPlayingTTS(false);
@@ -166,7 +166,7 @@ export default function EntrevistaPage() {
 
     try {
       // Check preload cache first
-      const cachedUrl = ttsCacheRef.current.get(currentIndex);
+      const cachedUrl = ttsCacheRef.current.get(questionIndex);
       let url: string;
       if (cachedUrl) {
         url = cachedUrl;
@@ -174,7 +174,7 @@ export default function EntrevistaPage() {
         setLoadingTTS(true);
         const blob = await api.postBlob("/api/voice/tts", { text });
         url = URL.createObjectURL(blob);
-        ttsCacheRef.current.set(currentIndex, url);
+        ttsCacheRef.current.set(questionIndex, url);
       }
 
       const audio = new Audio(url);
