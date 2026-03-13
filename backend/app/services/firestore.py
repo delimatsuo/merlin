@@ -1,5 +1,6 @@
 """Firestore data access layer."""
 
+import asyncio
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -542,26 +543,34 @@ class FirestoreService:
         )
 
     async def increment_daily_usage(self, uid: str) -> None:
-        """Increment daily usage counter and platform stats."""
+        """Increment daily usage counter atomically using a transaction.
+
+        Resets the counter when the date changes. The transaction prevents
+        race conditions where two concurrent requests both read the same count.
+        """
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         doc_ref = self.db.collection("users").document(uid)
-        doc = await doc_ref.get()
 
-        if doc.exists:
-            data = doc.to_dict()
-            usage = data.get("dailyUsage", {})
-            if usage.get("date") == today:
-                count = usage.get("tailorCount", 0) + 1
+        transaction = self.db.transaction()
+
+        @async_transactional
+        async def update_in_transaction(txn, ref):
+            doc = await ref.get(transaction=txn)
+            if doc.exists:
+                data = doc.to_dict()
+                usage = data.get("dailyUsage", {})
+                if usage.get("date") == today:
+                    count = usage.get("tailorCount", 0) + 1
+                else:
+                    count = 1
+                txn.update(ref, {"dailyUsage": {"tailorCount": count, "date": today}})
             else:
-                count = 1
-            await doc_ref.update({
-                "dailyUsage": {"tailorCount": count, "date": today}
-            })
-        else:
-            await doc_ref.set({
-                "dailyUsage": {"tailorCount": 1, "date": today},
-                "createdAt": datetime.now(timezone.utc).isoformat(),
-            })
+                txn.set(ref, {
+                    "dailyUsage": {"tailorCount": 1, "date": today},
+                    "createdAt": datetime.now(timezone.utc).isoformat(),
+                })
+
+        await update_in_transaction(transaction, doc_ref)
 
         # Increment denormalized generation counter on user
         await self._increment_user_stat(uid, "generationCount", 1)
@@ -798,30 +807,35 @@ class FirestoreService:
         return data
 
     async def get_platform_stats(self) -> dict:
-        """Current platform stats for admin dashboard."""
+        """Current platform stats for admin dashboard.
+
+        Uses batch get for monthly stats to minimize Firestore reads.
+        """
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-
-        # Today's stats
-        today_ref = self.db.collection("platformStats").document(today)
-        today_doc = await today_ref.get()
-        today_data = today_doc.to_dict() if today_doc.exists else {}
-
-        # Count total users (read all user docs — acceptable for small user base)
-        total_users = 0
-        async for _ in self.db.collection("users").select([]).stream():
-            total_users += 1
-
-        # This month's stats
         month_prefix = today[:7]  # YYYY-MM
+
+        # Batch read all days of this month in one call
+        month_refs = [
+            self.db.collection("platformStats").document(f"{month_prefix}-{day:02d}")
+            for day in range(1, 32)
+        ]
+        month_docs = await self.db.get_all(month_refs)
+
+        today_data = {}
         month_generations = 0
         month_signups = 0
-        for day in range(1, 32):
-            date_str = f"{month_prefix}-{day:02d}"
-            doc = await self.db.collection("platformStats").document(date_str).get()
+        for doc in month_docs:
             if doc.exists:
                 d = doc.to_dict()
                 month_generations += d.get("generationCount", 0)
                 month_signups += d.get("signupCount", 0)
+                if doc.id == today:
+                    today_data = d
+
+        # Count total users (acceptable for small user base)
+        total_users = 0
+        async for _ in self.db.collection("users").select([]).stream():
+            total_users += 1
 
         return {
             "totalUsers": total_users,
@@ -831,17 +845,22 @@ class FirestoreService:
         }
 
     async def get_daily_generation_stats(self, days: int = 30) -> list[dict]:
-        """Daily generation counts for the last N days."""
+        """Daily generation counts for the last N days. Uses batch get."""
         today = datetime.now(timezone.utc)
-        results = []
-        for i in range(days - 1, -1, -1):
-            date = (today - timedelta(days=i)).strftime("%Y-%m-%d")
-            doc = await self.db.collection("platformStats").document(date).get()
-            count = 0
+        dates = [
+            (today - timedelta(days=i)).strftime("%Y-%m-%d")
+            for i in range(days - 1, -1, -1)
+        ]
+        refs = [self.db.collection("platformStats").document(d) for d in dates]
+        docs = await self.db.get_all(refs)
+
+        # Build a map for lookup
+        doc_map = {}
+        for doc in docs:
             if doc.exists:
-                count = doc.to_dict().get("generationCount", 0)
-            results.append({"date": date, "count": count})
-        return results
+                doc_map[doc.id] = doc.to_dict().get("generationCount", 0)
+
+        return [{"date": d, "count": doc_map.get(d, 0)} for d in dates]
 
     async def get_recent_generations(self, limit: int = 20) -> list[dict]:
         """Recent generation log entries."""
@@ -859,12 +878,12 @@ class FirestoreService:
 
     async def disable_user(self, uid: str) -> None:
         """Disable a Firebase user and revoke their tokens."""
-        firebase_auth.update_user(uid, disabled=True)
-        firebase_auth.revoke_refresh_tokens(uid)
+        await asyncio.to_thread(firebase_auth.update_user, uid, disabled=True)
+        await asyncio.to_thread(firebase_auth.revoke_refresh_tokens, uid)
 
     async def enable_user(self, uid: str) -> None:
         """Re-enable a Firebase user."""
-        firebase_auth.update_user(uid, disabled=False)
+        await asyncio.to_thread(firebase_auth.update_user, uid, disabled=False)
 
     async def search_users_by_email(self, email_prefix: str, limit: int = 20) -> list[dict]:
         """Search users by email prefix using Firestore range query."""
@@ -918,7 +937,7 @@ class FirestoreService:
             existing = user_doc.to_dict()
             if not existing.get("email"):
                 try:
-                    fb_user = firebase_auth.get_user(uid)
+                    fb_user = await asyncio.to_thread(firebase_auth.get_user, uid)
                     update_data["email"] = fb_user.email or ""
                     update_data["name"] = fb_user.display_name or ""
                 except Exception:
