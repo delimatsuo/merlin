@@ -126,8 +126,13 @@ WIF_PROVIDER="projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/
 echo "Setting GitHub secrets via gh CLI..."
 echo "$WIF_PROVIDER" | gh secret set WIF_PROVIDER --repo "$GITHUB_REPO"
 echo "$SA_EMAIL" | gh secret set WIF_SERVICE_ACCOUNT --repo "$GITHUB_REPO"
-echo "AIzaSyAPhPf4qzo94WplQwQl9gbjauBbFOi7J3w" | gh secret set FIREBASE_API_KEY --repo "$GITHUB_REPO"
-echo "https://merlin-backend-531233742939.southamerica-east1.run.app" | gh secret set API_URL --repo "$GITHUB_REPO"
+
+# FIREBASE_API_KEY and API_URL must be set manually to avoid committing values to git:
+#   echo "YOUR_FIREBASE_API_KEY" | gh secret set FIREBASE_API_KEY --repo "$GITHUB_REPO"
+#   echo "YOUR_API_URL" | gh secret set API_URL --repo "$GITHUB_REPO"
+echo ""
+echo "NOTE: FIREBASE_API_KEY and API_URL secrets must be set manually (see comments in script)."
+echo "If they are already set in GitHub, no action needed."
 
 echo ""
 echo "============================================"
