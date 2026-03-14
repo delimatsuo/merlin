@@ -34,7 +34,7 @@ export default function PerfilPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const { profile, setProfile, setLoading } = useProfileStore();
-  const { setProfileId, markStep } = useWorkflowStore();
+  const { setProfileId, setApplicationId, setSteps, markStep } = useWorkflowStore();
   const { addTask, completeTask, failTask } = useProcessingStore();
   const { knowledge, setKnowledge } = useKnowledgeStore();
   const isFirstUpload = useRef(true);
@@ -61,12 +61,28 @@ export default function PerfilPage() {
     setDeletingId(profileId);
     try {
       await api.delete(`/api/profile/${profileId}`);
-      setAllProfiles((prev) => prev.filter((p) => p.id !== profileId));
+      const remaining = allProfiles.filter((p) => p.id !== profileId);
+      setAllProfiles(remaining);
       setConfirmDeleteId(null);
-      // Refresh knowledge store after rebuild
-      api.get<{ knowledge: Record<string, unknown> }>("/api/profile/knowledge")
-        .then((res) => setKnowledge(res.knowledge as never))
-        .catch(() => {});
+
+      if (remaining.length === 0) {
+        // Last profile deleted — full workflow reset
+        setSteps({ upload: false, interview: false, job: false, analysis: false, result: false });
+        setProfileId("");
+        setApplicationId("");
+        setKnowledge(null);
+        isFirstUpload.current = true;
+
+        // Authoritative confirmation from server
+        api.get<{ steps: Record<string, boolean>; profileId: string; applicationId: string }>("/api/profile/status")
+          .then((res) => setSteps(res.steps as never))
+          .catch(() => {});
+      } else {
+        // Partial delete — refresh knowledge only
+        api.get<{ knowledge: Record<string, unknown> }>("/api/profile/knowledge")
+          .then((res) => setKnowledge(res.knowledge as never))
+          .catch(() => {});
+      }
     } catch {
       setError("Erro ao excluir currículo. Tente novamente.");
     } finally {
