@@ -77,6 +77,8 @@ export default function PerfilPage() {
         setProfileId("");
         setApplicationId("");
         setKnowledge(null);
+        setProfile(null as never);
+        setUploadedFile(null);
         isFirstUpload.current = true;
       } else {
         // Partial delete — refresh knowledge only
