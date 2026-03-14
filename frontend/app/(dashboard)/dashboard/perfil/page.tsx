@@ -34,7 +34,7 @@ export default function PerfilPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const { profile, setProfile, setLoading } = useProfileStore();
-  const { setProfileId, markStep } = useWorkflowStore();
+  const { setProfileId, setApplicationId, setSteps, markStep } = useWorkflowStore();
   const { addTask, completeTask, failTask } = useProcessingStore();
   const { knowledge, setKnowledge } = useKnowledgeStore();
   const isFirstUpload = useRef(true);
@@ -61,12 +61,31 @@ export default function PerfilPage() {
     setDeletingId(profileId);
     try {
       await api.delete(`/api/profile/${profileId}`);
-      setAllProfiles((prev) => prev.filter((p) => p.id !== profileId));
       setConfirmDeleteId(null);
-      // Refresh knowledge store after rebuild
-      api.get<{ knowledge: Record<string, unknown> }>("/api/profile/knowledge")
-        .then((res) => setKnowledge(res.knowledge as never))
-        .catch(() => {});
+
+      // Use functional updater to avoid stale closure on allProfiles
+      let wasLastProfile = false;
+      setAllProfiles((prev) => {
+        const remaining = prev.filter((p) => p.id !== profileId);
+        wasLastProfile = remaining.length === 0;
+        return remaining;
+      });
+
+      if (wasLastProfile) {
+        // Last profile deleted — full workflow reset
+        setSteps({ upload: false, interview: false, job: false, analysis: false, result: false });
+        setProfileId("");
+        setApplicationId("");
+        setKnowledge(null);
+        setProfile(null as never);
+        setUploadedFile(null);
+        isFirstUpload.current = true;
+      } else {
+        // Partial delete — refresh knowledge only
+        api.get<{ knowledge: Record<string, unknown> }>("/api/profile/knowledge")
+          .then((res) => setKnowledge(res.knowledge as never))
+          .catch(() => {});
+      }
     } catch {
       setError("Erro ao excluir currículo. Tente novamente.");
     } finally {

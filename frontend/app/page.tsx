@@ -56,8 +56,12 @@ export default function LandingPage() {
         </h1>
         <p className="mt-6 text-lg text-muted-foreground max-w-xl mx-auto leading-relaxed">
           O Merlin analisa a vaga, identifica o que o recrutador procura, e
-          reescreve seu currículo para maximizar suas chances — tudo em minutos.
+          reescreve seu currículo para maximizar suas chances. Tudo em minutos.
         </p>
+        <div className="mt-5 inline-flex items-center gap-2 rounded-full bg-green-500/10 border border-green-500/20 px-5 py-2">
+          <span className="text-sm font-semibold text-green-600">100% gratuito</span>
+          <span className="text-xs text-green-600/70">até 5 currículos por dia</span>
+        </div>
         <div className="mt-10 flex items-center justify-center gap-4">
           <Link
             href="/cadastro"
@@ -167,7 +171,7 @@ export default function LandingPage() {
           Pronto para personalizar seu currículo?
         </h2>
         <p className="mt-4 text-base text-muted-foreground">
-          Crie sua conta gratuita e gere seu primeiro currículo em minutos.
+          Crie sua conta e gere até 5 currículos personalizados por dia, sem custo nenhum.
         </p>
         <Link
           href="/cadastro"
