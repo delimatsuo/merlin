@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { useAuthStore, useAdminStore } from "@/lib/store";
+import { useAuthStore, useAdminStore, type AdminStats } from "@/lib/store";
 import { api } from "@/lib/api";
 
 export function AdminGuard({ children }: { children: React.ReactNode }) {
@@ -41,7 +41,7 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
         // Step 2: load stats for the dashboard (non-blocking for guard)
         try {
           const data = await api.get<{
-            stats: Record<string, number>;
+            stats: AdminStats;
             dailyChart: { date: string; count: number }[];
             recentGenerations: {
               id: string;
@@ -52,7 +52,7 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
             }[];
           }>("/api/admin/stats");
           if (!cancelled) {
-            setStats(data.stats as any);
+            setStats(data.stats);
             setDailyChart(data.dailyChart);
             setRecentGenerations(data.recentGenerations);
           }
