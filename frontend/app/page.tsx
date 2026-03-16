@@ -17,7 +17,7 @@ import { LanguageToggle } from "@/components/language-toggle";
 
 export default function LandingPage() {
   const router = useRouter();
-  const { t, locale } = useTranslation();
+  const { t } = useTranslation();
 
   // Redirect authenticated users to dashboard
   useEffect(() => {

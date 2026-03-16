@@ -20,7 +20,6 @@ import {
   LogOut,
   User,
   Settings,
-  Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";

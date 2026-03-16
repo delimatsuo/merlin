@@ -22,17 +22,11 @@ export function useTranslation() {
   const [locale, setLocaleState] = useState<Locale>(getInitialLocale);
 
   useEffect(() => {
-    // Initialize on mount (handles SSR mismatch)
-    const detected = getInitialLocale();
-    if (detected !== locale) {
-      setLocaleState(detected);
-    }
-
     // Listen for changes from other components
     const handler = (newLocale: Locale) => setLocaleState(newLocale);
     listeners.add(handler);
     return () => { listeners.delete(handler); };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   const setLocale = useCallback((newLocale: Locale) => {
     broadcastLocaleChange(newLocale);
