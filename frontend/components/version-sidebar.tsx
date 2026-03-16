@@ -23,6 +23,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/lib/hooks/useTranslation";
 
 interface VersionSidebarProps {
   applicationId: string;
@@ -41,6 +42,7 @@ export function VersionSidebar({
   onEdit,
   onNewVersion,
 }: VersionSidebarProps) {
+  const { t } = useTranslation();
   const { versions, activeVersionId, setActiveVersion, updateVersion, removeVersion } =
     useVersionStore();
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -58,9 +60,9 @@ export function VersionSidebar({
         `/api/tailor/versions/${applicationId}`
       );
       useVersionStore.getState().setVersions(versionsResult.versions);
-      toast.success("Versao copiada");
+      toast.success(t("versions.copied"));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erro ao copiar versao.");
+      toast.error(e instanceof Error ? e.message : t("versions.errorCopy"));
     } finally {
       setActionLoading(null);
     }
@@ -77,7 +79,7 @@ export function VersionSidebar({
       });
       updateVersion(versionId, { name: renameValue.trim() });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erro ao renomear.");
+      toast.error(e instanceof Error ? e.message : t("versions.errorRename"));
     }
     setRenaming(null);
   };
@@ -87,9 +89,9 @@ export function VersionSidebar({
     try {
       await api.delete(`/api/tailor/version/${applicationId}/${versionId}`);
       removeVersion(versionId);
-      toast.success("Versao excluida");
+      toast.success(t("versions.deleted"));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erro ao excluir versao.");
+      toast.error(e instanceof Error ? e.message : t("versions.errorDelete"));
     } finally {
       setActionLoading(null);
     }
@@ -111,7 +113,7 @@ export function VersionSidebar({
       {/* Header */}
       <div className="px-4 py-3 border-b border-border flex items-center justify-between">
         <h3 className="text-xs font-semibold text-foreground uppercase tracking-wide">
-          Versoes
+          {t("versions.title")}
         </h3>
         <button
           onClick={onToggle}
@@ -169,13 +171,13 @@ export function VersionSidebar({
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-40">
                     <DropdownMenuItem onClick={() => onDownload(version.id, "resume")}>
-                      <Download className="mr-2 h-3.5 w-3.5" /> Baixar
+                      <Download className="mr-2 h-3.5 w-3.5" /> {t("versions.download")}
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => onEdit(version.id)}>
-                      <Pencil className="mr-2 h-3.5 w-3.5" /> Editar
+                      <Pencil className="mr-2 h-3.5 w-3.5" /> {t("versions.edit")}
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => handleCopy(version.id)}>
-                      <Copy className="mr-2 h-3.5 w-3.5" /> Copiar
+                      <Copy className="mr-2 h-3.5 w-3.5" /> {t("versions.copy")}
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() => {
@@ -183,13 +185,13 @@ export function VersionSidebar({
                         setRenameValue(version.name);
                       }}
                     >
-                      <Type className="mr-2 h-3.5 w-3.5" /> Renomear
+                      <Type className="mr-2 h-3.5 w-3.5" /> {t("versions.rename")}
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() => handleDelete(version.id)}
                       className="text-destructive focus:text-destructive"
                     >
-                      <Trash2 className="mr-2 h-3.5 w-3.5" /> Excluir
+                      <Trash2 className="mr-2 h-3.5 w-3.5" /> {t("versions.delete")}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -207,7 +209,7 @@ export function VersionSidebar({
           className="w-full h-8 rounded-lg text-xs"
         >
           <Plus className="mr-1.5 h-3 w-3" />
-          Gerar Nova Versao
+          {t("versions.newVersion")}
         </Button>
       </div>
     </div>

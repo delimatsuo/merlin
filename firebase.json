@@ -9,6 +9,16 @@
         "**/.*",
         "**/node_modules/**"
       ],
+      "redirects": [
+        { "source": "/cadastro", "destination": "/signup", "type": 301 },
+        { "source": "/privacidade", "destination": "/privacy", "type": 301 },
+        { "source": "/termos", "destination": "/terms", "type": 301 },
+        { "source": "/dashboard/vaga", "destination": "/dashboard/job", "type": 301 },
+        { "source": "/dashboard/perfil", "destination": "/dashboard/profile", "type": 301 },
+        { "source": "/dashboard/entrevista", "destination": "/dashboard/interview", "type": 301 },
+
+        { "source": "/dashboard/configuracoes", "destination": "/dashboard/settings", "type": 301 }
+      ],
       "rewrites": [
         {
           "source": "**",
@@ -60,6 +70,16 @@
         "firebase.json",
         "**/.*",
         "**/node_modules/**"
+      ],
+      "redirects": [
+        { "source": "/cadastro", "destination": "/signup", "type": 301 },
+        { "source": "/privacidade", "destination": "/privacy", "type": 301 },
+        { "source": "/termos", "destination": "/terms", "type": 301 },
+        { "source": "/dashboard/vaga", "destination": "/dashboard/job", "type": 301 },
+        { "source": "/dashboard/perfil", "destination": "/dashboard/profile", "type": 301 },
+        { "source": "/dashboard/entrevista", "destination": "/dashboard/interview", "type": 301 },
+
+        { "source": "/dashboard/configuracoes", "destination": "/dashboard/settings", "type": 301 }
       ],
       "rewrites": [
         {

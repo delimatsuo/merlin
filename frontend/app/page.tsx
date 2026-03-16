@@ -12,9 +12,12 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { auth } from "@/lib/firebase";
+import { useTranslation } from "@/lib/hooks/useTranslation";
+import { LanguageToggle } from "@/components/language-toggle";
 
 export default function LandingPage() {
   const router = useRouter();
+  const { t, locale } = useTranslation();
 
   // Redirect authenticated users to dashboard
   useEffect(() => {
@@ -24,6 +27,10 @@ export default function LandingPage() {
     });
     return unsubscribe;
   }, [router]);
+
+  useEffect(() => {
+    document.title = t("meta.defaultTitle");
+  }, [t]);
   return (
     <div className="min-h-screen bg-background">
       {/* Nav */}
@@ -36,13 +43,14 @@ export default function LandingPage() {
             href="/login"
             className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
           >
-            Entrar
+            {t("landing.signIn")}
           </Link>
+          <LanguageToggle />
           <Link
-            href="/cadastro"
+            href="/signup"
             className="h-9 px-5 inline-flex items-center justify-center rounded-full bg-foreground text-background text-sm font-semibold hover:opacity-90 transition-opacity"
           >
-            Criar conta
+            {t("landing.createAccount")}
           </Link>
         </div>
       </nav>
@@ -50,31 +58,30 @@ export default function LandingPage() {
       {/* Hero */}
       <section className="px-6 md:px-12 pt-20 pb-24 max-w-3xl mx-auto text-center">
         <h1 className="text-5xl md:text-6xl font-bold tracking-tight text-foreground leading-[1.1]">
-          Seu currículo sob
+          {t("landing.heroTitle1")}
           <br />
-          medida com IA
+          {t("landing.heroTitle2")}
         </h1>
         <p className="mt-6 text-lg text-muted-foreground max-w-xl mx-auto leading-relaxed">
-          O Merlin analisa a vaga, identifica o que o recrutador procura, e
-          reescreve seu currículo para maximizar suas chances. Tudo em minutos.
+          {t("landing.heroSubtitle")}
         </p>
         <div className="mt-5 inline-flex items-center gap-2 rounded-full bg-green-500/10 border border-green-500/20 px-5 py-2">
-          <span className="text-sm font-semibold text-green-600">100% gratuito</span>
-          <span className="text-xs text-green-600/70">até 5 currículos por dia</span>
+          <span className="text-sm font-semibold text-green-600">{t("landing.freeLabel")}</span>
+          <span className="text-xs text-green-600/70">{t("landing.freeDetail")}</span>
         </div>
         <div className="mt-10 flex items-center justify-center gap-4">
           <Link
-            href="/cadastro"
+            href="/signup"
             className="h-12 px-8 inline-flex items-center justify-center rounded-full bg-foreground text-background text-sm font-semibold hover:opacity-90 transition-opacity"
           >
-            Começar agora
+            {t("landing.getStarted")}
             <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
           <Link
             href="/login"
             className="h-12 px-8 inline-flex items-center justify-center rounded-full border border-border text-foreground text-sm font-semibold hover:bg-secondary transition-colors"
           >
-            Já tenho conta
+            {t("landing.haveAccount")}
           </Link>
         </div>
       </section>
@@ -82,7 +89,7 @@ export default function LandingPage() {
       {/* How it works */}
       <section className="px-6 md:px-12 py-20 max-w-4xl mx-auto">
         <h2 className="text-2xl font-bold tracking-tight text-foreground text-center mb-14">
-          Como funciona
+          {t("landing.howItWorks")}
         </h2>
         <div className="grid md:grid-cols-4 gap-8">
           <div className="text-center space-y-3">
@@ -90,10 +97,10 @@ export default function LandingPage() {
               <FileText className="h-5 w-5 text-foreground" />
             </div>
             <h3 className="text-sm font-semibold text-foreground">
-              1. Envie seu currículo
+              {t("landing.step1Title")}
             </h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Upload do seu PDF ou DOCX. A IA estrutura seus dados automaticamente.
+              {t("landing.step1Desc")}
             </p>
           </div>
           <div className="text-center space-y-3">
@@ -101,10 +108,10 @@ export default function LandingPage() {
               <MessageSquareText className="h-5 w-5 text-foreground" />
             </div>
             <h3 className="text-sm font-semibold text-foreground">
-              2. Entrevista rápida
+              {t("landing.step2Title")}
             </h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Responda perguntas sobre sua experiência para enriquecer o perfil.
+              {t("landing.step2Desc")}
             </p>
           </div>
           <div className="text-center space-y-3">
@@ -112,10 +119,10 @@ export default function LandingPage() {
               <Target className="h-5 w-5 text-foreground" />
             </div>
             <h3 className="text-sm font-semibold text-foreground">
-              3. Cole a vaga
+              {t("landing.step3Title")}
             </h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Cole a descrição da vaga e receba uma análise completa com score ATS.
+              {t("landing.step3Desc")}
             </p>
           </div>
           <div className="text-center space-y-3">
@@ -123,10 +130,10 @@ export default function LandingPage() {
               <Sparkles className="h-5 w-5 text-foreground" />
             </div>
             <h3 className="text-sm font-semibold text-foreground">
-              4. Currículo pronto
+              {t("landing.step4Title")}
             </h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Receba currículo e carta de apresentação personalizados para a vaga.
+              {t("landing.step4Desc")}
             </p>
           </div>
         </div>
@@ -137,29 +144,26 @@ export default function LandingPage() {
         <div className="grid md:grid-cols-3 gap-6">
           <div className="apple-shadow rounded-2xl bg-card p-7 space-y-3">
             <h3 className="text-sm font-semibold text-foreground">
-              Otimizado para ATS
+              {t("landing.feature1Title")}
             </h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Keywords estratégicas posicionadas nos pontos de maior scan dos
-              sistemas de triagem automática.
+              {t("landing.feature1Desc")}
             </p>
           </div>
           <div className="apple-shadow rounded-2xl bg-card p-7 space-y-3">
             <h3 className="text-sm font-semibold text-foreground">
-              Bilíngue PT-BR / EN
+              {t("landing.feature2Title")}
             </h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Detecta o idioma da vaga e gera o currículo na língua correta
-              automaticamente.
+              {t("landing.feature2Desc")}
             </p>
           </div>
           <div className="apple-shadow rounded-2xl bg-card p-7 space-y-3">
             <h3 className="text-sm font-semibold text-foreground">
-              Seus dados protegidos
+              {t("landing.feature3Title")}
             </h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Infraestrutura Google Cloud, autenticação Firebase, e conformidade
-              com a LGPD.
+              {t("landing.feature3Desc")}
             </p>
           </div>
         </div>
@@ -168,16 +172,16 @@ export default function LandingPage() {
       {/* CTA */}
       <section className="px-6 md:px-12 py-20 max-w-3xl mx-auto text-center">
         <h2 className="text-3xl font-bold tracking-tight text-foreground">
-          Pronto para personalizar seu currículo?
+          {t("landing.ctaTitle")}
         </h2>
         <p className="mt-4 text-base text-muted-foreground">
-          Crie sua conta e gere até 5 currículos personalizados por dia, sem custo nenhum.
+          {t("landing.ctaSubtitle")}
         </p>
         <Link
-          href="/cadastro"
+          href="/signup"
           className="mt-8 h-12 px-8 inline-flex items-center justify-center rounded-full bg-foreground text-background text-sm font-semibold hover:opacity-90 transition-opacity"
         >
-          Criar conta gratuita
+          {t("landing.ctaButton")}
           <ArrowRight className="ml-2 h-4 w-4" />
         </Link>
       </section>
@@ -189,7 +193,7 @@ export default function LandingPage() {
             <span>Merlin</span>
             <span className="text-muted-foreground/30">·</span>
             <span>
-              por{" "}
+              {t("footer.by")}{" "}
               <a
                 href="https://ellaexecutivesearch.com"
                 target="_blank"
@@ -202,17 +206,17 @@ export default function LandingPage() {
           </div>
           <div className="flex items-center gap-4">
             <Link
-              href="/privacidade"
+              href="/privacy"
               className="text-xs text-muted-foreground/70 hover:text-muted-foreground transition-colors"
             >
-              Privacidade
+              {t("footer.privacy")}
             </Link>
             <span className="text-muted-foreground/30">·</span>
             <Link
-              href="/termos"
+              href="/terms"
               className="text-xs text-muted-foreground/70 hover:text-muted-foreground transition-colors"
             >
-              Termos de Uso
+              {t("footer.terms")}
             </Link>
           </div>
         </div>

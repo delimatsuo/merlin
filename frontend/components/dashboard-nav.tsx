@@ -25,16 +25,19 @@ import {
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { useEffect } from "react";
-
-const navItems = [
-  { href: "/dashboard", label: "Candidaturas", icon: Briefcase },
-  { href: "/dashboard/perfil", label: "Meu Perfil", icon: UserIcon },
-  { href: "/dashboard/vaga", label: "Nova Vaga", icon: Plus },
-];
+import { useTranslation } from "@/lib/hooks/useTranslation";
+import { LanguageToggle } from "@/components/language-toggle";
 
 export function DashboardNav() {
   const pathname = usePathname();
   const router = useRouter();
+  const { t } = useTranslation();
+
+  const navItems = [
+    { href: "/dashboard", label: t("nav.applications"), icon: Briefcase },
+    { href: "/dashboard/profile", label: t("nav.profile"), icon: UserIcon },
+    { href: "/dashboard/job", label: t("nav.newJob"), icon: Plus },
+  ];
   const { user } = useAuthStore();
   const { isAdmin, setIsAdmin } = useAdminStore();
 
@@ -80,7 +83,7 @@ export function DashboardNav() {
               {navItems.map((item) => {
                 const isActive =
                   item.href === "/dashboard"
-                    ? pathname === "/dashboard" || pathname?.startsWith("/dashboard/candidatura")
+                    ? pathname === "/dashboard" || pathname?.startsWith("/dashboard/application")
                     : pathname === item.href;
                 return (
                   <Link
@@ -136,18 +139,21 @@ export function DashboardNav() {
                   {user?.displayName || user?.email}
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onClick={() => router.push("/dashboard/configuracoes")}
+                  onClick={() => router.push("/dashboard/settings")}
                   className="rounded-lg text-xs py-2.5 px-3 cursor-pointer"
                 >
                   <Settings className="mr-2.5 h-3.5 w-3.5 text-muted-foreground" />
-                  Configuracoes
+                  {t("nav.settings")}
                 </DropdownMenuItem>
+                <div className="px-3 py-2">
+                  <LanguageToggle />
+                </div>
                 <DropdownMenuItem
                   onClick={handleSignOut}
                   className="rounded-lg text-xs py-2.5 px-3 text-destructive focus:text-destructive cursor-pointer"
                 >
                   <LogOut className="mr-2.5 h-3.5 w-3.5" />
-                  Sair
+                  {t("nav.signOut")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

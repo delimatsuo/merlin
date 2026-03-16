@@ -1,0 +1,41 @@
+{
+  "meta.defaultTitle": "Merlin — AI-Tailored Resumes",
+  "meta.defaultDescription": "Transform your resume with artificial intelligence. Upload, quick interview, and get a personalized ATS-optimized resume.",
+
+  "nav.applications": "Applications",
+  "nav.profile": "My Profile",
+  "nav.newJob": "New Job",
+  "nav.admin": "Admin",
+  "nav.settings": "Settings",
+  "nav.signOut": "Sign Out",
+
+  "mobileNav.applications": "Applications",
+  "mobileNav.profile": "Profile",
+  "mobileNav.newJob": "New Job",
+
+  "footer.allRightsReserved": "All rights reserved.",
+  "footer.privacy": "Privacy",
+  "footer.terms": "Terms of Service",
+  "footer.contact": "Contact",
+  "footer.by": "by",
+
+  "common.cancel": "Cancel",
+  "common.confirm": "Confirm",
+  "common.save": "Save",
+  "common.delete": "Delete",
+  "common.edit": "Edit",
+  "common.loading": "Loading...",
+  "common.error": "Error",
+  "common.or": "or",
+  "common.next": "Next",
+  "common.previous": "Previous",
+  "common.close": "Close",
+  "common.download": "Download",
+  "common.back": "Back",
+  "common.loadMore": "Load more",
+  "common.continueWithGoogle": "Continue with Google",
+  "common.characters": "characters",
+
+  "legal.privacyTitle": "Privacy Policy",
+  "legal.termsTitle": "Terms of Service"
+}
