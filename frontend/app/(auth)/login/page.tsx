@@ -38,7 +38,7 @@ export default function LoginPage() {
       await signInWithEmailAndPassword(auth, email, password);
       router.push("/dashboard");
     } catch {
-      setError(t("login.errorInvalid"));
+      setError(t("login.errorInvalidCredentials"));
     } finally {
       setLoading(false);
     }
@@ -68,7 +68,7 @@ export default function LoginPage() {
             </h1>
           </Link>
           <p className="text-base text-muted-foreground">
-            {t("login.subtitle")}
+            {t("login.tagline")}
           </p>
         </div>
 
@@ -103,7 +103,7 @@ export default function LoginPage() {
                 fill="#EA4335"
               />
             </svg>
-            {t("login.continueWithGoogle")}
+            {t("common.continueWithGoogle")}
           </button>
 
           <div className="relative">
@@ -112,7 +112,7 @@ export default function LoginPage() {
             </div>
             <div className="relative flex justify-center">
               <span className="bg-card px-3 text-xs text-muted-foreground">
-                {t("login.or")}
+                {t("common.or")}
               </span>
             </div>
           </div>
@@ -172,18 +172,18 @@ export default function LoginPage() {
               href="/privacy"
               className="text-xs text-muted-foreground/70 hover:text-muted-foreground transition-colors"
             >
-              {t("login.privacy")}
+              {t("footer.privacy")}
             </Link>
             <span className="text-muted-foreground/30">·</span>
             <Link
               href="/terms"
               className="text-xs text-muted-foreground/70 hover:text-muted-foreground transition-colors"
             >
-              {t("login.terms")}
+              {t("footer.terms")}
             </Link>
           </div>
           <p className="text-xs text-muted-foreground/50 mt-4">
-            {t("login.by")}{" "}
+            {t("footer.by")}{" "}
             <a
               href="https://ellaexecutivesearch.com"
               target="_blank"

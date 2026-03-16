@@ -114,7 +114,7 @@ export default function CadastroPage() {
                 fill="#EA4335"
               />
             </svg>
-            {t("signup.continueWithGoogle")}
+            {t("common.continueWithGoogle")}
           </button>
 
           <div className="relative">
@@ -123,7 +123,7 @@ export default function CadastroPage() {
             </div>
             <div className="relative flex justify-center">
               <span className="bg-card px-3 text-xs text-muted-foreground">
-                {t("signup.or")}
+                {t("common.or")}
               </span>
             </div>
           </div>
@@ -239,7 +239,7 @@ export default function CadastroPage() {
         {/* Footer */}
         <div className="text-center mt-8 space-y-3">
           <p className="text-sm text-muted-foreground">
-            {t("signup.hasAccount")}{" "}
+            {t("signup.haveAccount")}{" "}
             <Link
               href="/login"
               className="text-foreground font-medium hover:underline underline-offset-4"
@@ -248,7 +248,7 @@ export default function CadastroPage() {
             </Link>
           </p>
           <p className="text-xs text-muted-foreground/50">
-            {t("signup.by")}{" "}
+            {t("footer.by")}{" "}
             <a
               href="https://ellaexecutivesearch.com"
               target="_blank"

@@ -40,6 +40,7 @@ Thumbs.db
 *.json
 !firebase.json
 !firestore.indexes.json
+!frontend/locales/**/*.json
 !package.json
 !package-lock.json
 !tsconfig.json

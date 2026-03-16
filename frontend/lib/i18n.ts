@@ -35,15 +35,6 @@ export function detectLocale(): Locale {
   return "en";
 }
 
-export function getLocale(): Locale {
-  if (typeof window === "undefined") return "en";
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored && VALID_LOCALES.has(stored)) return stored as Locale;
-  } catch {}
-  return "en";
-}
-
 export function setLocaleStorage(locale: Locale) {
   if (typeof window === "undefined") return;
   try {

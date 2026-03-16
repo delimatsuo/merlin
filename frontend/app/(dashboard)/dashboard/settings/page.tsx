@@ -118,7 +118,7 @@ export default function ConfiguracoesPage() {
             <span className="text-sm font-medium text-foreground">
               {user?.providerData?.[0]?.providerId === "google.com"
                 ? "Google"
-                : "Email/Senha"}
+                : locale === "en" ? "Email/Password" : "Email/Senha"}
             </span>
           </div>
         </div>

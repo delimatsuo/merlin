@@ -16,7 +16,7 @@
         { "source": "/dashboard/vaga", "destination": "/dashboard/job", "type": 301 },
         { "source": "/dashboard/perfil", "destination": "/dashboard/profile", "type": 301 },
         { "source": "/dashboard/entrevista", "destination": "/dashboard/interview", "type": 301 },
-        { "source": "/dashboard/candidatura", "destination": "/dashboard/application", "type": 301 },
+
         { "source": "/dashboard/configuracoes", "destination": "/dashboard/settings", "type": 301 }
       ],
       "rewrites": [
@@ -78,7 +78,7 @@
         { "source": "/dashboard/vaga", "destination": "/dashboard/job", "type": 301 },
         { "source": "/dashboard/perfil", "destination": "/dashboard/profile", "type": 301 },
         { "source": "/dashboard/entrevista", "destination": "/dashboard/interview", "type": 301 },
-        { "source": "/dashboard/candidatura", "destination": "/dashboard/application", "type": 301 },
+
         { "source": "/dashboard/configuracoes", "destination": "/dashboard/settings", "type": 301 }
       ],
       "rewrites": [

@@ -1,0 +1,41 @@
+{
+  "meta.defaultTitle": "Merlin — Currículo sob medida com IA",
+  "meta.defaultDescription": "Transforme seu currículo com inteligência artificial. Upload, entrevista por voz, e receba um currículo personalizado e otimizado para ATS.",
+
+  "nav.applications": "Candidaturas",
+  "nav.profile": "Meu Perfil",
+  "nav.newJob": "Nova Vaga",
+  "nav.admin": "Admin",
+  "nav.settings": "Configuracoes",
+  "nav.signOut": "Sair",
+
+  "mobileNav.applications": "Candidaturas",
+  "mobileNav.profile": "Perfil",
+  "mobileNav.newJob": "Nova Vaga",
+
+  "footer.allRightsReserved": "Todos os direitos reservados.",
+  "footer.privacy": "Privacidade",
+  "footer.terms": "Termos de Uso",
+  "footer.contact": "Contato",
+  "footer.by": "por",
+
+  "common.cancel": "Cancelar",
+  "common.confirm": "Confirmar",
+  "common.save": "Salvar",
+  "common.delete": "Excluir",
+  "common.edit": "Editar",
+  "common.loading": "Carregando...",
+  "common.error": "Erro",
+  "common.or": "ou",
+  "common.next": "Proxima",
+  "common.previous": "Anterior",
+  "common.close": "Fechar",
+  "common.download": "Baixar",
+  "common.back": "Voltar",
+  "common.loadMore": "Carregar mais",
+  "common.continueWithGoogle": "Continuar com Google",
+  "common.characters": "caracteres",
+
+  "legal.privacyTitle": "Politica de Privacidade",
+  "legal.termsTitle": "Termos de Uso"
+}
