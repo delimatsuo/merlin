@@ -11,7 +11,7 @@ from google.genai import types
 
 from app.config import get_settings
 from app.prompts.profile import PROFILE_STRUCTURING_PROMPT
-from app.prompts.questions import QUESTION_GENERATION_PROMPT
+from app.prompts.questions import QUESTION_GENERATION_PROMPT, get_question_prompt
 from app.prompts.tailor import RESUME_REWRITING_PROMPT
 from app.prompts.cover_letter import COVER_LETTER_PROMPT
 from app.prompts.job_analysis import JOB_ANALYSIS_PROMPT
@@ -284,7 +284,7 @@ async def analyze_job_description(job_text: str) -> dict:
 
 
 async def generate_interview_questions(
-    structured_data: dict, enriched_data: dict
+    structured_data: dict, enriched_data: dict, locale: str = "pt-BR"
 ) -> list[str]:
     """Generate targeted interview questions."""
     context = json.dumps({
@@ -293,7 +293,7 @@ async def generate_interview_questions(
     }, ensure_ascii=False, indent=2)
 
     content = await _call_sonnet(
-        system=QUESTION_GENERATION_PROMPT,
+        system=get_question_prompt(locale),
         user_content=context,
         task="generate_questions",
         max_tokens=1024,

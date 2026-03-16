@@ -35,7 +35,7 @@ interface InterviewSession {
 
 export default function EntrevistaPage() {
   const router = useRouter();
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const { markStep } = useWorkflowStore();
   const { setKnowledge } = useKnowledgeStore();
 
@@ -100,7 +100,7 @@ export default function EntrevistaPage() {
   useEffect(() => {
     const init = async () => {
       try {
-        const result = await api.post<InterviewSession>("/api/voice/questions");
+        const result = await api.post<InterviewSession>("/api/voice/questions", { locale });
         if (!result.questions || result.questions.length === 0) {
           setError(t("interview.errorNoQuestions"));
           setLoading(false);
@@ -128,6 +128,7 @@ export default function EntrevistaPage() {
       try {
         const blob = await api.postBlob("/api/voice/tts", {
           text: session.questions[index],
+          locale,
         });
         const url = URL.createObjectURL(blob);
         ttsCacheRef.current.set(index, url);
@@ -174,7 +175,7 @@ export default function EntrevistaPage() {
         url = cachedUrl;
       } else {
         setLoadingTTS(true);
-        const blob = await api.postBlob("/api/voice/tts", { text });
+        const blob = await api.postBlob("/api/voice/tts", { text, locale });
         url = URL.createObjectURL(blob);
         ttsCacheRef.current.set(questionIndex, url);
       }

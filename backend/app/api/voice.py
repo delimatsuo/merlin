@@ -37,6 +37,11 @@ def _get_genai_client() -> genai.Client:
 
 class TTSRequest(BaseModel):
     text: str
+    locale: str = "pt-BR"
+
+
+class QuestionsRequest(BaseModel):
+    locale: str = "pt-BR"
 
 
 @router.post("/tts")
@@ -53,6 +58,9 @@ async def text_to_speech(
     if len(text) > 2000:
         raise HTTPException(status_code=400, detail="Texto muito longo (max 2000 chars).")
 
+    # Select voice based on locale: Orus for Portuguese, Kore for English
+    voice_name = "Kore" if body.locale == "en" else "Orus"
+
     client = _get_genai_client()
 
     response = await client.aio.models.generate_content(
@@ -63,7 +71,7 @@ async def text_to_speech(
             speech_config=types.SpeechConfig(
                 voice_config=types.VoiceConfig(
                     prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                        voice_name="Orus",
+                        voice_name=voice_name,
                     )
                 )
             ),
@@ -168,6 +176,7 @@ def _convert_webm_to_ogg(audio_data: bytes) -> bytes:
 
 @router.post("/questions")
 async def get_interview_questions(
+    body: QuestionsRequest = QuestionsRequest(),
     user: AuthenticatedUser = Depends(get_current_user),
 ):
     """Generate interview questions based on profile gaps."""
@@ -180,7 +189,7 @@ async def get_interview_questions(
     structured_data = profile.get("structuredData", {})
     enriched_data = profile.get("enrichedProfile", {})
 
-    questions = await generate_interview_questions(structured_data, enriched_data)
+    questions = await generate_interview_questions(structured_data, enriched_data, locale=body.locale)
 
     # Create voice session
     session_id = await fs.create_voice_session(
