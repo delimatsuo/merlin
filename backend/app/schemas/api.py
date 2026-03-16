@@ -1,8 +1,8 @@
 """Pydantic schemas for API request/response validation."""
 
-from typing import Optional
+from typing import Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # --- Profile ---
@@ -14,7 +14,7 @@ class ExperienceItem(BaseModel):
     end_date: Optional[str] = Field(alias="endDate", default=None)
     description: str = ""
 
-    model_config = {"populate_by_name": True}
+    model_config = {"populate_by_name": True, "extra": "ignore"}
 
 
 class EducationItem(BaseModel):
@@ -24,12 +24,14 @@ class EducationItem(BaseModel):
     start_date: Optional[str] = Field(alias="startDate", default=None)
     end_date: Optional[str] = Field(alias="endDate", default=None)
 
-    model_config = {"populate_by_name": True}
+    model_config = {"populate_by_name": True, "extra": "ignore"}
 
 
 class LanguageItem(BaseModel):
-    language: str
-    level: str
+    language: str = ""
+    level: str = ""
+
+    model_config = {"extra": "ignore"}
 
 
 class ProfileData(BaseModel):
@@ -43,6 +45,46 @@ class ProfileData(BaseModel):
     skills: list[str] = []
     languages: list[LanguageItem] = []
     certifications: list[str] = []
+
+    model_config = {"extra": "ignore"}
+
+    @field_validator("languages", mode="before")
+    @classmethod
+    def coerce_languages(cls, v: list) -> list:
+        """Handle AI returning plain strings instead of {language, level} objects."""
+        if not isinstance(v, list):
+            return []
+        result = []
+        for item in v:
+            if isinstance(item, str):
+                result.append({"language": item, "level": ""})
+            elif isinstance(item, dict):
+                result.append(item)
+        return result
+
+    @field_validator("experience", mode="before")
+    @classmethod
+    def coerce_experience(cls, v: list) -> list:
+        """Skip non-dict entries in experience list."""
+        if not isinstance(v, list):
+            return []
+        return [item for item in v if isinstance(item, dict)]
+
+    @field_validator("education", mode="before")
+    @classmethod
+    def coerce_education(cls, v: list) -> list:
+        """Skip non-dict entries in education list."""
+        if not isinstance(v, list):
+            return []
+        return [item for item in v if isinstance(item, dict)]
+
+    @field_validator("skills", "certifications", mode="before")
+    @classmethod
+    def coerce_string_list(cls, v: list) -> list:
+        """Ensure list of strings, converting non-string items."""
+        if not isinstance(v, list):
+            return []
+        return [str(item) for item in v if item]
 
 
 class ProfileResponse(BaseModel):
