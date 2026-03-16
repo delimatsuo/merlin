@@ -1,0 +1,330 @@
+export default function PrivacyEN() {
+  return (
+    <div className="space-y-10">
+      <section>
+        <p className="text-sm text-foreground/80 leading-relaxed italic mb-6">
+          This policy applies to users in Brazil and the United States.
+        </p>
+      </section>
+
+      <section>
+        <h2 className="text-xl font-semibold text-foreground mb-3">
+          1. Data Controller
+        </h2>
+        <p className="text-sm text-foreground/80 leading-relaxed">
+          The data controller for personal data processed by the Merlin platform is{" "}
+          <strong>Ella Executive Search Ltda</strong>, registered under CNPJ
+          44.891.922/0001-01, located at Calcada das Margaridas, 163, Sala 02,
+          Condominio Centro Comercial Alphaville, Barueri/SP, Brazil.
+        </p>
+      </section>
+
+      <section>
+        <h2 className="text-xl font-semibold text-foreground mb-3">
+          2. Data Protection Officer (DPO)
+        </h2>
+        <p className="text-sm text-foreground/80 leading-relaxed">
+          To exercise your rights or clarify any questions about the processing
+          of your data, contact our Data Protection Officer:{" "}
+          <a
+            href="mailto:contact@ellaexecutivesearch.com"
+            className="text-foreground font-medium underline underline-offset-4 decoration-foreground/30 hover:decoration-foreground transition-colors"
+          >
+            contact@ellaexecutivesearch.com
+          </a>
+        </p>
+      </section>
+
+      <section>
+        <h2 className="text-xl font-semibold text-foreground mb-3">
+          3. Data Collected
+        </h2>
+        <p className="text-sm text-foreground/80 leading-relaxed mb-3">
+          We collect the following personal data:
+        </p>
+        <ul className="space-y-2">
+          {[
+            "Identification data: name, email, and profile photo (via registration or Google OAuth)",
+            "Professional data: uploaded resume (work experience, education, skills, certifications, languages)",
+            "Interview data: text responses to profile questions and voice audio (processed in real time via Google Cloud Speech-to-Text, not stored after transcription)",
+            "Application data: job descriptions you provide, generated tailored resumes, cover letters",
+            "Usage data: access logs, operation timestamps",
+          ].map((item) => (
+            <li key={item} className="flex items-start gap-3 text-sm text-foreground/80">
+              <span className="h-1.5 w-1.5 rounded-full bg-foreground/30 mt-1.5 shrink-0" />
+              {item}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section>
+        <h2 className="text-xl font-semibold text-foreground mb-3">
+          4. Legal Basis and Purpose
+        </h2>
+        <p className="text-sm text-foreground/80 leading-relaxed mb-4">
+          Your data is processed based on your <strong>consent</strong> (LGPD Art. 7, I),
+          collected at the time of registration. Under the CCPA, we collect the following
+          categories of personal information: identifiers, professional information,
+          and internet activity. Your data is used exclusively to:
+        </p>
+        <ul className="space-y-2">
+          {[
+            "Create and enrich your consolidated professional profile (knowledge file)",
+            "Tailor resumes and cover letters for specific job openings",
+            "Analyze compatibility between your profile and job requirements (ATS score)",
+            "Generate follow-up questions to improve personalization",
+            "Improve service quality (aggregated and anonymized analytics)",
+          ].map((item) => (
+            <li key={item} className="flex items-start gap-3 text-sm text-foreground/80">
+              <span className="h-1.5 w-1.5 rounded-full bg-foreground/30 mt-1.5 shrink-0" />
+              {item}
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section>
+        <h2 className="text-xl font-semibold text-foreground mb-3">
+          5. Third-Party Sharing
+        </h2>
+        <p className="text-sm text-foreground/80 leading-relaxed mb-4">
+          To provide the service, we share limited data with the following processors:
+        </p>
+        <div className="space-y-3">
+          {[
+            {
+              name: "Google Cloud Platform (Firebase, Cloud Run, Firestore)",
+              desc: "Storage and processing of your data. Data stored in the southamerica-east1 region (Sao Paulo). Subject to Google Cloud's privacy policy and DPA.",
+            },
+            {
+              name: "Google Gemini AI",
+              desc: "Resume text, job descriptions, and interview transcripts are sent for personalized content generation. Audio is processed in real time via Speech-to-Text and not stored. The Gemini API does not use customer data for model training.",
+            },
+            {
+              name: "Firebase Authentication",
+              desc: "Identity management and authentication. Stores email, name, and profile photo.",
+            },
+            {
+              name: "Brave Search",
+              desc: "Only company names extracted from your resume are sent for public search. No personally identifiable data is transmitted.",
+            },
+          ].map((provider) => (
+            <div
+              key={provider.name}
+              className="rounded-xl bg-secondary/70 p-4"
+            >
+              <p className="text-sm font-medium text-foreground">
+                {provider.name}
+              </p>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                {provider.desc}
+              </p>
+            </div>
+          ))}
+        </div>
+        <p className="text-sm text-foreground/80 leading-relaxed mt-4">
+          We do not sell, rent, or share your personal data with third parties for
+          marketing or advertising purposes.{" "}
+          <strong>We do not sell personal information</strong> as defined under the
+          California Consumer Privacy Act (CCPA).
+        </p>
+      </section>
+
+      <section>
+        <h2 className="text-xl font-semibold text-foreground mb-3">
+          6. International Data Transfers
+        </h2>
+        <p className="text-sm text-foreground/80 leading-relaxed">
+          Data stored in Firestore and Cloud Storage remains in the{" "}
+          <strong>southamerica-east1</strong> region (Sao Paulo, Brazil). However,
+          AI processing via Google Gemini and Speech-to-Text may occur on servers
+          outside of Brazil. This transfer is carried out pursuant to LGPD Art. 33, II
+          (Google Cloud standard contractual clauses) and Google&apos;s data processing
+          policy, which ensures an adequate level of protection. Data may also be
+          processed in the United States through Google Cloud&apos;s global infrastructure.
+        </p>
+      </section>
+
+      <section>
+        <h2 className="text-xl font-semibold text-foreground mb-3">
+          7. Your Rights
+        </h2>
+        <p className="text-sm text-foreground/80 leading-relaxed mb-3">
+          You have the following rights, which you may exercise at any time:
+        </p>
+        <div className="space-y-3">
+          {[
+            {
+              right: "Access & Confirmation",
+              desc: "Confirm the existence of data processing and access all your data. Available in Settings > Export Data. (LGPD Art. 18; CCPA right to know)",
+            },
+            {
+              right: "Correction",
+              desc: "Correct incomplete, inaccurate, or outdated data. Available by editing your resume or profile. (LGPD Art. 18)",
+            },
+            {
+              right: "Anonymization or Deletion",
+              desc: "Request deletion of your data. Available in Settings > Delete Account. (LGPD Art. 18; CCPA right to delete)",
+            },
+            {
+              right: "Portability",
+              desc: "Export your data in a structured format (JSON). Available in Settings > Export Data. (LGPD Art. 18)",
+            },
+            {
+              right: "Deletion",
+              desc: "Delete all data processed based on your consent. Deletion is permanent and irreversible. (CCPA right to delete)",
+            },
+            {
+              right: "Consent Revocation",
+              desc: "Withdraw your consent at any time, without affecting prior processing. Revocation results in account and data deletion. (LGPD Art. 18)",
+            },
+            {
+              right: "Sharing Information",
+              desc: "Know which third parties your data is shared with (detailed in section 5 above). (LGPD Art. 18; CCPA right to know)",
+            },
+            {
+              right: "Opt-Out of Sale",
+              desc: "We do not sell your personal information. You may still submit an opt-out request at any time. (CCPA right to opt-out)",
+            },
+            {
+              right: "Non-Discrimination",
+              desc: "You will not be discriminated against for exercising your privacy rights. (CCPA)",
+            },
+          ].map((item) => (
+            <div key={item.right} className="flex items-start gap-3 text-sm">
+              <span className="font-medium text-foreground whitespace-nowrap min-w-[140px]">
+                {item.right}
+              </span>
+              <span className="text-foreground/80">{item.desc}</span>
+            </div>
+          ))}
+        </div>
+        <p className="text-sm text-foreground/80 leading-relaxed mt-4">
+          To exercise any right, use the platform&apos;s dashboard features or contact
+          the DPO at{" "}
+          <a
+            href="mailto:contact@ellaexecutivesearch.com"
+            className="text-foreground font-medium underline underline-offset-4 decoration-foreground/30 hover:decoration-foreground transition-colors"
+          >
+            contact@ellaexecutivesearch.com
+          </a>
+          . We will respond within 15 business days. In compliance with CalOPPA, a
+          conspicuous link to this privacy policy is provided on every page of the platform.
+        </p>
+      </section>
+
+      <section>
+        <h2 className="text-xl font-semibold text-foreground mb-3">
+          8. Data Security
+        </h2>
+        <p className="text-sm text-foreground/80 leading-relaxed">
+          We adopt technical and organizational measures to protect your data,
+          including: encryption at rest (AES-256) and in transit (TLS 1.3);
+          Firestore security rules ensuring per-user data isolation;
+          Firebase Auth authentication with JWT tokens; secrets stored via
+          GCP Secret Manager; and audit logs for sensitive operations.
+        </p>
+      </section>
+
+      <section>
+        <h2 className="text-xl font-semibold text-foreground mb-3">
+          9. Data Retention
+        </h2>
+        <div className="space-y-3">
+          {[
+            {
+              item: "Account and profile data",
+              period: "Retained while the account is active.",
+            },
+            {
+              item: "Original resumes (PDF/DOCX)",
+              period: "Retained in Cloud Storage while the associated profile exists. Deleted along with the profile.",
+            },
+            {
+              item: "Inactive accounts",
+              period: "Flagged after 12 months of inactivity. All data automatically deleted after 18 months.",
+            },
+            {
+              item: "Account deletion",
+              period: "All data (Firestore, Cloud Storage, Firebase Auth) is permanently and irreversibly deleted.",
+            },
+          ].map((row) => (
+            <div key={row.item} className="rounded-xl bg-secondary/70 p-4">
+              <p className="text-sm font-medium text-foreground">
+                {row.item}
+              </p>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                {row.period}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <h2 className="text-xl font-semibold text-foreground mb-3">
+          10. Cookies and Tracking Technologies
+        </h2>
+        <p className="text-sm text-foreground/80 leading-relaxed">
+          The Merlin platform uses only strictly necessary cookies for service
+          operation (Firebase authentication). We do not use marketing,
+          advertising, or third-party tracking cookies. We do not use Google
+          Analytics or similar tracking tools.
+        </p>
+      </section>
+
+      <section>
+        <h2 className="text-xl font-semibold text-foreground mb-3">
+          11. Minors
+        </h2>
+        <p className="text-sm text-foreground/80 leading-relaxed">
+          The Merlin platform is not directed at individuals under 18 years of age.
+          We do not knowingly collect data from minors. If we identify data belonging
+          to a minor, it will be deleted immediately.
+        </p>
+      </section>
+
+      <section>
+        <h2 className="text-xl font-semibold text-foreground mb-3">
+          12. Policy Changes
+        </h2>
+        <p className="text-sm text-foreground/80 leading-relaxed">
+          This policy may be updated periodically. We will notify you of relevant
+          changes by email or through the platform. The date of the last update
+          will always be indicated at the top of this page.
+        </p>
+      </section>
+
+      <section>
+        <h2 className="text-xl font-semibold text-foreground mb-3">
+          13. Contact and Complaints
+        </h2>
+        <p className="text-sm text-foreground/80 leading-relaxed">
+          For questions, requests, or complaints about the processing of your
+          personal data, contact our DPO:{" "}
+          <a
+            href="mailto:contact@ellaexecutivesearch.com"
+            className="text-foreground font-medium underline underline-offset-4 decoration-foreground/30 hover:decoration-foreground transition-colors"
+          >
+            contact@ellaexecutivesearch.com
+          </a>
+        </p>
+        <p className="text-sm text-foreground/80 leading-relaxed mt-3">
+          For users in Brazil, you also have the right to file a complaint with the
+          Autoridade Nacional de Protecao de Dados (ANPD) if you believe your data
+          processing violates the LGPD. For users in California, you may file a
+          complaint with the California Attorney General regarding CCPA violations.
+        </p>
+      </section>
+
+      <section className="border-t border-border pt-8">
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Ella Executive Search Ltda — CNPJ 44.891.922/0001-01
+          <br />
+          Calcada das Margaridas, 163, Sala 02, Cond. Centro Comercial Alphaville, Barueri/SP, Brazil
+        </p>
+      </section>
+    </div>
+  );
+}

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
   signInWithPopup,
 } from "firebase/auth";
 import { auth, googleProvider } from "@/lib/firebase";
@@ -14,44 +15,51 @@ import { Label } from "@/components/ui/label";
 import { useTranslation } from "@/lib/hooks/useTranslation";
 import { LanguageToggle } from "@/components/language-toggle";
 
-export default function LoginPage() {
+export default function CadastroPage() {
   const router = useRouter();
   const { t } = useTranslation();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [consent, setConsent] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // If the user is already authenticated, redirect to dashboard
-  // instead of showing the login form. Only sign out on explicit logout action.
-  useEffect(() => {
-    if (auth?.currentUser) {
-      router.replace("/dashboard");
-    }
-  }, [router]);
-
-  const handleEmailLogin = async (e: React.FormEvent) => {
+  const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!consent) {
+      setError(t("signup.errorConsent"));
+      return;
+    }
     setError("");
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const result = await createUserWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
+      await updateProfile(result.user, { displayName: name });
       router.push("/dashboard");
     } catch {
-      setError(t("login.errorInvalid"));
+      setError(t("signup.errorCreate"));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleGoogleLogin = async () => {
+  const handleGoogleSignUp = async () => {
+    if (!consent) {
+      setError(t("signup.errorConsent"));
+      return;
+    }
     setError("");
     setLoading(true);
     try {
       await signInWithPopup(auth, googleProvider);
       router.push("/dashboard");
     } catch {
-      setError(t("login.errorGoogle"));
+      setError(t("signup.errorGoogle"));
     } finally {
       setLoading(false);
     }
@@ -63,12 +71,15 @@ export default function LoginPage() {
         {/* Header */}
         <div className="text-center mb-10">
           <Link href="/" className="inline-block">
-            <h1 className="text-4xl font-bold tracking-tight text-foreground mb-2">
+            <h1 className="text-4xl font-bold tracking-tight text-foreground mb-2 hover:opacity-80 transition-opacity">
               Merlin
             </h1>
           </Link>
+          <h2 className="text-2xl font-bold tracking-tight text-foreground mb-2">
+            {t("signup.title")}
+          </h2>
           <p className="text-base text-muted-foreground">
-            {t("login.subtitle")}
+            {t("signup.subtitle")}
           </p>
         </div>
 
@@ -81,7 +92,7 @@ export default function LoginPage() {
           )}
 
           <button
-            onClick={handleGoogleLogin}
+            onClick={handleGoogleSignUp}
             disabled={loading}
             className="w-full flex items-center justify-center gap-3 h-12 rounded-xl bg-secondary hover:bg-secondary/70 transition-colors duration-200 text-sm font-medium text-foreground disabled:opacity-50"
           >
@@ -103,7 +114,7 @@ export default function LoginPage() {
                 fill="#EA4335"
               />
             </svg>
-            {t("login.continueWithGoogle")}
+            {t("signup.continueWithGoogle")}
           </button>
 
           <div className="relative">
@@ -112,20 +123,40 @@ export default function LoginPage() {
             </div>
             <div className="relative flex justify-center">
               <span className="bg-card px-3 text-xs text-muted-foreground">
-                {t("login.or")}
+                {t("signup.or")}
               </span>
             </div>
           </div>
 
-          <form onSubmit={handleEmailLogin} className="space-y-4">
+          <form onSubmit={handleSignUp} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="email" className="text-xs font-medium text-muted-foreground">
-                {t("login.email")}
+              <Label
+                htmlFor="name"
+                className="text-xs font-medium text-muted-foreground"
+              >
+                {t("signup.fullName")}
+              </Label>
+              <Input
+                id="name"
+                type="text"
+                placeholder={t("signup.namePlaceholder")}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                className="h-12 rounded-xl bg-secondary border-0 text-sm placeholder:text-muted-foreground/50 focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label
+                htmlFor="email"
+                className="text-xs font-medium text-muted-foreground"
+              >
+                {t("signup.email")}
               </Label>
               <Input
                 id="email"
                 type="email"
-                placeholder={t("login.emailPlaceholder")}
+                placeholder={t("signup.emailPlaceholder")}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -133,25 +164,74 @@ export default function LoginPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="password" className="text-xs font-medium text-muted-foreground">
-                {t("login.password")}
+              <Label
+                htmlFor="password"
+                className="text-xs font-medium text-muted-foreground"
+              >
+                {t("signup.password")}
               </Label>
               <Input
                 id="password"
                 type="password"
-                placeholder={t("login.passwordPlaceholder")}
+                placeholder={t("signup.passwordPlaceholder")}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                minLength={8}
                 required
                 className="h-12 rounded-xl bg-secondary border-0 text-sm placeholder:text-muted-foreground/50 focus-visible:ring-2 focus-visible:ring-ring"
               />
             </div>
+            <label
+              htmlFor="consent"
+              className="flex items-start gap-3 cursor-pointer group"
+            >
+              <div className="relative mt-0.5">
+                <input
+                  type="checkbox"
+                  id="consent"
+                  checked={consent}
+                  onChange={(e) => setConsent(e.target.checked)}
+                  className="peer sr-only"
+                />
+                <div className="h-5 w-5 rounded-md border-2 border-border peer-checked:border-foreground peer-checked:bg-foreground transition-all duration-200" />
+                <svg
+                  className="absolute inset-0 h-5 w-5 text-background opacity-0 peer-checked:opacity-100 transition-opacity duration-200 p-0.5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={3}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </div>
+              <span className="text-xs text-muted-foreground leading-relaxed">
+                {t("signup.consent")}{" "}
+                <Link
+                  href="/privacy"
+                  className="text-foreground font-medium underline underline-offset-2"
+                  target="_blank"
+                >
+                  {t("signup.privacyPolicy")}
+                </Link>{" "}
+                {t("signup.and")}{" "}
+                <Link
+                  href="/terms"
+                  className="text-foreground font-medium underline underline-offset-2"
+                  target="_blank"
+                >
+                  {t("signup.termsOfService")}
+                </Link>
+                {t("signup.consentSuffix")}
+              </span>
+            </label>
             <Button
               type="submit"
               className="w-full h-12 rounded-xl text-sm font-semibold"
               disabled={loading}
             >
-              {loading ? t("login.signingIn") : t("login.signIn")}
+              {loading ? t("signup.creatingAccount") : t("signup.createAccount")}
             </Button>
           </form>
         </div>
@@ -159,31 +239,16 @@ export default function LoginPage() {
         {/* Footer */}
         <div className="text-center mt-8 space-y-3">
           <p className="text-sm text-muted-foreground">
-            {t("login.noAccount")}{" "}
+            {t("signup.hasAccount")}{" "}
             <Link
-              href="/signup"
+              href="/login"
               className="text-foreground font-medium hover:underline underline-offset-4"
             >
-              {t("login.signUp")}
+              {t("signup.signIn")}
             </Link>
           </p>
-          <div className="flex items-center justify-center gap-3">
-            <Link
-              href="/privacy"
-              className="text-xs text-muted-foreground/70 hover:text-muted-foreground transition-colors"
-            >
-              {t("login.privacy")}
-            </Link>
-            <span className="text-muted-foreground/30">·</span>
-            <Link
-              href="/terms"
-              className="text-xs text-muted-foreground/70 hover:text-muted-foreground transition-colors"
-            >
-              {t("login.terms")}
-            </Link>
-          </div>
-          <p className="text-xs text-muted-foreground/50 mt-4">
-            {t("login.by")}{" "}
+          <p className="text-xs text-muted-foreground/50">
+            {t("signup.by")}{" "}
             <a
               href="https://ellaexecutivesearch.com"
               target="_blank"

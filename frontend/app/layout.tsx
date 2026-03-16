@@ -10,10 +10,10 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Merlin — Currículo sob medida com IA",
+  title: "Merlin — AI-Tailored Resumes",
   description:
-    "Transforme seu currículo com inteligência artificial. Upload, entrevista por voz, e receba um currículo personalizado e otimizado para ATS.",
-  keywords: ["currículo", "emprego", "IA", "ATS", "Brasil", "vaga"],
+    "Transform your resume with artificial intelligence. Upload, quick interview, and get a personalized ATS-optimized resume.",
+  keywords: ["resume", "job", "AI", "ATS", "career", "cover letter", "currículo", "emprego", "vaga"],
 };
 
 export default function RootLayout({
@@ -22,7 +22,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="pt-BR" className={inter.variable}>
+    <html lang="en" className={inter.variable}>
       <body className="font-sans">
         <Providers>{children}</Providers>
       </body>
