@@ -1,18 +1,24 @@
 """Profile CRUD endpoints."""
 
 import html
+from typing import Literal
+
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.auth import AuthenticatedUser, get_current_user
-from app.schemas.api import ProfileUpdateRequest
+from app.schemas.api import ProfileUpdateRequest, RecommendationsResponse
 from app.services.audit import log_data_access
 from app.services.firestore import FirestoreService
+from app.services.gemini_ai import generate_recommendations
 from app.services.knowledge import build_knowledge_from_profile, merge_comment_into_knowledge, rebuild_knowledge
 
 logger = structlog.get_logger()
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 
 class MergeInsightsRequest(BaseModel):
@@ -222,6 +228,57 @@ async def delete_profile(
     log_data_access(user.uid, "delete_profile", "profile", resource_id=profile_id)
     logger.info("profile_deleted", uid=user.uid, profile_id=profile_id)
     return {"status": "deleted"}
+
+
+class RecommendationsRequest(BaseModel):
+    locale: Literal["pt-BR", "en"] = "pt-BR"
+
+
+@router.post("/{profile_id}/recommendations", response_model=RecommendationsResponse)
+@limiter.limit("5/minute")
+async def get_profile_recommendations(
+    profile_id: str,
+    request: Request,
+    body: RecommendationsRequest,
+    user: AuthenticatedUser = Depends(get_current_user),
+):
+    """Generate CV health-check recommendations for a profile."""
+    fs = FirestoreService()
+
+    # Verify ownership
+    profile = await fs.get_profile(user.uid, profile_id)
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Perfil não encontrado.",
+        )
+
+    # Check cache — hit if recommendations exist and locale matches
+    cached = await fs.get_recommendations(user.uid, profile_id)
+    if cached and cached.get("locale") == body.locale:
+        return RecommendationsResponse(recommendations=cached["recommendations"])
+
+    # Generate fresh recommendations
+    structured_data = profile.get("structuredData", {})
+    knowledge = await fs.get_candidate_knowledge(user.uid)
+
+    try:
+        recommendations = await generate_recommendations(
+            profile=structured_data,
+            knowledge=knowledge,
+            locale=body.locale,
+        )
+    except Exception as e:
+        logger.error("recommendations_error", uid=user.uid, error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro ao gerar recomendações. Tente novamente.",
+        )
+
+    # Save to profile doc cache
+    await fs.save_recommendations(user.uid, profile_id, recommendations, body.locale)
+
+    return RecommendationsResponse(recommendations=recommendations)
 
 
 @router.get("/data-export")

@@ -5,10 +5,11 @@ import { useDropzone } from "react-dropzone";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useProfileStore, useWorkflowStore, useProcessingStore, useKnowledgeStore } from "@/lib/store";
-import { Upload, FileText, Loader2, CheckCircle2, Trash2, ArrowRight } from "lucide-react";
+import { Upload, FileText, Loader2, CheckCircle2, Trash2, ArrowRight, Sparkles, ChevronDown, ChevronUp, AlertTriangle, Info, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/hooks/useTranslation";
+import { Button } from "@/components/ui/button";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ACCEPTED_TYPES = {
@@ -23,6 +24,19 @@ interface ProfileSummary {
   name: string;
   status: string;
   createdAt: string;
+}
+
+interface RecommendationExample {
+  before: string;
+  after: string;
+}
+
+interface Recommendation {
+  id: string;
+  severity: "high" | "medium" | "low";
+  title: string;
+  detail: string;
+  examples: RecommendationExample[];
 }
 
 export default function PerfilPage() {
@@ -40,6 +54,10 @@ export default function PerfilPage() {
   const { addTask, completeTask, failTask } = useProcessingStore();
   const { knowledge, setKnowledge } = useKnowledgeStore();
   const isFirstUpload = useRef(true);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [loadingRecommendations, setLoadingRecommendations] = useState(false);
+  const [recommendationsError, setRecommendationsError] = useState("");
+  const [expandedRec, setExpandedRec] = useState<string | null>(null);
 
   // Load all profiles on mount
   useEffect(() => {
@@ -156,6 +174,24 @@ export default function PerfilPage() {
     },
     [setProfile, setLoading, setProfileId, markStep, addTask, completeTask, failTask, router]
   );
+
+  const handleGetRecommendations = async () => {
+    if (allProfiles.length === 0) return;
+    const profileId = allProfiles[0].id;
+    setLoadingRecommendations(true);
+    setRecommendationsError("");
+    try {
+      const result = await api.post<{ recommendations: Recommendation[] }>(
+        `/api/profile/${profileId}/recommendations`,
+        { locale }
+      );
+      setRecommendations(result.recommendations);
+    } catch {
+      setRecommendationsError(t("profile.errorRecommendations"));
+    } finally {
+      setLoadingRecommendations(false);
+    }
+  };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -331,6 +367,110 @@ export default function PerfilPage() {
               ))
             )}
           </div>
+        </div>
+      )}
+
+      {/* CV Recommendations */}
+      {allProfiles.length > 0 && (
+        <div className="apple-shadow rounded-2xl bg-card overflow-hidden">
+          <div className="px-8 pt-8 pb-2 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">
+                {t("profile.recommendationsTitle")}
+              </h2>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                {t("profile.recommendationsDesc")}
+              </p>
+            </div>
+            {recommendations.length === 0 && (
+              <Button
+                onClick={handleGetRecommendations}
+                disabled={loadingRecommendations}
+                size="sm"
+                className="rounded-lg text-xs shrink-0"
+              >
+                {loadingRecommendations ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                {loadingRecommendations
+                  ? t("profile.loadingRecommendations")
+                  : t("profile.getCVFeedback")}
+              </Button>
+            )}
+          </div>
+
+          {recommendationsError && (
+            <div className="px-8 pt-4">
+              <div className="rounded-xl bg-destructive/8 border border-destructive/15 px-4 py-3 flex items-center justify-between">
+                <p className="text-sm text-destructive">{recommendationsError}</p>
+                <button
+                  onClick={handleGetRecommendations}
+                  className="text-xs font-medium text-destructive underline ml-3 shrink-0"
+                >
+                  {t("common.retry")}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {recommendations.length > 0 && (
+            <div className="px-8 pb-8 pt-4 space-y-3">
+              {recommendations.map((rec) => {
+                const isExpanded = expandedRec === rec.id;
+                const severityStyles = {
+                  high: { bg: "bg-red-100 dark:bg-red-900/30", text: "text-red-700 dark:text-red-300", Icon: AlertCircle },
+                  medium: { bg: "bg-amber-100 dark:bg-amber-900/30", text: "text-amber-700 dark:text-amber-300", Icon: AlertTriangle },
+                  low: { bg: "bg-blue-100 dark:bg-blue-900/30", text: "text-blue-700 dark:text-blue-300", Icon: Info },
+                };
+                const severity = severityStyles[rec.severity] || severityStyles.medium;
+                return (
+                  <div key={rec.id} className="rounded-xl bg-secondary/50 overflow-hidden">
+                    <button
+                      onClick={() => setExpandedRec(isExpanded ? null : rec.id)}
+                      className="w-full px-5 py-4 flex items-start gap-3 text-left"
+                    >
+                      <span
+                        className={cn(
+                          "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide shrink-0 mt-0.5",
+                          severity.bg,
+                          severity.text
+                        )}
+                      >
+                        {t(`profile.severity${rec.severity.charAt(0).toUpperCase() + rec.severity.slice(1)}`)}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground">{rec.title}</p>
+                        <p className="text-sm text-muted-foreground mt-1">{rec.detail}</p>
+                      </div>
+                      {rec.examples.length > 0 && (
+                        isExpanded
+                          ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0 mt-1" />
+                          : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0 mt-1" />
+                      )}
+                    </button>
+                    {isExpanded && rec.examples.length > 0 && (
+                      <div className="px-5 pb-4 space-y-3">
+                        {rec.examples.map((ex, i) => (
+                          <div key={i} className="rounded-lg overflow-hidden text-sm">
+                            <div className="bg-red-50 dark:bg-red-950/20 px-4 py-2.5 border-l-2 border-red-300 dark:border-red-700">
+                              <p className="text-xs font-medium text-red-600 dark:text-red-400 mb-1">{t("profile.before")}</p>
+                              <p className="text-foreground/80">{ex.before}</p>
+                            </div>
+                            <div className="bg-green-50 dark:bg-green-950/20 px-4 py-2.5 border-l-2 border-green-300 dark:border-green-700">
+                              <p className="text-xs font-medium text-green-600 dark:text-green-400 mb-1">{t("profile.after")}</p>
+                              <p className="text-foreground/80">{ex.after}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
