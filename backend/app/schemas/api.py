@@ -200,3 +200,138 @@ class Recommendation(BaseModel):
 
 class RecommendationsResponse(BaseModel):
     recommendations: list[Recommendation] = []
+
+
+# --- LinkedIn ---
+
+class LinkedInExperienceItem(BaseModel):
+    company: str = ""
+    role: str = ""
+    start_date: Optional[str] = Field(alias="startDate", default=None)
+    end_date: Optional[str] = Field(alias="endDate", default=None)
+    location: Optional[str] = None
+    description: Optional[str] = None
+
+    model_config = {"populate_by_name": True, "extra": "ignore"}
+
+
+class LinkedInEducationItem(BaseModel):
+    institution: str = ""
+    degree: str = ""
+    field: Optional[str] = None
+    start_date: Optional[str] = Field(alias="startDate", default=None)
+    end_date: Optional[str] = Field(alias="endDate", default=None)
+
+    model_config = {"populate_by_name": True, "extra": "ignore"}
+
+
+class LinkedInCertification(BaseModel):
+    name: str = ""
+    issuer: Optional[str] = None
+    date: Optional[str] = None
+
+    model_config = {"extra": "ignore"}
+
+
+class LinkedInCourse(BaseModel):
+    name: str = ""
+    institution: Optional[str] = None
+
+    model_config = {"extra": "ignore"}
+
+
+class LinkedInVolunteerWork(BaseModel):
+    organization: str = ""
+    role: Optional[str] = None
+    description: Optional[str] = None
+
+    model_config = {"extra": "ignore"}
+
+
+class LinkedInLanguageItem(BaseModel):
+    language: str = ""
+    level: Optional[str] = None
+
+    model_config = {"extra": "ignore"}
+
+
+class LinkedInStructured(BaseModel):
+    name: Optional[str] = None
+    headline: Optional[str] = None
+    location: Optional[str] = None
+    about: Optional[str] = None
+    experience: list[LinkedInExperienceItem] = []
+    education: list[LinkedInEducationItem] = []
+    skills: list[str] = []
+    certifications: list[LinkedInCertification] = []
+    courses: list[LinkedInCourse] = []
+    honors: list[str] = []
+    languages: list[LinkedInLanguageItem] = []
+    recommendations: list[str] = []
+    volunteer_work: list[LinkedInVolunteerWork] = Field(alias="volunteerWork", default=[])
+
+    model_config = {"populate_by_name": True, "extra": "ignore"}
+
+    @field_validator("skills", "honors", "recommendations", mode="before")
+    @classmethod
+    def coerce_string_list(cls, v: list) -> list:
+        if not isinstance(v, list):
+            return []
+        return [str(item) for item in v if item]
+
+    @field_validator("languages", mode="before")
+    @classmethod
+    def coerce_languages(cls, v: list) -> list:
+        if not isinstance(v, list):
+            return []
+        result = []
+        for item in v:
+            if isinstance(item, str):
+                result.append({"language": item, "level": None})
+            elif isinstance(item, dict):
+                result.append(item)
+        return result
+
+
+class LinkedInUploadResponse(BaseModel):
+    structured: LinkedInStructured
+    status: str = "parsed"
+
+
+class LinkedInPasteRequest(BaseModel):
+    text: str = Field(min_length=300, max_length=50000)
+
+
+class LinkedInSuggestionExample(BaseModel):
+    before: str
+    after: str
+
+
+class LinkedInSuggestion(BaseModel):
+    id: str
+    section: str
+    severity: Literal["high", "medium", "low"]
+    title: str
+    detail: str
+    examples: list[LinkedInSuggestionExample] = []
+    linkedin_specific: bool = Field(alias="linkedinSpecific", default=False)
+
+    model_config = {"populate_by_name": True}
+
+
+class LinkedInCrossRef(BaseModel):
+    section: str
+    insight: str
+    source: str
+
+
+class LinkedInAnalyzeRequest(BaseModel):
+    locale: Literal["pt-BR", "en"] = "pt-BR"
+    force: bool = False
+
+
+class LinkedInAnalyzeResponse(BaseModel):
+    suggestions: list[LinkedInSuggestion] = []
+    cross_ref: list[LinkedInCrossRef] = Field(alias="crossRef", default=[])
+
+    model_config = {"populate_by_name": True}

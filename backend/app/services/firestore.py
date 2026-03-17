@@ -224,6 +224,74 @@ class FirestoreService:
                 }
         return None
 
+    # --- LinkedIn Profile Operations ---
+
+    async def save_linkedin_profile(
+        self, uid: str, raw_text: str, structured: dict, source: str
+    ) -> None:
+        """Save a LinkedIn profile, clearing any existing suggestions (cache invalidation)."""
+        now = datetime.now(timezone.utc).isoformat()
+        doc_ref = (
+            self.db.collection("users").document(uid)
+            .collection("linkedin").document("current")
+        )
+        await doc_ref.set({
+            "rawText": raw_text,
+            "structured": structured,
+            "suggestions": None,
+            "suggestionsLocale": None,
+            "suggestionsGeneratedAt": None,
+            "crossRef": None,
+            "source": source,
+            "createdAt": now,
+            "updatedAt": now,
+        })
+
+    async def get_linkedin_profile(self, uid: str) -> Optional[dict]:
+        """Get the current LinkedIn profile."""
+        doc_ref = (
+            self.db.collection("users").document(uid)
+            .collection("linkedin").document("current")
+        )
+        doc = await doc_ref.get()
+        if doc.exists:
+            return doc.to_dict()
+        return None
+
+    async def save_linkedin_suggestions(
+        self, uid: str, suggestions: list[dict], cross_ref: list[dict], locale: str
+    ) -> None:
+        """Save LinkedIn analysis suggestions to the current doc."""
+        doc_ref = (
+            self.db.collection("users").document(uid)
+            .collection("linkedin").document("current")
+        )
+        await doc_ref.update({
+            "suggestions": suggestions,
+            "crossRef": cross_ref,
+            "suggestionsLocale": locale,
+            "suggestionsGeneratedAt": datetime.now(timezone.utc).isoformat(),
+            "updatedAt": datetime.now(timezone.utc).isoformat(),
+        })
+
+    async def get_linkedin_suggestions(self, uid: str) -> Optional[dict]:
+        """Read LinkedIn suggestions from the current doc."""
+        doc_ref = (
+            self.db.collection("users").document(uid)
+            .collection("linkedin").document("current")
+        )
+        doc = await doc_ref.get()
+        if doc.exists:
+            data = doc.to_dict()
+            if data.get("suggestions"):
+                return {
+                    "suggestions": data["suggestions"],
+                    "crossRef": data.get("crossRef", []),
+                    "locale": data.get("suggestionsLocale", ""),
+                    "generatedAt": data.get("suggestionsGeneratedAt", ""),
+                }
+        return None
+
     # --- Application Operations ---
 
     async def save_application(
@@ -654,7 +722,7 @@ class FirestoreService:
 
     async def export_user_data(self, uid: str) -> dict:
         """Export all user data (LGPD right to access)."""
-        data = {"uid": uid, "profiles": [], "applications": [], "voiceSessions": [], "knowledge": None}
+        data = {"uid": uid, "profiles": [], "applications": [], "voiceSessions": [], "knowledge": None, "linkedin": None}
 
         # Profiles
         profiles_ref = self.db.collection("users").document(uid).collection("profiles")
@@ -682,6 +750,11 @@ class FirestoreService:
         if knowledge:
             data["knowledge"] = knowledge
 
+        # LinkedIn profile
+        linkedin = await self.get_linkedin_profile(uid)
+        if linkedin:
+            data["linkedin"] = linkedin
+
         return data
 
     async def delete_all_user_data(self, uid: str) -> None:
@@ -698,6 +771,11 @@ class FirestoreService:
         # Delete knowledge subcollection
         knowledge_ref = self.db.collection("users").document(uid).collection("knowledge")
         async for doc in knowledge_ref.stream():
+            await doc.reference.delete()
+
+        # Delete linkedin subcollection
+        linkedin_ref = self.db.collection("users").document(uid).collection("linkedin")
+        async for doc in linkedin_ref.stream():
             await doc.reference.delete()
 
         # Delete applications and their resumes

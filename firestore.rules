@@ -23,6 +23,12 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // LinkedIn subcollection — read: owner, write: backend only (RA-2)
+      match /linkedin/{doc} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow write: if false;
+      }
+
       // Applications subcollection
       match /applications/{applicationId} {
         allow read, write: if request.auth != null && request.auth.uid == uid;

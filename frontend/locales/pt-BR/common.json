@@ -5,6 +5,7 @@
   "nav.applications": "Candidaturas",
   "nav.profile": "Meu Perfil",
   "nav.newJob": "Nova Vaga",
+  "nav.linkedin": "LinkedIn",
   "nav.admin": "Admin",
   "nav.settings": "Configuracoes",
   "nav.signOut": "Sair",
@@ -12,6 +13,7 @@
   "mobileNav.applications": "Candidaturas",
   "mobileNav.profile": "Perfil",
   "mobileNav.newJob": "Nova Vaga",
+  "mobileNav.linkedin": "LinkedIn",
 
   "footer.allRightsReserved": "Todos os direitos reservados.",
   "footer.privacy": "Privacidade",
