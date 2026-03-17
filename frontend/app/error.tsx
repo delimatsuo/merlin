@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
+import { captureError } from "@/lib/sentry";
 
 export default function GlobalError({
   error,
@@ -12,6 +13,7 @@ export default function GlobalError({
 }) {
   useEffect(() => {
     console.error("[Merlin] Global error:", error.message, error.digest);
+    captureError(error, { digest: error.digest, boundary: "global" });
   }, [error]);
 
   return (

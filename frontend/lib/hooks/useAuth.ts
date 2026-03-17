@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { setUser as setSentryUser, clearUser as clearSentryUser } from "@/lib/sentry";
 import {
   useAuthStore,
   useProfileStore,
@@ -45,10 +46,15 @@ export function useAuth() {
       // Clear stores on sign-out or user switch
       if (prevUid && prevUid !== newUid) {
         clearAllStores();
+        clearSentryUser();
       }
 
       prevUidRef.current = newUid;
       setAuth(firebaseUser);
+
+      if (firebaseUser) {
+        setSentryUser(firebaseUser.uid, firebaseUser.email || undefined);
+      }
     });
     return unsubscribe;
   }, [setAuth]);

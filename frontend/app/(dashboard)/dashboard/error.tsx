@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, RefreshCw, Home } from "lucide-react";
 import Link from "next/link";
+import { captureError } from "@/lib/sentry";
 
 export default function DashboardError({
   error,
@@ -13,8 +14,8 @@ export default function DashboardError({
   reset: () => void;
 }) {
   useEffect(() => {
-    // Log to console for debugging — in the future, send to error tracking service
     console.error("[Merlin] Dashboard error:", error.message, error.digest);
+    captureError(error, { digest: error.digest, boundary: "dashboard" });
   }, [error]);
 
   return (
