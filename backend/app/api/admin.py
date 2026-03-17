@@ -134,24 +134,49 @@ async def get_costs(
     stats = await fs.get_platform_stats()
     daily = await fs.get_daily_generation_stats(30)
 
-    # Hardcoded unit costs (USD)
+    # Unit costs per call (USD) — grouped by model tier
+    # Sonnet (writing/reasoning): ~$3/M input, $15/M output
+    # Flash-Lite (extraction): ~$0.075/M input, $0.30/M output
     unit_costs = {
-        "resume_gen": 0.02,
-        "job_analysis": 0.003,
+        # --- Sonnet tier (writing/reasoning) ---
+        "resume_rewrite": 0.020,
+        "cover_letter": 0.012,
+        "job_analysis": 0.006,
+        "interview_questions": 0.004,
+        "voice_processing": 0.006,
+        "followup_questions": 0.004,
+        "cv_recommendations": 0.012,
+        "linkedin_analysis": 0.015,
+        # --- Flash-Lite tier (extraction) ---
+        "resume_structuring": 0.001,
+        "ats_keywords": 0.001,
+        "skill_matching": 0.001,
+        "company_enrichment": 0.001,
+        "linkedin_structuring": 0.001,
+        # --- Other AI services ---
         "tts": 0.005,
-        "interview": 0.01,
         "transcription": 0.002,
     }
 
     gen_today = stats.get("generationsToday", 0)
     gen_month = stats.get("generationsMonth", 0)
 
+    # Each generation pipeline: rewrite + cover letter + analysis + ATS + skill match
+    cost_per_generation = (
+        unit_costs["resume_rewrite"]
+        + unit_costs["cover_letter"]
+        + unit_costs["job_analysis"]
+        + unit_costs["ats_keywords"]
+        + unit_costs["skill_matching"]
+    )
+
     return {
         "unitCosts": unit_costs,
         "generationsToday": gen_today,
         "generationsMonth": gen_month,
-        "estimatedCostToday": round(gen_today * unit_costs["resume_gen"], 4),
-        "estimatedCostMonth": round(gen_month * unit_costs["resume_gen"], 4),
+        "estimatedCostToday": round(gen_today * cost_per_generation, 4),
+        "estimatedCostMonth": round(gen_month * cost_per_generation, 4),
+        "costPerGeneration": round(cost_per_generation, 4),
         "dailyChart": daily,
     }
 
