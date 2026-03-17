@@ -348,7 +348,11 @@ def _parse_xml_tagged_response(content: str) -> tuple[str, list[dict]]:
     resume_match = re.search(r'<resume>(.*?)</resume>', content, re.DOTALL)
     changelog_match = re.search(r'<changelog>(.*?)</changelog>', content, re.DOTALL)
 
-    resume_content = resume_match.group(1).strip() if resume_match else content
+    if resume_match:
+        resume_content = resume_match.group(1).strip()
+    else:
+        # Strip any <changelog> block from fallback to avoid showing raw JSON to the user
+        resume_content = re.sub(r'<changelog>.*?</changelog>', '', content, flags=re.DOTALL).strip()
     changelog: list[dict] = []
 
     if changelog_match:

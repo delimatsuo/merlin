@@ -120,6 +120,7 @@ class FirestoreService:
         doc_ref = self.db.collection("users").document(uid).collection("profiles").document(profile_id)
         await doc_ref.update({
             "structuredData": data,
+            "recommendations": None,
             "updatedAt": datetime.now(timezone.utc).isoformat(),
         })
 
