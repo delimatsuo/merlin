@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import { useAuthStore } from "@/lib/store";
+import { useAuthStore, useAdminStore } from "@/lib/store";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -20,19 +20,50 @@ import {
   LogOut,
   User,
   Settings,
+  Linkedin,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-const navItems = [
-  { href: "/dashboard", label: "Candidaturas", icon: Briefcase },
-  { href: "/dashboard/perfil", label: "Meu Perfil", icon: UserIcon },
-  { href: "/dashboard/vaga", label: "Nova Vaga", icon: Plus },
-];
+import { api } from "@/lib/api";
+import { useEffect } from "react";
+import { useTranslation } from "@/lib/hooks/useTranslation";
+import { LanguageToggle } from "@/components/language-toggle";
 
 export function DashboardNav() {
   const pathname = usePathname();
   const router = useRouter();
+  const { t } = useTranslation();
+
+  const navItems = [
+    { href: "/dashboard", label: t("nav.applications"), icon: Briefcase },
+    { href: "/dashboard/profile", label: t("nav.profile"), icon: UserIcon },
+    { href: "/dashboard/job", label: t("nav.newJob"), icon: Plus },
+    { href: "/dashboard/linkedin", label: t("nav.linkedin"), icon: Linkedin },
+  ];
   const { user } = useAuthStore();
+  const { isAdmin, setIsAdmin } = useAdminStore();
+
+  // Check admin status once on mount (lightweight endpoint, retry once on network error)
+  useEffect(() => {
+    if (!user || isAdmin !== null) return;
+    let cancelled = false;
+    const check = async (attempt = 0) => {
+      try {
+        await api.get("/api/admin/check");
+        if (!cancelled) setIsAdmin(true);
+      } catch {
+        if (!cancelled) {
+          if (attempt === 0) {
+            // Retry once after 2s (handles cold start)
+            setTimeout(() => check(1), 2000);
+          } else {
+            setIsAdmin(false);
+          }
+        }
+      }
+    };
+    check();
+    return () => { cancelled = true; };
+  }, [user, isAdmin]);
 
   const handleSignOut = async () => {
     await signOut(auth);
@@ -53,7 +84,7 @@ export function DashboardNav() {
               {navItems.map((item) => {
                 const isActive =
                   item.href === "/dashboard"
-                    ? pathname === "/dashboard" || pathname?.startsWith("/dashboard/candidatura")
+                    ? pathname === "/dashboard" || pathname?.startsWith("/dashboard/application")
                     : pathname === item.href;
                 return (
                   <Link
@@ -70,6 +101,19 @@ export function DashboardNav() {
                   </Link>
                 );
               })}
+              {isAdmin && (
+                <Link
+                  href="/admin"
+                  className={cn(
+                    "px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200",
+                    pathname?.startsWith("/admin")
+                      ? "bg-foreground text-background"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  Admin
+                </Link>
+              )}
             </div>
           </div>
           <div className="flex items-center">
@@ -96,18 +140,21 @@ export function DashboardNav() {
                   {user?.displayName || user?.email}
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onClick={() => router.push("/dashboard/configuracoes")}
+                  onClick={() => router.push("/dashboard/settings")}
                   className="rounded-lg text-xs py-2.5 px-3 cursor-pointer"
                 >
                   <Settings className="mr-2.5 h-3.5 w-3.5 text-muted-foreground" />
-                  Configuracoes
+                  {t("nav.settings")}
                 </DropdownMenuItem>
+                <div className="px-3 py-2">
+                  <LanguageToggle />
+                </div>
                 <DropdownMenuItem
                   onClick={handleSignOut}
                   className="rounded-lg text-xs py-2.5 px-3 text-destructive focus:text-destructive cursor-pointer"
                 >
                   <LogOut className="mr-2.5 h-3.5 w-3.5" />
-                  Sair
+                  {t("nav.signOut")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

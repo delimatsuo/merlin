@@ -9,6 +9,7 @@ from slowapi.util import get_remote_address
 from app.auth import AuthenticatedUser, get_current_user
 from app.config import get_settings
 from app.schemas.api import TailorRequest, TailorResponse, RegenerateRequest
+from app.services.admin_settings import AdminSettingsService
 from app.services.audit import log_data_access
 from app.services.gemini_ai import rewrite_resume, generate_cover_letter
 from app.services.firestore import FirestoreService
@@ -31,12 +32,13 @@ async def generate_tailored_resume(
 
     fs = FirestoreService()
 
-    # Check daily usage limit
+    # Check daily usage limit (dynamic from admin settings)
+    daily_limit = await AdminSettingsService.get_daily_limit()
     usage = await fs.get_daily_usage(user.uid)
-    if usage >= settings.max_daily_tailor_count:
+    if usage >= daily_limit:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Você atingiu o limite diário de {settings.max_daily_tailor_count} personalizações. Tente novamente amanhã.",
+            detail=f"Você atingiu o limite diário de {daily_limit} personalizações. Tente novamente amanhã.",
         )
 
     # Get profile and application
@@ -65,7 +67,7 @@ async def generate_tailored_resume(
 
     # Rewrite resume
     try:
-        resume_content = await rewrite_resume(
+        resume_content, changelog = await rewrite_resume(
             profile=structured_data,
             job_description=job_description,
             job_analysis=job_analysis,
@@ -107,10 +109,12 @@ async def generate_tailored_resume(
         cover_letter=cover_letter,
         ats_score=ats_score,
         version_name=version_name,
+        changelog=changelog,
     )
 
-    # Increment daily usage
+    # Increment daily usage + log generation for admin dashboard
     await fs.increment_daily_usage(user.uid)
+    await fs.log_generation(user.uid, user.email or "", company)
 
     log_data_access(user.uid, "ai_generate_resume", "application", resource_id=body.application_id)
     logger.info("tailor_complete", uid=user.uid)
@@ -119,6 +123,7 @@ async def generate_tailored_resume(
         resumeContent=resume_content,
         coverLetter=cover_letter,
         atsScore=ats_score,
+        changelog=changelog,
     )
 
 
@@ -156,12 +161,13 @@ async def regenerate_resume(
 
     fs = FirestoreService()
 
-    # Check daily usage limit
+    # Check daily usage limit (dynamic from admin settings)
+    daily_limit = await AdminSettingsService.get_daily_limit()
     usage = await fs.get_daily_usage(user.uid)
-    if usage >= settings.max_daily_tailor_count:
+    if usage >= daily_limit:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Você atingiu o limite diário de {settings.max_daily_tailor_count} personalizações. Tente novamente amanhã.",
+            detail=f"Você atingiu o limite diário de {daily_limit} personalizações. Tente novamente amanhã.",
         )
 
     application = await fs.get_application(user.uid, body.application_id)
@@ -189,7 +195,7 @@ async def regenerate_resume(
     knowledge = await fs.get_candidate_knowledge(user.uid)
 
     try:
-        resume_content = await rewrite_resume(
+        resume_content, changelog = await rewrite_resume(
             profile=structured_data,
             job_description=job_description,
             job_analysis=job_analysis,
@@ -215,13 +221,16 @@ async def regenerate_resume(
         resume_content=resume_content,
         cover_letter=existing_cover_letter,
         ats_score=application.get("atsScore", 0) or 0,
+        changelog=changelog,
     )
 
-    # Increment daily usage
+    # Increment daily usage + log generation
     await fs.increment_daily_usage(user.uid)
+    company = application.get("jobAnalysis", {}).get("company", "")
+    await fs.log_generation(user.uid, user.email or "", company)
 
     log_data_access(user.uid, "ai_regenerate_resume", "application", resource_id=body.application_id)
-    return {"status": "regenerated", "resumeContent": resume_content}
+    return {"status": "regenerated", "resumeContent": resume_content, "changelog": changelog}
 
 
 # --- Version CRUD (Phase 4) ---

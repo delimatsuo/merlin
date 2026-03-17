@@ -11,9 +11,12 @@ import { auth, googleProvider } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useTranslation } from "@/lib/hooks/useTranslation";
+import { LanguageToggle } from "@/components/language-toggle";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -35,7 +38,7 @@ export default function LoginPage() {
       await signInWithEmailAndPassword(auth, email, password);
       router.push("/dashboard");
     } catch {
-      setError("Email ou senha inválidos. Tente novamente.");
+      setError(t("login.errorInvalidCredentials"));
     } finally {
       setLoading(false);
     }
@@ -48,7 +51,7 @@ export default function LoginPage() {
       await signInWithPopup(auth, googleProvider);
       router.push("/dashboard");
     } catch {
-      setError("Erro ao entrar com Google. Tente novamente.");
+      setError(t("login.errorGoogle"));
     } finally {
       setLoading(false);
     }
@@ -65,7 +68,7 @@ export default function LoginPage() {
             </h1>
           </Link>
           <p className="text-base text-muted-foreground">
-            Currículo sob medida com IA
+            {t("login.tagline")}
           </p>
         </div>
 
@@ -100,7 +103,7 @@ export default function LoginPage() {
                 fill="#EA4335"
               />
             </svg>
-            Continuar com Google
+            {t("common.continueWithGoogle")}
           </button>
 
           <div className="relative">
@@ -109,7 +112,7 @@ export default function LoginPage() {
             </div>
             <div className="relative flex justify-center">
               <span className="bg-card px-3 text-xs text-muted-foreground">
-                ou
+                {t("common.or")}
               </span>
             </div>
           </div>
@@ -117,12 +120,12 @@ export default function LoginPage() {
           <form onSubmit={handleEmailLogin} className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="email" className="text-xs font-medium text-muted-foreground">
-                Email
+                {t("login.email")}
               </Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="seu@email.com"
+                placeholder={t("login.emailPlaceholder")}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -131,12 +134,12 @@ export default function LoginPage() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="password" className="text-xs font-medium text-muted-foreground">
-                Senha
+                {t("login.password")}
               </Label>
               <Input
                 id="password"
                 type="password"
-                placeholder="Sua senha"
+                placeholder={t("login.passwordPlaceholder")}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -148,7 +151,7 @@ export default function LoginPage() {
               className="w-full h-12 rounded-xl text-sm font-semibold"
               disabled={loading}
             >
-              {loading ? "Entrando..." : "Entrar"}
+              {loading ? t("login.signingIn") : t("login.signIn")}
             </Button>
           </form>
         </div>
@@ -156,31 +159,31 @@ export default function LoginPage() {
         {/* Footer */}
         <div className="text-center mt-8 space-y-3">
           <p className="text-sm text-muted-foreground">
-            Não tem conta?{" "}
+            {t("login.noAccount")}{" "}
             <Link
-              href="/cadastro"
+              href="/signup"
               className="text-foreground font-medium hover:underline underline-offset-4"
             >
-              Cadastre-se
+              {t("login.signUp")}
             </Link>
           </p>
           <div className="flex items-center justify-center gap-3">
             <Link
-              href="/privacidade"
+              href="/privacy"
               className="text-xs text-muted-foreground/70 hover:text-muted-foreground transition-colors"
             >
-              Privacidade
+              {t("footer.privacy")}
             </Link>
             <span className="text-muted-foreground/30">·</span>
             <Link
-              href="/termos"
+              href="/terms"
               className="text-xs text-muted-foreground/70 hover:text-muted-foreground transition-colors"
             >
-              Termos de Uso
+              {t("footer.terms")}
             </Link>
           </div>
           <p className="text-xs text-muted-foreground/50 mt-4">
-            por{" "}
+            {t("footer.by")}{" "}
             <a
               href="https://ellaexecutivesearch.com"
               target="_blank"
@@ -190,6 +193,9 @@ export default function LoginPage() {
               Ella Executive Search
             </a>
           </p>
+          <div className="mt-2">
+            <LanguageToggle />
+          </div>
         </div>
       </div>
     </div>

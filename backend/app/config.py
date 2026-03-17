@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     opus_timeout: int = 60
     generation_timeout: int = 60
 
+    # Admin
+    admin_emails: str = os.environ.get("ADMIN_EMAILS", "deli@ellaexecutivesearch.com")
+
     # AI backend switch: "gemini" or "claude"
     ai_backend: str = "gemini"
 

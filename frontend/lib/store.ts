@@ -243,7 +243,178 @@ export const useApplicationsListStore = create<ApplicationsListState>((set) => (
   setNextCursor: (nextCursor) => set({ nextCursor }),
 }));
 
+// --- Admin Store ---
+
+export interface AdminStats {
+  totalUsers: number;
+  generationsToday: number;
+  generationsMonth: number;
+  signupsMonth: number;
+}
+
+export interface AdminUser {
+  uid: string;
+  email: string;
+  name: string;
+  createdAt: string;
+  profileCount: number;
+  applicationCount: number;
+  generationCount: number;
+}
+
+export interface AdminDailyPoint {
+  date: string;
+  count: number;
+}
+
+export interface AdminGeneration {
+  id: string;
+  uid: string;
+  userEmail: string;
+  company: string;
+  createdAt: string;
+}
+
+export interface AdminSettingsData {
+  daily_limit: number;
+  tts_enabled: boolean;
+  interview_enabled: boolean;
+  cover_letter_enabled: boolean;
+}
+
+interface AdminState {
+  isAdmin: boolean | null; // null = not checked yet
+  stats: AdminStats | null;
+  dailyChart: AdminDailyPoint[];
+  recentGenerations: AdminGeneration[];
+  users: AdminUser[];
+  usersCursor: string;
+  usersHasMore: boolean;
+  settings: AdminSettingsData | null;
+  loading: boolean;
+  setIsAdmin: (v: boolean) => void;
+  setStats: (s: AdminStats) => void;
+  setDailyChart: (d: AdminDailyPoint[]) => void;
+  setRecentGenerations: (g: AdminGeneration[]) => void;
+  setUsers: (u: AdminUser[]) => void;
+  appendUsers: (u: AdminUser[]) => void;
+  setUsersCursor: (c: string) => void;
+  setUsersHasMore: (h: boolean) => void;
+  setSettings: (s: AdminSettingsData) => void;
+  setLoading: (l: boolean) => void;
+}
+
+export const useAdminStore = create<AdminState>((set) => ({
+  isAdmin: null,
+  stats: null,
+  dailyChart: [],
+  recentGenerations: [],
+  users: [],
+  usersCursor: "",
+  usersHasMore: false,
+  settings: null,
+  loading: false,
+  setIsAdmin: (isAdmin) => set({ isAdmin }),
+  setStats: (stats) => set({ stats }),
+  setDailyChart: (dailyChart) => set({ dailyChart }),
+  setRecentGenerations: (recentGenerations) => set({ recentGenerations }),
+  setUsers: (users) => set({ users }),
+  appendUsers: (users) =>
+    set((state) => ({ users: [...state.users, ...users] })),
+  setUsersCursor: (usersCursor) => set({ usersCursor }),
+  setUsersHasMore: (usersHasMore) => set({ usersHasMore }),
+  setSettings: (settings) => set({ settings }),
+  setLoading: (loading) => set({ loading }),
+}));
+
+// --- LinkedIn Store ---
+
+interface LinkedInStructured {
+  name?: string;
+  headline?: string;
+  location?: string;
+  about?: string;
+  experience?: Array<{
+    company: string;
+    role: string;
+    startDate?: string;
+    endDate?: string;
+    location?: string;
+    description?: string;
+  }>;
+  education?: Array<{
+    institution: string;
+    degree: string;
+    field?: string;
+  }>;
+  skills?: string[];
+  certifications?: Array<{ name: string; issuer?: string }>;
+  courses?: Array<{ name: string; institution?: string }>;
+  honors?: string[];
+  languages?: Array<{ language: string; level?: string }>;
+  recommendations?: string[];
+  volunteerWork?: Array<{ organization: string; role?: string }>;
+}
+
+interface LinkedInSuggestion {
+  id: string;
+  section: string;
+  severity: "high" | "medium" | "low";
+  title: string;
+  detail: string;
+  examples: Array<{ before: string; after: string }>;
+  linkedinSpecific?: boolean;
+}
+
+interface LinkedInCrossRef {
+  section: string;
+  insight: string;
+  source: string;
+}
+
+interface LinkedInState {
+  structured: LinkedInStructured | null;
+  suggestions: LinkedInSuggestion[];
+  crossRef: LinkedInCrossRef[];
+  loading: boolean;
+  analyzing: boolean;
+  setStructured: (s: LinkedInStructured | null) => void;
+  setSuggestions: (s: LinkedInSuggestion[]) => void;
+  setCrossRef: (c: LinkedInCrossRef[]) => void;
+  setLoading: (l: boolean) => void;
+  setAnalyzing: (a: boolean) => void;
+  reset: () => void;
+}
+
+export const useLinkedInStore = create<LinkedInState>((set) => ({
+  structured: null,
+  suggestions: [],
+  crossRef: [],
+  loading: false,
+  analyzing: false,
+  setStructured: (structured) => set({ structured }),
+  setSuggestions: (suggestions) => set({ suggestions }),
+  setCrossRef: (crossRef) => set({ crossRef }),
+  setLoading: (loading) => set({ loading }),
+  setAnalyzing: (analyzing) => set({ analyzing }),
+  reset: () =>
+    set({
+      structured: null,
+      suggestions: [],
+      crossRef: [],
+      loading: false,
+      analyzing: false,
+    }),
+}));
+
 // --- Version Store ---
+
+export interface ChangelogItem {
+  section: string;
+  what: string;
+  why: string;
+  category: "keyword" | "ats" | "impact" | "structure";
+}
 
 export interface ResumeVersion {
   id: string;
@@ -252,6 +423,7 @@ export interface ResumeVersion {
   resumeContent: string;
   coverLetterText: string;
   atsScore: number;
+  changelog?: ChangelogItem[];
   createdAt: string;
   updatedAt?: string;
 }

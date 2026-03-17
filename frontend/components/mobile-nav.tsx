@@ -2,26 +2,29 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Briefcase, User, Plus } from "lucide-react";
+import { Briefcase, User, Plus, Linkedin } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-const navItems = [
-  { href: "/dashboard", label: "Candidaturas", icon: Briefcase },
-  { href: "/dashboard/perfil", label: "Perfil", icon: User },
-  { href: "/dashboard/vaga", label: "Nova Vaga", icon: Plus },
-];
+import { useTranslation } from "@/lib/hooks/useTranslation";
 
 export function MobileNav() {
   const pathname = usePathname();
+  const { t } = useTranslation();
+
+  const navItems = [
+    { href: "/dashboard", label: t("mobileNav.applications"), icon: Briefcase },
+    { href: "/dashboard/profile", label: t("mobileNav.profile"), icon: User },
+    { href: "/dashboard/job", label: t("mobileNav.newJob"), icon: Plus },
+    { href: "/dashboard/linkedin", label: t("mobileNav.linkedin"), icon: Linkedin },
+  ];
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 glass border-t border-border/50 md:hidden safe-area-bottom">
-      <div className="grid grid-cols-3">
+      <div className="grid grid-cols-4">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive =
             item.href === "/dashboard"
-              ? pathname === "/dashboard" || pathname?.startsWith("/dashboard/candidatura")
+              ? pathname === "/dashboard" || pathname?.startsWith("/dashboard/application")
               : pathname === item.href;
           return (
             <Link

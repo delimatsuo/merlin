@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   FileText,
   Mail,
+  List,
   Download,
   Pencil,
   Save,
@@ -18,6 +19,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/lib/hooks/useTranslation";
 
 interface ResumeEditorProps {
   applicationId: string;
@@ -27,6 +29,13 @@ interface ResumeEditorProps {
   downloading: boolean;
 }
 
+const CATEGORY_STYLES: Record<string, { bg: string; text: string; label: string }> = {
+  keyword: { bg: "bg-blue-100 dark:bg-blue-900/30", text: "text-blue-700 dark:text-blue-300", label: "editor.changeKeyword" },
+  ats: { bg: "bg-green-100 dark:bg-green-900/30", text: "text-green-700 dark:text-green-300", label: "editor.changeAts" },
+  impact: { bg: "bg-purple-100 dark:bg-purple-900/30", text: "text-purple-700 dark:text-purple-300", label: "editor.changeImpact" },
+  structure: { bg: "bg-orange-100 dark:bg-orange-900/30", text: "text-orange-700 dark:text-orange-300", label: "editor.changeStructure" },
+};
+
 export function ResumeEditor({
   applicationId,
   onDownload,
@@ -34,8 +43,9 @@ export function ResumeEditor({
   regenerating,
   downloading,
 }: ResumeEditorProps) {
+  const { t } = useTranslation();
   const { versions, activeVersionId, updateVersion } = useVersionStore();
-  const [activeTab, setActiveTab] = useState<"resume" | "cover-letter">("resume");
+  const [activeTab, setActiveTab] = useState<"resume" | "cover-letter" | "changes">("resume");
   const [editing, setEditing] = useState(false);
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
@@ -46,7 +56,9 @@ export function ResumeEditor({
   const content =
     activeTab === "resume"
       ? activeVersion?.resumeContent || ""
-      : activeVersion?.coverLetterText || "";
+      : activeTab === "cover-letter"
+        ? activeVersion?.coverLetterText || ""
+        : "";
 
   const handleStartEdit = () => {
     setEditContent(content);
@@ -64,9 +76,9 @@ export function ResumeEditor({
       const updateField = activeTab === "resume" ? "resumeContent" : "coverLetterText";
       updateVersion(activeVersion.id, { [updateField]: editContent } as Partial<ResumeVersion>);
       setEditing(false);
-      toast.success("Alteracoes salvas");
+      toast.success(t("editor.saved"));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erro ao salvar.");
+      toast.error(e instanceof Error ? e.message : t("editor.errorSave"));
     } finally {
       setSaving(false);
     }
@@ -90,13 +102,15 @@ export function ResumeEditor({
       );
       useVersionStore.getState().setVersions(versionsResult.versions);
       setEditing(false);
-      toast.success("Nova versao criada");
+      toast.success(t("editor.newVersionCreated"));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erro ao salvar nova versao.");
+      toast.error(e instanceof Error ? e.message : t("editor.errorSaveNew"));
     } finally {
       setSaving(false);
     }
   };
+
+  const changelog = activeVersion?.changelog ?? [];
 
   return (
     <div className="flex-1 flex flex-col min-w-0">
@@ -113,7 +127,7 @@ export function ResumeEditor({
             )}
           >
             <FileText className="h-3.5 w-3.5" />
-            Curriculo
+            {t("editor.resume")}
           </button>
           <button
             onClick={() => { setActiveTab("cover-letter"); setEditing(false); }}
@@ -125,7 +139,19 @@ export function ResumeEditor({
             )}
           >
             <Mail className="h-3.5 w-3.5" />
-            Carta
+            {t("editor.coverLetter")}
+          </button>
+          <button
+            onClick={() => { setActiveTab("changes"); setEditing(false); }}
+            className={cn(
+              "flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium transition-all active:scale-[0.97] active:opacity-80",
+              activeTab === "changes"
+                ? "bg-card apple-shadow-sm text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <List className="h-3.5 w-3.5" />
+            {t("editor.changes")}
           </button>
         </div>
 
@@ -138,7 +164,7 @@ export function ResumeEditor({
                 onClick={() => setEditing(false)}
                 className="h-8 rounded-lg text-xs"
               >
-                <X className="mr-1 h-3 w-3" /> Cancelar
+                <X className="mr-1 h-3 w-3" /> {t("common.cancel")}
               </Button>
               <Button
                 variant="outline"
@@ -148,7 +174,7 @@ export function ResumeEditor({
                 className="h-8 rounded-lg text-xs"
               >
                 {saving ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Save className="mr-1 h-3 w-3" />}
-                Salvar como nova versao
+                {t("editor.saveAsNew")}
               </Button>
               <Button
                 size="sm"
@@ -157,10 +183,10 @@ export function ResumeEditor({
                 className="h-8 rounded-lg text-xs"
               >
                 {saving ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Save className="mr-1 h-3 w-3" />}
-                Salvar
+                {t("editor.save")}
               </Button>
             </>
-          ) : (
+          ) : activeTab !== "changes" ? (
             <>
               {activeVersion && (
                 <>
@@ -170,7 +196,7 @@ export function ResumeEditor({
                     onClick={handleStartEdit}
                     className="h-8 rounded-lg text-xs"
                   >
-                    <Pencil className="mr-1 h-3 w-3" /> Editar
+                    <Pencil className="mr-1 h-3 w-3" /> {t("editor.edit")}
                   </Button>
                   <Button
                     variant="outline"
@@ -186,12 +212,12 @@ export function ResumeEditor({
                     ) : (
                       <Download className="mr-1 h-3 w-3" />
                     )}
-                    {downloading ? "Baixando..." : "Baixar .docx"}
+                    {downloading ? t("editor.downloading") : t("editor.downloadDocx")}
                   </Button>
                 </>
               )}
             </>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -200,9 +226,52 @@ export function ResumeEditor({
         {!activeVersion ? (
           <div className="flex items-center justify-center h-full min-h-[300px]">
             <p className="text-sm text-muted-foreground">
-              Nenhuma versao disponivel. Gere um curriculo primeiro.
+              {t("editor.noVersions")}
             </p>
           </div>
+        ) : activeTab === "changes" ? (
+          changelog.length === 0 ? (
+            <div className="flex items-center justify-center h-full min-h-[300px]">
+              <p className="text-sm text-muted-foreground">
+                {t("editor.noChanges")}
+              </p>
+            </div>
+          ) : (
+            <div className="max-w-[720px] mx-auto space-y-3">
+              {changelog.map((item, i) => {
+                const style = CATEGORY_STYLES[item.category] || CATEGORY_STYLES.impact;
+                return (
+                  <div
+                    key={i}
+                    className="rounded-xl bg-white dark:bg-card p-5 apple-shadow-sm"
+                  >
+                    <div className="flex items-start gap-3">
+                      <span
+                        className={cn(
+                          "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide shrink-0 mt-0.5",
+                          style.bg,
+                          style.text
+                        )}
+                      >
+                        {t(style.label)}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-muted-foreground">
+                          {item.section}
+                        </p>
+                        <p className="text-sm font-medium text-foreground mt-1">
+                          {item.what}
+                        </p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {item.why}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )
         ) : editing ? (
           <Textarea
             value={editContent}
@@ -212,19 +281,19 @@ export function ResumeEditor({
         ) : (
           <div className="rounded-2xl bg-white dark:bg-card p-10 min-h-[400px] apple-shadow-sm max-w-[720px] mx-auto">
             <div className="resume-content">
-              {content ? <Markdown>{content}</Markdown> : "Conteudo vazio."}
+              {content ? <Markdown>{content}</Markdown> : t("editor.emptyContent")}
             </div>
           </div>
         )}
       </div>
 
       {/* Regenerate */}
-      {!editing && activeVersion && (
+      {!editing && activeVersion && activeTab !== "changes" && (
         <div className="px-6 py-4 border-t border-border">
           <div className="flex items-center gap-3">
             <input
               type="text"
-              placeholder="Instrucoes para regenerar..."
+              placeholder={t("editor.regeneratePlaceholder")}
               value={regenerateInstructions}
               onChange={(e) => setRegenerateInstructions(e.target.value)}
               onKeyDown={(e) => {
@@ -252,7 +321,7 @@ export function ResumeEditor({
               ) : (
                 <>
                   <RefreshCw className="mr-1 h-3 w-3" />
-                  Regenerar
+                  {t("editor.regenerate")}
                 </>
               )}
             </Button>

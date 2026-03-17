@@ -17,6 +17,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/lib/hooks/useTranslation";
 
 function getScoreBadgeClass(score: number | null) {
   if (score === null) return "bg-secondary text-muted-foreground";
@@ -25,9 +26,9 @@ function getScoreBadgeClass(score: number | null) {
   return "bg-red-500/10 text-red-600";
 }
 
-function formatDate(iso: string) {
+function formatDate(iso: string, locale: string) {
   try {
-    return new Date(iso).toLocaleDateString("pt-BR", {
+    return new Date(iso).toLocaleDateString(locale, {
       day: "2-digit",
       month: "short",
     });
@@ -37,31 +38,32 @@ function formatDate(iso: string) {
 }
 
 function OnboardingFlow() {
+  const { t } = useTranslation();
   return (
     <div className="space-y-10">
       <div className="pt-4">
         <h1 className="text-3xl font-bold tracking-tight text-foreground">
-          Bem-vindo ao Merlin
+          {t("dashboard.welcomeTitle")}
         </h1>
         <p className="text-base text-muted-foreground mt-2 max-w-lg">
-          Para comecar, envie seu curriculo e complete a entrevista. Depois, voce podera personalizar para quantas vagas quiser.
+          {t("dashboard.welcomeSubtitle")}
         </p>
       </div>
 
       <div className="space-y-3">
-        <Link href="/dashboard/perfil" className="block group">
+        <Link href="/dashboard/profile" className="block group">
           <div className="apple-shadow-sm rounded-2xl bg-card p-6 transition-all duration-300 hover:apple-shadow hover:scale-[1.01]">
             <div className="flex items-center gap-5">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-secondary group-hover:bg-foreground/5">
                 <Upload className="h-5 w-5 text-foreground/70" />
               </div>
               <div className="flex-1">
-                <span className="text-xs font-medium text-muted-foreground">Passo 1</span>
+                <span className="text-xs font-medium text-muted-foreground">{t("dashboard.step1Label")}</span>
                 <h3 className="text-base font-semibold text-foreground mt-0.5">
-                  Envie seu Curriculo
+                  {t("dashboard.step1Title")}
                 </h3>
                 <p className="text-sm text-muted-foreground mt-0.5">
-                  PDF ou DOCX para analise inteligente
+                  {t("dashboard.step1Desc")}
                 </p>
               </div>
               <ArrowRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-foreground transition-all" />
@@ -69,19 +71,19 @@ function OnboardingFlow() {
           </div>
         </Link>
 
-        <Link href="/dashboard/entrevista" className="block group">
+        <Link href="/dashboard/interview" className="block group">
           <div className="apple-shadow-sm rounded-2xl bg-card p-6 transition-all duration-300 hover:apple-shadow hover:scale-[1.01]">
             <div className="flex items-center gap-5">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-secondary group-hover:bg-foreground/5">
                 <Mic className="h-5 w-5 text-foreground/70" />
               </div>
               <div className="flex-1">
-                <span className="text-xs font-medium text-muted-foreground">Passo 2</span>
+                <span className="text-xs font-medium text-muted-foreground">{t("dashboard.step2Label")}</span>
                 <h3 className="text-base font-semibold text-foreground mt-0.5">
-                  Entrevista de Perfil
+                  {t("dashboard.step2Title")}
                 </h3>
                 <p className="text-sm text-muted-foreground mt-0.5">
-                  Converse com a IA para enriquecer seu perfil
+                  {t("dashboard.step2Desc")}
                 </p>
               </div>
               <ArrowRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-foreground transition-all" />
@@ -95,6 +97,7 @@ function OnboardingFlow() {
 
 export default function DashboardPage() {
   const { user } = useAuthStore();
+  const { t, locale } = useTranslation();
   const { needsOnboarding, loading: onboardingLoading } = useOnboarding();
   const {
     applications,
@@ -110,7 +113,7 @@ export default function DashboardPage() {
   } = useApplicationsListStore();
   const [deleting, setDeleting] = useState<string | null>(null);
 
-  const firstName = user?.displayName?.split(" ")[0] || "Candidato";
+  const firstName = user?.displayName?.split(" ")[0] || t("dashboard.candidate");
 
   useEffect(() => {
     if (needsOnboarding || onboardingLoading) return;
@@ -185,16 +188,16 @@ export default function DashboardPage() {
       <div className="pt-4 flex items-end justify-between">
         <div>
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">
-            Ola, {firstName}.
+            {t("dashboard.greeting", { firstName })}
           </h1>
           <p className="text-base text-muted-foreground mt-1">
-            Suas candidaturas
+            {t("dashboard.yourApplications")}
           </p>
         </div>
-        <Link href="/dashboard/vaga">
+        <Link href="/dashboard/job">
           <Button className="h-10 px-5 rounded-full text-sm font-semibold">
             <Plus className="mr-1.5 h-4 w-4" />
-            Nova Vaga
+            {t("dashboard.newJob")}
           </Button>
         </Link>
       </div>
@@ -212,15 +215,15 @@ export default function DashboardPage() {
             <Briefcase className="h-7 w-7 text-muted-foreground" />
           </div>
           <p className="text-base font-medium text-foreground mb-1">
-            Nenhuma candidatura ainda
+            {t("dashboard.noApplications")}
           </p>
           <p className="text-sm text-muted-foreground mb-6">
-            Cole uma descricao de vaga para comecar!
+            {t("dashboard.noApplicationsDesc")}
           </p>
-          <Link href="/dashboard/vaga">
+          <Link href="/dashboard/job">
             <Button className="h-10 px-6 rounded-full text-sm font-semibold">
               <Plus className="mr-1.5 h-4 w-4" />
-              Nova Vaga
+              {t("dashboard.newJob")}
             </Button>
           </Link>
         </div>
@@ -229,7 +232,7 @@ export default function DashboardPage() {
           {applications.map((app) => (
             <Link
               key={app.id}
-              href={`/dashboard/candidatura?id=${app.id}`}
+              href={`/dashboard/application?id=${app.id}`}
               className="block group"
             >
               <div className="apple-shadow-sm rounded-2xl bg-card p-5 transition-all duration-300 hover:apple-shadow hover:scale-[1.005]">
@@ -261,13 +264,13 @@ export default function DashboardPage() {
                       )}
                       {app.company && <span className="text-muted-foreground/30">·</span>}
                       <span className="text-xs text-muted-foreground">
-                        {formatDate(app.createdAt)}
+                        {formatDate(app.createdAt, locale)}
                       </span>
                       {app.versionCount > 0 && (
                         <>
                           <span className="text-muted-foreground/30">·</span>
                           <span className="text-xs text-muted-foreground">
-                            {app.versionCount} {app.versionCount === 1 ? "versao" : "versoes"}
+                            {app.versionCount} {app.versionCount === 1 ? t("dashboard.version") : t("dashboard.versions")}
                           </span>
                         </>
                       )}
@@ -303,7 +306,7 @@ export default function DashboardPage() {
                 {loading ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
-                  "Carregar mais"
+                  t("common.loadMore")
                 )}
               </Button>
             </div>

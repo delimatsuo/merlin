@@ -34,7 +34,7 @@ ci_cd:
   provider: "github-actions"
   deploy_workflow: ".github/workflows/deploy.yml"
   rollback_workflow: ".github/workflows/rollback.yml"
-  auth_method: "not-configured"
+  auth_method: "workload-identity-federation"
   # Also has: backend/cloudbuild.yaml for Cloud Build (alternative)
 
 reviewer:

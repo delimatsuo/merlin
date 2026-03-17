@@ -11,12 +11,15 @@ from google.genai import types
 
 from app.config import get_settings
 from app.prompts.profile import PROFILE_STRUCTURING_PROMPT
-from app.prompts.questions import QUESTION_GENERATION_PROMPT
+from app.prompts.questions import QUESTION_GENERATION_PROMPT, get_question_prompt
 from app.prompts.tailor import RESUME_REWRITING_PROMPT
 from app.prompts.cover_letter import COVER_LETTER_PROMPT
 from app.prompts.job_analysis import JOB_ANALYSIS_PROMPT
 from app.prompts.voice_processing import VOICE_PROCESSING_PROMPT
 from app.prompts.enrichment import ENRICHMENT_PROMPT
+from app.prompts.recommendations import get_recommendations_prompt
+from app.prompts.linkedin_structure import LINKEDIN_STRUCTURING_PROMPT
+from app.prompts.linkedin_analysis import get_linkedin_analysis_prompt
 
 logger = structlog.get_logger()
 
@@ -284,7 +287,7 @@ async def analyze_job_description(job_text: str) -> dict:
 
 
 async def generate_interview_questions(
-    structured_data: dict, enriched_data: dict
+    structured_data: dict, enriched_data: dict, locale: str = "pt-BR"
 ) -> list[str]:
     """Generate targeted interview questions."""
     context = json.dumps({
@@ -293,7 +296,7 @@ async def generate_interview_questions(
     }, ensure_ascii=False, indent=2)
 
     content = await _call_sonnet(
-        system=QUESTION_GENERATION_PROMPT,
+        system=get_question_prompt(locale),
         user_content=context,
         task="generate_questions",
         max_tokens=1024,
@@ -342,6 +345,36 @@ async def process_voice_answers(questions: list[str], answers: list[str]) -> dic
         return {"raw_answers": content}
 
 
+def _parse_xml_tagged_response(content: str) -> tuple[str, list[dict]]:
+    """Parse XML-tagged response with <resume> and <changelog> sections."""
+    resume_match = re.search(r'<resume>(.*?)</resume>', content, re.DOTALL)
+    changelog_match = re.search(r'<changelog>(.*?)</changelog>', content, re.DOTALL)
+
+    if resume_match:
+        resume_content = resume_match.group(1).strip()
+    else:
+        # Strip any <changelog> block from fallback to avoid showing raw JSON to the user
+        resume_content = re.sub(r'<changelog>.*?</changelog>', '', content, flags=re.DOTALL).strip()
+    changelog: list[dict] = []
+
+    if changelog_match:
+        try:
+            raw = changelog_match.group(1).strip()
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                valid_categories = {"keyword", "ats", "impact", "structure"}
+                changelog = [
+                    item for item in parsed[:10]
+                    if isinstance(item, dict)
+                    and all(k in item for k in ("section", "what", "why", "category"))
+                    and item.get("category") in valid_categories
+                ]
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("changelog_parse_error", raw=changelog_match.group(1)[:200])
+
+    return resume_content, changelog
+
+
 async def rewrite_resume(
     profile: dict,
     job_description: str,
@@ -350,8 +383,8 @@ async def rewrite_resume(
     additional_instructions: Optional[str] = None,
     knowledge: Optional[dict] = None,
     enrichment: Optional[dict] = None,
-) -> str:
-    """Rewrite the resume tailored to the job."""
+) -> tuple[str, list[dict]]:
+    """Rewrite the resume tailored to the job. Returns (resume_content, changelog)."""
     # Build comprehensive candidate data
     candidate_data = {"structured_resume": profile}
     if knowledge:
@@ -387,7 +420,7 @@ async def rewrite_resume(
         max_tokens=8192,
     )
 
-    return content
+    return _parse_xml_tagged_response(content)
 
 
 async def generate_cover_letter(
@@ -457,3 +490,93 @@ Return a JSON array of strings.""",
         return []
     except json.JSONDecodeError:
         return []
+
+
+async def generate_recommendations(
+    profile: dict,
+    knowledge: Optional[dict],
+    locale: str = "pt-BR",
+) -> list[dict]:
+    """Generate CV health-check recommendations."""
+    context = json.dumps({
+        "profile": profile,
+        "knowledge": knowledge or {},
+    }, ensure_ascii=False, indent=2)
+
+    content = await _call_sonnet(
+        system=get_recommendations_prompt(locale),
+        user_content=context,
+        task="recommendations",
+        max_tokens=4096,
+    )
+
+    result = _parse_json_response(content)
+    if result and isinstance(result, list):
+        return result[:5]
+
+    try:
+        parsed = json.loads(content)
+        if isinstance(parsed, list):
+            return parsed[:5]
+        return []
+    except json.JSONDecodeError:
+        logger.error("recommendations_parse_error", content=content[:500])
+        return []
+
+
+# ===========================================================================
+# LINKEDIN PROFILE — Extraction + Analysis
+# ===========================================================================
+
+async def structure_linkedin_profile(raw_text: str) -> dict:
+    """Structure raw LinkedIn profile text into structured JSON."""
+    content = await _call_flash_lite(
+        system=LINKEDIN_STRUCTURING_PROMPT,
+        user_content=raw_text,
+        task="structure_linkedin",
+    )
+
+    result = _parse_json_response(content)
+    if result and isinstance(result, dict):
+        return result
+
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        logger.error("linkedin_structure_parse_error", content=content[:500])
+        return {"raw_text": raw_text, "parse_error": True}
+
+
+async def analyze_linkedin_profile(
+    structured: dict,
+    knowledge: Optional[dict] = None,
+    locale: str = "pt-BR",
+) -> tuple[list[dict], list[dict]]:
+    """Analyze a LinkedIn profile and return improvement suggestions + cross-references."""
+    context_data: dict = {"linkedin_profile": structured}
+    if knowledge:
+        context_data["candidate_knowledge"] = knowledge
+
+    context = json.dumps(context_data, ensure_ascii=False, indent=2)
+
+    content = await _call_sonnet(
+        system=get_linkedin_analysis_prompt(locale),
+        user_content=context,
+        task="linkedin_analysis",
+        max_tokens=6144,
+    )
+
+    result = _parse_json_response(content)
+    if result and isinstance(result, dict):
+        suggestions = result.get("suggestions", [])
+        cross_ref = result.get("crossRef", [])
+        return suggestions[:8], cross_ref
+
+    try:
+        parsed = json.loads(content)
+        if isinstance(parsed, dict):
+            return parsed.get("suggestions", [])[:8], parsed.get("crossRef", [])
+        return [], []
+    except json.JSONDecodeError:
+        logger.error("linkedin_analysis_parse_error", content=content[:500])
+        return [], []

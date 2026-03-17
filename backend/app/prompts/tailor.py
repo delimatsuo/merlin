@@ -143,4 +143,31 @@ List of skills relevant to the target job, separated by " · "
 (Only include this section if certifications array is non-empty)
 
 Use "- " for bullet lists. Use ### for sub-entries within sections. Keep markdown simple: headers, bold, bullets only. No tables, no horizontal rules.
-</format>"""
+</format>
+
+<output_wrapper>
+Wrap your ENTIRE output in two XML sections:
+
+1. <resume> ... </resume> — contains the full markdown resume
+2. <changelog> ... </changelog> — contains a JSON array of changes you made
+
+The changelog documents WHAT you changed and WHY, so the candidate understands exactly how their resume was tailored. Write it in the same language as the resume.
+
+Changelog JSON schema (max 10 items):
+[
+  {
+    "section": "section name (e.g. Professional Summary, Experience > Company Name)",
+    "what": "brief description of the change",
+    "why": "reason this change improves fit for the target job",
+    "category": "keyword | ats | impact | structure"
+  }
+]
+
+Categories:
+- "keyword": Added or repositioned a keyword from the job description
+- "ats": Structural change to improve ATS parsing or score
+- "impact": Rewrote a bullet to emphasize measurable results or relevance
+- "structure": Reordered, added, or removed a section for better fit
+
+Keep entries concise (1 sentence each for "what" and "why"). Focus on the most significant changes.
+</output_wrapper>"""

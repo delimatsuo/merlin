@@ -104,6 +104,8 @@ async def upload_resume(
         raw_text=raw_text,
         structured_data=profile_data,
         file_url=file_url,
+        user_email=user.email or "",
+        user_name=user.name or "",
     )
 
     # Merge into knowledge file (fire-and-forget)
