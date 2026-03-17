@@ -9,15 +9,32 @@ interface CostData {
   generationsMonth: number;
   estimatedCostToday: number;
   estimatedCostMonth: number;
+  costPerGeneration: number;
   dailyChart: { date: string; count: number }[];
 }
 
-const COST_LABELS: Record<string, string> = {
-  resume_gen: "Geração de currículo (Pro)",
-  job_analysis: "Análise de vaga (Flash)",
-  tts: "Text-to-Speech (Flash TTS)",
-  interview: "Perguntas de entrevista (Pro)",
-  transcription: "Transcrição (Flash)",
+const SONNET_COSTS: Record<string, string> = {
+  resume_rewrite: "Reescrita de currículo",
+  cover_letter: "Carta de apresentação",
+  job_analysis: "Análise de vaga",
+  interview_questions: "Perguntas de entrevista",
+  voice_processing: "Processamento de respostas",
+  followup_questions: "Perguntas complementares",
+  cv_recommendations: "Recomendações do CV",
+  linkedin_analysis: "Análise LinkedIn",
+};
+
+const FLASH_LITE_COSTS: Record<string, string> = {
+  resume_structuring: "Estruturação de currículo",
+  ats_keywords: "Extração de keywords ATS",
+  skill_matching: "Match de competências",
+  company_enrichment: "Enriquecimento empresa",
+  linkedin_structuring: "Estruturação LinkedIn",
+};
+
+const OTHER_COSTS: Record<string, string> = {
+  tts: "Text-to-Speech (TTS)",
+  transcription: "Transcrição de áudio",
 };
 
 export default function AdminCustos() {
@@ -63,26 +80,37 @@ export default function AdminCustos() {
         />
       </div>
 
-      {/* Unit Costs Table */}
-      <div className="rounded-xl border border-border/50 p-6">
-        <h2 className="text-sm font-medium mb-4">Custo unitário por tipo de API</h2>
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="border-b border-border/50 text-muted-foreground">
-              <th className="text-left py-2 font-medium">Tipo</th>
-              <th className="text-right py-2 font-medium">Custo/chamada (USD)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {Object.entries(data.unitCosts).map(([key, cost]) => (
-              <tr key={key} className="border-b border-border/30">
-                <td className="py-2">{COST_LABELS[key] || key}</td>
-                <td className="py-2 text-right font-mono">${cost.toFixed(3)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {/* Pipeline cost */}
+      {data.costPerGeneration > 0 && (
+        <div className="rounded-xl border border-border/50 p-4">
+          <p className="text-xs text-muted-foreground">Custo por pipeline de geração (reescrita + carta + análise + ATS + skills)</p>
+          <p className="text-lg font-semibold mt-1 font-mono">${data.costPerGeneration.toFixed(3)}</p>
+        </div>
+      )}
+
+      {/* Sonnet Tier */}
+      <CostTable
+        title="Claude Sonnet 4.6 — Escrita e Raciocínio"
+        subtitle="~$3/M tokens entrada, $15/M tokens saída"
+        costs={data.unitCosts}
+        labels={SONNET_COSTS}
+      />
+
+      {/* Flash-Lite Tier */}
+      <CostTable
+        title="Gemini Flash-Lite — Extração"
+        subtitle="~$0.075/M tokens entrada, $0.30/M tokens saída"
+        costs={data.unitCosts}
+        labels={FLASH_LITE_COSTS}
+      />
+
+      {/* Other AI */}
+      <CostTable
+        title="Outros Serviços de IA"
+        subtitle="Gemini Flash TTS e transcrição"
+        costs={data.unitCosts}
+        labels={OTHER_COSTS}
+      />
 
       {/* Daily Cost Chart */}
       <div className="rounded-xl border border-border/50 p-6">
@@ -91,9 +119,9 @@ export default function AdminCustos() {
         </h2>
         <div className="flex items-end gap-[2px] h-32">
           {data.dailyChart.map((d) => {
-            const cost = d.count * data.unitCosts.resume_gen;
+            const cost = d.count * (data.costPerGeneration || 0.04);
             const maxCost = Math.max(
-              ...data.dailyChart.map((x) => x.count * data.unitCosts.resume_gen),
+              ...data.dailyChart.map((x) => x.count * (data.costPerGeneration || 0.04)),
               0.01
             );
             return (
@@ -120,6 +148,43 @@ export default function AdminCustos() {
           <span>{data.dailyChart[data.dailyChart.length - 1]?.date.slice(5)}</span>
         </div>
       </div>
+    </div>
+  );
+}
+
+function CostTable({
+  title,
+  subtitle,
+  costs,
+  labels,
+}: {
+  title: string;
+  subtitle: string;
+  costs: Record<string, number>;
+  labels: Record<string, string>;
+}) {
+  return (
+    <div className="rounded-xl border border-border/50 p-6">
+      <h2 className="text-sm font-medium">{title}</h2>
+      <p className="text-[10px] text-muted-foreground mb-4">{subtitle}</p>
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="border-b border-border/50 text-muted-foreground">
+            <th className="text-left py-2 font-medium">Tipo</th>
+            <th className="text-right py-2 font-medium">Custo/chamada (USD)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {Object.entries(labels).map(([key, label]) => (
+            <tr key={key} className="border-b border-border/30">
+              <td className="py-2">{label}</td>
+              <td className="py-2 text-right font-mono">
+                ${(costs[key] ?? 0).toFixed(3)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

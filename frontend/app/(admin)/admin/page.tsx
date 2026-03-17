@@ -1,11 +1,46 @@
 "use client";
 
-import { useAdminStore } from "@/lib/store";
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
+import { useAdminStore, type AdminStats } from "@/lib/store";
 
 export default function AdminDashboard() {
-  const { stats, dailyChart, recentGenerations } = useAdminStore();
+  const storeStats = useAdminStore((s) => s.stats);
+  const storeDailyChart = useAdminStore((s) => s.dailyChart);
+  const storeRecentGens = useAdminStore((s) => s.recentGenerations);
+  const { setStats, setDailyChart, setRecentGenerations } = useAdminStore();
+
+  const [loading, setLoading] = useState(!storeStats);
+
+  // Always fetch fresh stats on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await api.get<{
+          stats: AdminStats;
+          dailyChart: { date: string; count: number }[];
+          recentGenerations: { id: string; uid: string; userEmail: string; company: string; createdAt: string }[];
+        }>("/api/admin/stats");
+        setStats(data.stats);
+        setDailyChart(data.dailyChart);
+        setRecentGenerations(data.recentGenerations);
+      } catch {
+        // Use cached data if fetch fails
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [setStats, setDailyChart, setRecentGenerations]);
+
+  const stats = storeStats;
+  const dailyChart = storeDailyChart;
+  const recentGenerations = storeRecentGens;
 
   const maxCount = Math.max(...dailyChart.map((d) => d.count), 1);
+
+  if (loading) {
+    return <p className="text-xs text-muted-foreground">Carregando dashboard...</p>;
+  }
 
   return (
     <div className="space-y-8">
