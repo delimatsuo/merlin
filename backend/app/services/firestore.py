@@ -132,6 +132,7 @@ class FirestoreService:
             "enrichedProfile": voice_data,
             "voiceAnswers": voice_data,
             "status": "enriched",
+            "recommendations": None,
             "updatedAt": datetime.now(timezone.utc).isoformat(),
         })
 
@@ -194,6 +195,33 @@ class FirestoreService:
             "status": "enriched",
             "updatedAt": datetime.now(timezone.utc).isoformat(),
         })
+
+    # --- Recommendations Operations ---
+
+    async def save_recommendations(
+        self, uid: str, profile_id: str, recommendations: list[dict], locale: str
+    ) -> None:
+        """Store recommendations as a field on the profile doc."""
+        doc_ref = self.db.collection("users").document(uid).collection("profiles").document(profile_id)
+        await doc_ref.update({
+            "recommendations": recommendations,
+            "recommendationsLocale": locale,
+            "recommendationsGeneratedAt": datetime.now(timezone.utc).isoformat(),
+        })
+
+    async def get_recommendations(self, uid: str, profile_id: str) -> Optional[dict]:
+        """Read recommendations from the profile doc. Returns dict with recommendations, locale, and timestamp."""
+        doc_ref = self.db.collection("users").document(uid).collection("profiles").document(profile_id)
+        doc = await doc_ref.get()
+        if doc.exists:
+            data = doc.to_dict()
+            if data.get("recommendations"):
+                return {
+                    "recommendations": data["recommendations"],
+                    "locale": data.get("recommendationsLocale", ""),
+                    "generatedAt": data.get("recommendationsGeneratedAt", ""),
+                }
+        return None
 
     # --- Application Operations ---
 
@@ -309,6 +337,7 @@ class FirestoreService:
         cover_letter: str,
         ats_score: float,
         version_name: str = "",
+        changelog: list[dict] | None = None,
     ) -> str:
         """Save a tailored resume version."""
         version_id = str(uuid.uuid4())
@@ -331,6 +360,7 @@ class FirestoreService:
             "atsScore": ats_score,
             "name": name,
             "type": "resume",
+            "changelog": changelog or [],
             "docxFileUrl": None,
             "createdAt": now,
             "updatedAt": now,
@@ -367,11 +397,12 @@ class FirestoreService:
         async for doc in query.stream():
             data = doc.to_dict()
             data["id"] = doc.id
-            # Handle legacy docs without name/type
+            # Handle legacy docs without name/type/changelog
             if "name" not in data:
                 data["name"] = f"Versão {len(results) + 1}"
             if "type" not in data:
                 data["type"] = "resume"
+            data["changelog"] = data.get("changelog", [])
             results.append(data)
         return results
 
@@ -390,6 +421,7 @@ class FirestoreService:
                 data["name"] = "Versão"
             if "type" not in data:
                 data["type"] = "resume"
+            data["changelog"] = data.get("changelog", [])
             return data
         return None
 
@@ -425,6 +457,7 @@ class FirestoreService:
             "atsScore": original.get("atsScore", 0),
             "name": f"{original.get('name', 'Versão')} (cópia)",
             "type": original.get("type", "resume"),
+            "changelog": original.get("changelog", []),
             "docxFileUrl": None,
             "createdAt": now,
             "updatedAt": now,

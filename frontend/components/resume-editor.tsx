@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   FileText,
   Mail,
+  List,
   Download,
   Pencil,
   Save,
@@ -28,6 +29,13 @@ interface ResumeEditorProps {
   downloading: boolean;
 }
 
+const CATEGORY_STYLES: Record<string, { bg: string; text: string; label: string }> = {
+  keyword: { bg: "bg-blue-100 dark:bg-blue-900/30", text: "text-blue-700 dark:text-blue-300", label: "editor.changeKeyword" },
+  ats: { bg: "bg-green-100 dark:bg-green-900/30", text: "text-green-700 dark:text-green-300", label: "editor.changeAts" },
+  impact: { bg: "bg-purple-100 dark:bg-purple-900/30", text: "text-purple-700 dark:text-purple-300", label: "editor.changeImpact" },
+  structure: { bg: "bg-orange-100 dark:bg-orange-900/30", text: "text-orange-700 dark:text-orange-300", label: "editor.changeStructure" },
+};
+
 export function ResumeEditor({
   applicationId,
   onDownload,
@@ -37,7 +45,7 @@ export function ResumeEditor({
 }: ResumeEditorProps) {
   const { t } = useTranslation();
   const { versions, activeVersionId, updateVersion } = useVersionStore();
-  const [activeTab, setActiveTab] = useState<"resume" | "cover-letter">("resume");
+  const [activeTab, setActiveTab] = useState<"resume" | "cover-letter" | "changes">("resume");
   const [editing, setEditing] = useState(false);
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
@@ -48,7 +56,9 @@ export function ResumeEditor({
   const content =
     activeTab === "resume"
       ? activeVersion?.resumeContent || ""
-      : activeVersion?.coverLetterText || "";
+      : activeTab === "cover-letter"
+        ? activeVersion?.coverLetterText || ""
+        : "";
 
   const handleStartEdit = () => {
     setEditContent(content);
@@ -100,6 +110,8 @@ export function ResumeEditor({
     }
   };
 
+  const changelog = activeVersion?.changelog ?? [];
+
   return (
     <div className="flex-1 flex flex-col min-w-0">
       {/* Tab Switcher + Actions */}
@@ -128,6 +140,18 @@ export function ResumeEditor({
           >
             <Mail className="h-3.5 w-3.5" />
             {t("editor.coverLetter")}
+          </button>
+          <button
+            onClick={() => { setActiveTab("changes"); setEditing(false); }}
+            className={cn(
+              "flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium transition-all active:scale-[0.97] active:opacity-80",
+              activeTab === "changes"
+                ? "bg-card apple-shadow-sm text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <List className="h-3.5 w-3.5" />
+            {t("editor.changes")}
           </button>
         </div>
 
@@ -162,7 +186,7 @@ export function ResumeEditor({
                 {t("editor.save")}
               </Button>
             </>
-          ) : (
+          ) : activeTab !== "changes" ? (
             <>
               {activeVersion && (
                 <>
@@ -193,7 +217,7 @@ export function ResumeEditor({
                 </>
               )}
             </>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -205,6 +229,49 @@ export function ResumeEditor({
               {t("editor.noVersions")}
             </p>
           </div>
+        ) : activeTab === "changes" ? (
+          changelog.length === 0 ? (
+            <div className="flex items-center justify-center h-full min-h-[300px]">
+              <p className="text-sm text-muted-foreground">
+                {t("editor.noChanges")}
+              </p>
+            </div>
+          ) : (
+            <div className="max-w-[720px] mx-auto space-y-3">
+              {changelog.map((item, i) => {
+                const style = CATEGORY_STYLES[item.category] || CATEGORY_STYLES.impact;
+                return (
+                  <div
+                    key={i}
+                    className="rounded-xl bg-white dark:bg-card p-5 apple-shadow-sm"
+                  >
+                    <div className="flex items-start gap-3">
+                      <span
+                        className={cn(
+                          "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide shrink-0 mt-0.5",
+                          style.bg,
+                          style.text
+                        )}
+                      >
+                        {t(style.label)}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-muted-foreground">
+                          {item.section}
+                        </p>
+                        <p className="text-sm font-medium text-foreground mt-1">
+                          {item.what}
+                        </p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {item.why}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )
         ) : editing ? (
           <Textarea
             value={editContent}
@@ -221,7 +288,7 @@ export function ResumeEditor({
       </div>
 
       {/* Regenerate */}
-      {!editing && activeVersion && (
+      {!editing && activeVersion && activeTab !== "changes" && (
         <div className="px-6 py-4 border-t border-border">
           <div className="flex items-center gap-3">
             <input

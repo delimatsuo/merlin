@@ -1,6 +1,6 @@
 """Pydantic schemas for API request/response validation."""
 
-from typing import Optional, Union
+from typing import Literal, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -146,10 +146,18 @@ class RegenerateRequest(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class ChangelogItem(BaseModel):
+    section: str
+    what: str
+    why: str
+    category: Literal["keyword", "ats", "impact", "structure"]
+
+
 class TailorResponse(BaseModel):
     resume_content: str = Field(alias="resumeContent")
     cover_letter: str = Field(alias="coverLetter")
     ats_score: float = Field(alias="atsScore")
+    changelog: list[ChangelogItem] = []
     version: int = 1
 
     model_config = {"populate_by_name": True}
@@ -173,3 +181,22 @@ class UsageResponse(BaseModel):
     date: str
 
     model_config = {"populate_by_name": True}
+
+
+# --- Recommendations ---
+
+class RecommendationExample(BaseModel):
+    before: str
+    after: str
+
+
+class Recommendation(BaseModel):
+    id: str
+    severity: Literal["high", "medium", "low"]
+    title: str
+    detail: str
+    examples: list[RecommendationExample] = []
+
+
+class RecommendationsResponse(BaseModel):
+    recommendations: list[Recommendation] = []

@@ -329,6 +329,13 @@ export const useAdminStore = create<AdminState>((set) => ({
 
 // --- Version Store ---
 
+export interface ChangelogItem {
+  section: string;
+  what: string;
+  why: string;
+  category: "keyword" | "ats" | "impact" | "structure";
+}
+
 export interface ResumeVersion {
   id: string;
   name: string;
@@ -336,6 +343,7 @@ export interface ResumeVersion {
   resumeContent: string;
   coverLetterText: string;
   atsScore: number;
+  changelog?: ChangelogItem[];
   createdAt: string;
   updatedAt?: string;
 }

@@ -17,6 +17,7 @@ from app.prompts.cover_letter import COVER_LETTER_PROMPT
 from app.prompts.job_analysis import JOB_ANALYSIS_PROMPT
 from app.prompts.voice_processing import VOICE_PROCESSING_PROMPT
 from app.prompts.enrichment import ENRICHMENT_PROMPT
+from app.prompts.recommendations import get_recommendations_prompt
 
 logger = structlog.get_logger()
 
@@ -342,6 +343,32 @@ async def process_voice_answers(questions: list[str], answers: list[str]) -> dic
         return {"raw_answers": content}
 
 
+def _parse_xml_tagged_response(content: str) -> tuple[str, list[dict]]:
+    """Parse XML-tagged response with <resume> and <changelog> sections."""
+    resume_match = re.search(r'<resume>(.*?)</resume>', content, re.DOTALL)
+    changelog_match = re.search(r'<changelog>(.*?)</changelog>', content, re.DOTALL)
+
+    resume_content = resume_match.group(1).strip() if resume_match else content
+    changelog: list[dict] = []
+
+    if changelog_match:
+        try:
+            raw = changelog_match.group(1).strip()
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                valid_categories = {"keyword", "ats", "impact", "structure"}
+                changelog = [
+                    item for item in parsed[:10]
+                    if isinstance(item, dict)
+                    and all(k in item for k in ("section", "what", "why", "category"))
+                    and item.get("category") in valid_categories
+                ]
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("changelog_parse_error", raw=changelog_match.group(1)[:200])
+
+    return resume_content, changelog
+
+
 async def rewrite_resume(
     profile: dict,
     job_description: str,
@@ -350,8 +377,8 @@ async def rewrite_resume(
     additional_instructions: Optional[str] = None,
     knowledge: Optional[dict] = None,
     enrichment: Optional[dict] = None,
-) -> str:
-    """Rewrite the resume tailored to the job."""
+) -> tuple[str, list[dict]]:
+    """Rewrite the resume tailored to the job. Returns (resume_content, changelog)."""
     # Build comprehensive candidate data
     candidate_data = {"structured_resume": profile}
     if knowledge:
@@ -387,7 +414,7 @@ async def rewrite_resume(
         max_tokens=8192,
     )
 
-    return content
+    return _parse_xml_tagged_response(content)
 
 
 async def generate_cover_letter(
@@ -456,4 +483,36 @@ Return a JSON array of strings.""",
             return questions[:5]
         return []
     except json.JSONDecodeError:
+        return []
+
+
+async def generate_recommendations(
+    profile: dict,
+    knowledge: Optional[dict],
+    locale: str = "pt-BR",
+) -> list[dict]:
+    """Generate CV health-check recommendations."""
+    context = json.dumps({
+        "profile": profile,
+        "knowledge": knowledge or {},
+    }, ensure_ascii=False, indent=2)
+
+    content = await _call_sonnet(
+        system=get_recommendations_prompt(locale),
+        user_content=context,
+        task="recommendations",
+        max_tokens=4096,
+    )
+
+    result = _parse_json_response(content)
+    if result and isinstance(result, list):
+        return result[:5]
+
+    try:
+        parsed = json.loads(content)
+        if isinstance(parsed, list):
+            return parsed[:5]
+        return []
+    except json.JSONDecodeError:
+        logger.error("recommendations_parse_error", content=content[:500])
         return []

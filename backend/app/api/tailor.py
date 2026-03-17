@@ -67,7 +67,7 @@ async def generate_tailored_resume(
 
     # Rewrite resume
     try:
-        resume_content = await rewrite_resume(
+        resume_content, changelog = await rewrite_resume(
             profile=structured_data,
             job_description=job_description,
             job_analysis=job_analysis,
@@ -109,6 +109,7 @@ async def generate_tailored_resume(
         cover_letter=cover_letter,
         ats_score=ats_score,
         version_name=version_name,
+        changelog=changelog,
     )
 
     # Increment daily usage + log generation for admin dashboard
@@ -122,6 +123,7 @@ async def generate_tailored_resume(
         resumeContent=resume_content,
         coverLetter=cover_letter,
         atsScore=ats_score,
+        changelog=changelog,
     )
 
 
@@ -193,7 +195,7 @@ async def regenerate_resume(
     knowledge = await fs.get_candidate_knowledge(user.uid)
 
     try:
-        resume_content = await rewrite_resume(
+        resume_content, changelog = await rewrite_resume(
             profile=structured_data,
             job_description=job_description,
             job_analysis=job_analysis,
@@ -219,6 +221,7 @@ async def regenerate_resume(
         resume_content=resume_content,
         cover_letter=existing_cover_letter,
         ats_score=application.get("atsScore", 0) or 0,
+        changelog=changelog,
     )
 
     # Increment daily usage + log generation
@@ -227,7 +230,7 @@ async def regenerate_resume(
     await fs.log_generation(user.uid, user.email or "", company)
 
     log_data_access(user.uid, "ai_regenerate_resume", "application", resource_id=body.application_id)
-    return {"status": "regenerated", "resumeContent": resume_content}
+    return {"status": "regenerated", "resumeContent": resume_content, "changelog": changelog}
 
 
 # --- Version CRUD (Phase 4) ---
