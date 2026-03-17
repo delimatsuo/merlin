@@ -76,7 +76,7 @@ export default function LinkedInPage() {
       }
     };
     fetchExisting();
-  }, []);
+  }, [setStructured, setSuggestions, setCrossRef]);
 
   const handleUpload = useCallback(
     async (acceptedFiles: File[]) => {
