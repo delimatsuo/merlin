@@ -944,10 +944,17 @@ class FirestoreService:
                 if doc.id == today:
                     today_data = d
 
-        # Count total users (acceptable for small user base)
+        # Count total users and sum generation stats from user docs
         total_users = 0
-        async for _ in self.db.collection("users").select([]).stream():
+        total_generations = 0
+        async for doc in self.db.collection("users").stream():
             total_users += 1
+            stats = doc.to_dict().get("stats", {})
+            total_generations += stats.get("generationCount", 0)
+
+        # If platformStats is empty (not yet backfilled), use user-level totals
+        if month_generations == 0 and total_generations > 0:
+            month_generations = total_generations
 
         return {
             "totalUsers": total_users,
@@ -1022,8 +1029,11 @@ class FirestoreService:
         return results
 
     async def backfill_user_stats(self) -> int:
-        """One-time backfill: count subcollections and write stats + email for all users."""
+        """One-time backfill: count subcollections, write user stats, and populate platformStats."""
         count = 0
+        total_generations = 0
+        total_signups = 0
+
         async for user_doc in self.db.collection("users").stream():
             uid = user_doc.id
             profile_count = 0
@@ -1057,5 +1067,14 @@ class FirestoreService:
 
             await self.db.collection("users").document(uid).set(update_data, merge=True)
             count += 1
+            total_generations += gen_count
+            total_signups += 1
+
+        # Backfill platformStats for today with accumulated totals
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        await self.db.collection("platformStats").document(today).set({
+            "generationCount": total_generations,
+            "signupCount": total_signups,
+        }, merge=True)
 
         return count
