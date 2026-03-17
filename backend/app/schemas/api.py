@@ -327,6 +327,7 @@ class LinkedInCrossRef(BaseModel):
 
 class LinkedInAnalyzeRequest(BaseModel):
     locale: Literal["pt-BR", "en"] = "pt-BR"
+    force: bool = False
 
 
 class LinkedInAnalyzeResponse(BaseModel):

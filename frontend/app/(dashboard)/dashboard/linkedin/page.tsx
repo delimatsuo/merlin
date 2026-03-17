@@ -133,7 +133,7 @@ export default function LinkedInPage() {
     }
   };
 
-  const handleAnalyze = async () => {
+  const handleAnalyze = async (force = false) => {
     setError("");
     setAnalyzing(true);
 
@@ -141,7 +141,7 @@ export default function LinkedInPage() {
       const result = await api.post<{
         suggestions: typeof suggestions;
         crossRef: typeof crossRef;
-      }>("/api/linkedin/analyze", { locale });
+      }>("/api/linkedin/analyze", { locale, force });
       setSuggestions(result.suggestions || []);
       setCrossRef(result.crossRef || []);
     } catch (err) {
@@ -154,10 +154,9 @@ export default function LinkedInPage() {
   };
 
   const handleReanalyze = async () => {
-    // Force fresh analysis by clearing cache first
     setSuggestions([]);
     setCrossRef([]);
-    await handleAnalyze();
+    await handleAnalyze(true);
   };
 
   const handleSendNew = () => {
@@ -384,7 +383,7 @@ export default function LinkedInPage() {
           <div className="px-8 pb-8 flex gap-3">
             {!hasSuggestions ? (
               <Button
-                onClick={handleAnalyze}
+                onClick={() => handleAnalyze()}
                 disabled={analyzing}
                 className="flex-1 rounded-xl"
               >

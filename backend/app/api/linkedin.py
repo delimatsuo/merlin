@@ -1,9 +1,8 @@
 """LinkedIn profile optimization endpoints."""
 
-import html
-
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, status
+from pydantic import ValidationError
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -17,7 +16,7 @@ from app.schemas.api import (
     LinkedInUploadResponse,
 )
 from app.services.firestore import FirestoreService
-from app.services.gemini_ai import analyze_linkedin_profile, structure_linkedin_profile
+from app.services.gemini_ai import analyze_linkedin_profile, structure_linkedin_profile, _sanitize_input
 from app.services.parser import parse_resume
 
 logger = structlog.get_logger()
@@ -122,7 +121,19 @@ async def upload_linkedin_pdf(
         )
 
     # Validate structured data
-    structured = LinkedInStructured(**structured_data)
+    if structured_data.get("parse_error"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Não conseguimos interpretar o perfil. Tente colar o texto manualmente.",
+        )
+    try:
+        structured = LinkedInStructured(**structured_data)
+    except ValidationError as e:
+        logger.error("linkedin_validation_error", uid=user.uid, error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Erro ao validar os dados do perfil. Tente novamente.",
+        )
 
     # Save to Firestore
     fs = FirestoreService()
@@ -148,8 +159,8 @@ async def paste_linkedin_text(
     """Parse pasted LinkedIn profile text."""
     logger.info("linkedin_paste_start", uid=user.uid, text_length=len(body.text))
 
-    # Sanitize input (RA-4)
-    sanitized_text = html.escape(body.text)
+    # Sanitize control characters (RA-4 — XSS handled by React's default text rendering)
+    sanitized_text = _sanitize_input(body.text)
 
     # Structure with Flash-Lite
     try:
@@ -161,7 +172,19 @@ async def paste_linkedin_text(
             detail="Erro ao processar o perfil LinkedIn. Tente novamente em alguns minutos.",
         )
 
-    structured = LinkedInStructured(**structured_data)
+    if structured_data.get("parse_error"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Não conseguimos interpretar o perfil. Tente novamente com mais texto.",
+        )
+    try:
+        structured = LinkedInStructured(**structured_data)
+    except ValidationError as e:
+        logger.error("linkedin_validation_error", uid=user.uid, error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Erro ao validar os dados do perfil. Tente novamente.",
+        )
 
     # Save to Firestore
     fs = FirestoreService()
@@ -209,9 +232,9 @@ async def analyze_linkedin(
             detail="Envie seu perfil LinkedIn primeiro.",
         )
 
-    # Cache check
+    # Cache check (skip if force=true for re-analysis)
     cached = await fs.get_linkedin_suggestions(user.uid)
-    if cached and cached.get("locale") == body.locale:
+    if not body.force and cached and cached.get("locale") == body.locale:
         logger.info("linkedin_analyze_cache_hit", uid=user.uid)
         return LinkedInAnalyzeResponse(
             suggestions=cached["suggestions"],
