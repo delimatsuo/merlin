@@ -931,12 +931,10 @@ class FirestoreService:
             self.db.collection("platformStats").document(f"{month_prefix}-{day:02d}")
             for day in range(1, 32)
         ]
-        month_docs = await self.db.get_all(month_refs)
-
         today_data = {}
         month_generations = 0
         month_signups = 0
-        for doc in month_docs:
+        async for doc in self.db.get_all(month_refs):
             if doc.exists:
                 d = doc.to_dict()
                 month_generations += d.get("generationCount", 0)
@@ -971,11 +969,10 @@ class FirestoreService:
             for i in range(days - 1, -1, -1)
         ]
         refs = [self.db.collection("platformStats").document(d) for d in dates]
-        docs = await self.db.get_all(refs)
 
         # Build a map for lookup
         doc_map = {}
-        for doc in docs:
+        async for doc in self.db.get_all(refs):
             if doc.exists:
                 doc_map[doc.id] = doc.to_dict().get("generationCount", 0)
 
