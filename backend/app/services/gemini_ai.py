@@ -18,6 +18,8 @@ from app.prompts.job_analysis import JOB_ANALYSIS_PROMPT
 from app.prompts.voice_processing import VOICE_PROCESSING_PROMPT
 from app.prompts.enrichment import ENRICHMENT_PROMPT
 from app.prompts.recommendations import get_recommendations_prompt
+from app.prompts.linkedin_structure import LINKEDIN_STRUCTURING_PROMPT
+from app.prompts.linkedin_analysis import get_linkedin_analysis_prompt
 
 logger = structlog.get_logger()
 
@@ -520,3 +522,61 @@ async def generate_recommendations(
     except json.JSONDecodeError:
         logger.error("recommendations_parse_error", content=content[:500])
         return []
+
+
+# ===========================================================================
+# LINKEDIN PROFILE — Extraction + Analysis
+# ===========================================================================
+
+async def structure_linkedin_profile(raw_text: str) -> dict:
+    """Structure raw LinkedIn profile text into structured JSON."""
+    content = await _call_flash_lite(
+        system=LINKEDIN_STRUCTURING_PROMPT,
+        user_content=raw_text,
+        task="structure_linkedin",
+    )
+
+    result = _parse_json_response(content)
+    if result and isinstance(result, dict):
+        return result
+
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        logger.error("linkedin_structure_parse_error", content=content[:500])
+        return {"raw_text": raw_text, "parse_error": True}
+
+
+async def analyze_linkedin_profile(
+    structured: dict,
+    knowledge: Optional[dict] = None,
+    locale: str = "pt-BR",
+) -> tuple[list[dict], list[dict]]:
+    """Analyze a LinkedIn profile and return improvement suggestions + cross-references."""
+    context_data: dict = {"linkedin_profile": structured}
+    if knowledge:
+        context_data["candidate_knowledge"] = knowledge
+
+    context = json.dumps(context_data, ensure_ascii=False, indent=2)
+
+    content = await _call_sonnet(
+        system=get_linkedin_analysis_prompt(locale),
+        user_content=context,
+        task="linkedin_analysis",
+        max_tokens=6144,
+    )
+
+    result = _parse_json_response(content)
+    if result and isinstance(result, dict):
+        suggestions = result.get("suggestions", [])
+        cross_ref = result.get("crossRef", [])
+        return suggestions[:8], cross_ref
+
+    try:
+        parsed = json.loads(content)
+        if isinstance(parsed, dict):
+            return parsed.get("suggestions", [])[:8], parsed.get("crossRef", [])
+        return [], []
+    except json.JSONDecodeError:
+        logger.error("linkedin_analysis_parse_error", content=content[:500])
+        return [], []

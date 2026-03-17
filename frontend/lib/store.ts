@@ -327,6 +327,86 @@ export const useAdminStore = create<AdminState>((set) => ({
   setLoading: (loading) => set({ loading }),
 }));
 
+// --- LinkedIn Store ---
+
+interface LinkedInStructured {
+  name?: string;
+  headline?: string;
+  location?: string;
+  about?: string;
+  experience?: Array<{
+    company: string;
+    role: string;
+    startDate?: string;
+    endDate?: string;
+    location?: string;
+    description?: string;
+  }>;
+  education?: Array<{
+    institution: string;
+    degree: string;
+    field?: string;
+  }>;
+  skills?: string[];
+  certifications?: Array<{ name: string; issuer?: string }>;
+  courses?: Array<{ name: string; institution?: string }>;
+  honors?: string[];
+  languages?: Array<{ language: string; level?: string }>;
+  recommendations?: string[];
+  volunteerWork?: Array<{ organization: string; role?: string }>;
+}
+
+interface LinkedInSuggestion {
+  id: string;
+  section: string;
+  severity: "high" | "medium" | "low";
+  title: string;
+  detail: string;
+  examples: Array<{ before: string; after: string }>;
+  linkedinSpecific?: boolean;
+}
+
+interface LinkedInCrossRef {
+  section: string;
+  insight: string;
+  source: string;
+}
+
+interface LinkedInState {
+  structured: LinkedInStructured | null;
+  suggestions: LinkedInSuggestion[];
+  crossRef: LinkedInCrossRef[];
+  loading: boolean;
+  analyzing: boolean;
+  setStructured: (s: LinkedInStructured | null) => void;
+  setSuggestions: (s: LinkedInSuggestion[]) => void;
+  setCrossRef: (c: LinkedInCrossRef[]) => void;
+  setLoading: (l: boolean) => void;
+  setAnalyzing: (a: boolean) => void;
+  reset: () => void;
+}
+
+export const useLinkedInStore = create<LinkedInState>((set) => ({
+  structured: null,
+  suggestions: [],
+  crossRef: [],
+  loading: false,
+  analyzing: false,
+  setStructured: (structured) => set({ structured }),
+  setSuggestions: (suggestions) => set({ suggestions }),
+  setCrossRef: (crossRef) => set({ crossRef }),
+  setLoading: (loading) => set({ loading }),
+  setAnalyzing: (analyzing) => set({ analyzing }),
+  reset: () =>
+    set({
+      structured: null,
+      suggestions: [],
+      crossRef: [],
+      loading: false,
+      analyzing: false,
+    }),
+}));
+
 // --- Version Store ---
 
 export interface ChangelogItem {

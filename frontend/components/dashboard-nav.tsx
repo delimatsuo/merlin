@@ -20,6 +20,7 @@ import {
   LogOut,
   User,
   Settings,
+  Linkedin,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
@@ -36,6 +37,7 @@ export function DashboardNav() {
     { href: "/dashboard", label: t("nav.applications"), icon: Briefcase },
     { href: "/dashboard/profile", label: t("nav.profile"), icon: UserIcon },
     { href: "/dashboard/job", label: t("nav.newJob"), icon: Plus },
+    { href: "/dashboard/linkedin", label: t("nav.linkedin"), icon: Linkedin },
   ];
   const { user } = useAuthStore();
   const { isAdmin, setIsAdmin } = useAdminStore();
