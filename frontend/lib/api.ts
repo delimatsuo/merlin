@@ -1,4 +1,5 @@
 import { auth } from "./firebase";
+import { captureError, addBreadcrumb } from "./sentry";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -42,7 +43,9 @@ class ApiClient {
       } else {
         message = `Erro ${response.status}. Tente novamente.`;
       }
-      throw new Error(message);
+      const err = new Error(message);
+      captureError(err, { status: response.status, url: response.url });
+      throw err;
     }
     return response.json();
   }
@@ -71,6 +74,7 @@ class ApiClient {
   }
 
   async get<T>(path: string): Promise<T> {
+    addBreadcrumb("api", `GET ${path}`);
     const response = await this.retryOnce(async () => {
       const headers = await this.getHeaders();
       return fetch(`${API_BASE_URL}${path}`, { headers });
@@ -79,6 +83,7 @@ class ApiClient {
   }
 
   async post<T>(path: string, body?: unknown): Promise<T> {
+    addBreadcrumb("api", `POST ${path}`);
     const response = await this.retryOnce(async () => {
       const headers = await this.getHeaders();
       return fetch(`${API_BASE_URL}${path}`, {

@@ -18,6 +18,16 @@ load_secrets_from_gcp()
 
 settings = get_settings()
 
+# Initialize Sentry for error tracking (before app creation)
+if settings.sentry_dsn:
+    import sentry_sdk
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        environment="production" if os.getenv("K_SERVICE") else "development",
+        traces_sample_rate=0.1,
+        send_default_pii=False,
+    )
+
 # Initialize Firebase Admin SDK
 if not firebase_admin._apps:
     firebase_admin.initialize_app(options={

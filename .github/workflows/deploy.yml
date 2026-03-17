@@ -84,6 +84,8 @@ jobs:
           NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=531233742939
           NEXT_PUBLIC_FIREBASE_APP_ID=1:531233742939:web:ca00cb4179af522e689f7e
           NEXT_PUBLIC_API_URL=${{ secrets.API_URL }}
+          NEXT_PUBLIC_SENTRY_DSN=${{ secrets.SENTRY_FRONTEND_DSN }}
+          NEXT_PUBLIC_SENTRY_RELEASE=${{ github.sha }}
           ENVEOF
 
       - name: Type check

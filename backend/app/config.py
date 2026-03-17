@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     brave_search_api_key: str = ""
     gemini_api_key: str = ""
 
+    # Sentry
+    sentry_dsn: str = ""
+
     # Firebase
     firebase_storage_bucket: str = "merlin-489714.firebasestorage.app"
 
@@ -69,6 +72,7 @@ def load_secrets_from_gcp() -> None:
                 "ANTHROPIC_API_KEY": "anthropic_api_key",
                 "BRAVE_SEARCH_API_KEY": "brave_search_api_key",
                 "GEMINI_API_KEY": "gemini_api_key",
+                "SENTRY_DSN": "sentry_dsn",
             }
 
             for secret_name, env_name in secrets.items():
