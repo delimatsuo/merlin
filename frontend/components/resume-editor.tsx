@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Markdown from "react-markdown";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -50,6 +50,7 @@ export function ResumeEditor({
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
   const [regenerateInstructions, setRegenerateInstructions] = useState("");
+  const coverLetterWarningShown = useRef(false);
 
   const activeVersion = versions.find((v) => v.id === activeVersionId);
 
@@ -63,6 +64,10 @@ export function ResumeEditor({
   const handleStartEdit = () => {
     setEditContent(content);
     setEditing(true);
+    if (activeTab === "resume" && activeVersion?.coverLetterText && !coverLetterWarningShown.current) {
+      toast.info(t("editor.coverLetterWontUpdate"));
+      coverLetterWarningShown.current = true;
+    }
   };
 
   const handleSave = async () => {

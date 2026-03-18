@@ -240,6 +240,7 @@
   "editor.changeAts": "ATS",
   "editor.changeImpact": "Impacto",
   "editor.changeStructure": "Estrutura",
+  "editor.coverLetterWontUpdate": "A carta de apresentação não será atualizada automaticamente. Use 'Regenerar' para atualizar ambos.",
 
   "linkedin.title": "Otimizador de LinkedIn",
   "linkedin.subtitle": "Analise e melhore seu perfil do LinkedIn com IA para aumentar sua visibilidade para recrutadores.",

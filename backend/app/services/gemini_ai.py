@@ -192,11 +192,13 @@ Return a JSON object with field names as keys and arrays of structured objects a
 Only include the fields that need repair."""
 
 
-async def _repair_malformed_entries(data: dict) -> dict:
+async def _repair_malformed_entries(data: dict, exclude_fields: list[str] | None = None) -> dict:
     """If any list fields contain non-dict entries, re-prompt the AI to structure them."""
     malformed: dict[str, list[str]] = {}
 
     for field in _OBJECT_LIST_FIELDS:
+        if exclude_fields and field in exclude_fields:
+            continue
         items = data.get(field, [])
         if not isinstance(items, list):
             continue
@@ -276,7 +278,8 @@ async def structure_resume(raw_text: str) -> dict:
             return {"raw_text": raw_text, "parse_error": True}
 
     # Repair pass: if any list fields contain non-dict entries, re-structure them
-    result = await _repair_malformed_entries(result)
+    # Exclude certifications — profile schema uses list[str], not list[dict]
+    result = await _repair_malformed_entries(result, exclude_fields=["certifications"])
     return result
 
 
