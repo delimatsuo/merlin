@@ -182,7 +182,19 @@ export default function TermsPTBR() {
 
       <section>
         <h2 className="text-xl font-semibold text-foreground mb-3">
-          12. Contato
+          12. Disponibilidade Regional
+        </h2>
+        <p className="text-sm text-foreground/80 leading-relaxed">
+          O Servico e projetado e disponibilizado para usuarios nos{" "}
+          <strong>Estados Unidos</strong> e no <strong>Brasil</strong>. Usuarios
+          de outras regioes podem acessar o Servico por sua conta e risco,
+          sujeitos a estes Termos e as leis locais aplicaveis.
+        </p>
+      </section>
+
+      <section>
+        <h2 className="text-xl font-semibold text-foreground mb-3">
+          13. Contato
         </h2>
         <p className="text-sm text-foreground/80 leading-relaxed">
           Para duvidas sobre estes termos, entre em contato:{" "}

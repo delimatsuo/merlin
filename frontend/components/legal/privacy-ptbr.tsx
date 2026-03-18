@@ -304,6 +304,19 @@ export default function PrivacyPTBR() {
         </p>
       </section>
 
+      <section>
+        <h2 className="text-xl font-semibold text-foreground mb-3">
+          14. Disponibilidade Regional
+        </h2>
+        <p className="text-sm text-foreground/80 leading-relaxed">
+          A plataforma Merlin esta atualmente disponivel para usuarios nos{" "}
+          <strong>Estados Unidos</strong> e no <strong>Brasil</strong>. Usuarios
+          de outras regioes podem acessar o Servico, mas devem estar cientes de
+          que as leis de privacidade locais fora dessas jurisdicoes podem nao
+          ser especificamente abordadas por esta politica.
+        </p>
+      </section>
+
       <section className="border-t border-border pt-8">
         <p className="text-xs text-muted-foreground leading-relaxed">
           Ella Executive Search Ltda — CNPJ 44.891.922/0001-01
