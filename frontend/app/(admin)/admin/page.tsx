@@ -14,6 +14,7 @@ export default function AdminDashboard() {
 
   const [loading, setLoading] = useState(!storeStats);
   const [aiQuality, setAiQuality] = useState<Record<string, number | string>>({});
+  const [featureCounts, setFeatureCounts] = useState<Record<string, number>>({});
 
   // Always fetch fresh stats on mount
   useEffect(() => {
@@ -26,6 +27,7 @@ export default function AdminDashboard() {
           globalGenerations: number;
           globalLimit: number;
           aiQuality: Record<string, number | string>;
+          featureCounts: Record<string, number>;
         }>("/api/admin/stats");
         setStats(data.stats);
         setDailyChart(data.dailyChart);
@@ -33,6 +35,7 @@ export default function AdminDashboard() {
         setGlobalGenerations(data.globalGenerations);
         setGlobalLimit(data.globalLimit);
         if (data.aiQuality) setAiQuality(data.aiQuality);
+        if (data.featureCounts) setFeatureCounts(data.featureCounts);
       } catch {
         // Use cached data if fetch fails
       } finally {
@@ -100,6 +103,68 @@ export default function AdminDashboard() {
           <span>{dailyChart[dailyChart.length - 1]?.date.slice(5)}</span>
         </div>
       </div>
+
+      {/* Feature Breakdown */}
+      {Object.keys(featureCounts).length > 0 && (
+        <div className="rounded-xl border border-border/50 p-6">
+          <h2 className="text-sm font-medium mb-4">Chamadas de IA por feature</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-border/50 text-muted-foreground">
+                  <th className="text-left py-2 font-medium">Feature</th>
+                  <th className="text-right py-2 font-medium">Chamadas</th>
+                  <th className="text-right py-2 font-medium">Custo est. (USD)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(featureCounts)
+                  .sort(([, a], [, b]) => b - a)
+                  .map(([feature, count]) => {
+                    const costMap: Record<string, number> = {
+                      resume_rewrite: 0.020, cover_letter: 0.012, job_analysis: 0.006,
+                      interview_questions: 0.004, voice_processing: 0.006, followup_questions: 0.004,
+                      cv_recommendations: 0.012, linkedin_analysis: 0.015,
+                      resume_structuring: 0.003, linkedin_structuring: 0.003,
+                    };
+                    const labelMap: Record<string, string> = {
+                      resume_rewrite: "Reescrita de currículo", cover_letter: "Carta de apresentação",
+                      job_analysis: "Análise de vaga", interview_questions: "Perguntas de entrevista",
+                      voice_processing: "Processamento de respostas", followup_questions: "Perguntas complementares",
+                      cv_recommendations: "Recomendações CV", linkedin_analysis: "Análise LinkedIn",
+                      resume_structuring: "Estruturação currículo", linkedin_structuring: "Estruturação LinkedIn",
+                    };
+                    const cost = (costMap[feature] || 0.005) * count;
+                    return (
+                      <tr key={feature} className="border-b border-border/30">
+                        <td className="py-2">{labelMap[feature] || feature}</td>
+                        <td className="py-2 text-right font-mono">{count}</td>
+                        <td className="py-2 text-right font-mono">${cost.toFixed(2)}</td>
+                      </tr>
+                    );
+                  })}
+                <tr className="border-t border-border/50 font-medium">
+                  <td className="py-2">Total</td>
+                  <td className="py-2 text-right font-mono">
+                    {Object.values(featureCounts).reduce((a, b) => a + b, 0)}
+                  </td>
+                  <td className="py-2 text-right font-mono">
+                    ${Object.entries(featureCounts).reduce((sum, [f, c]) => {
+                      const costMap: Record<string, number> = {
+                        resume_rewrite: 0.020, cover_letter: 0.012, job_analysis: 0.006,
+                        interview_questions: 0.004, voice_processing: 0.006, followup_questions: 0.004,
+                        cv_recommendations: 0.012, linkedin_analysis: 0.015,
+                        resume_structuring: 0.003, linkedin_structuring: 0.003,
+                      };
+                      return sum + (costMap[f] || 0.005) * c;
+                    }, 0).toFixed(2)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* AI Quality */}
       {(aiQuality.malformed_entries || aiQuality.repair_failed) && (
