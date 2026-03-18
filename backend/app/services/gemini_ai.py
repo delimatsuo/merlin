@@ -207,7 +207,16 @@ async def _repair_malformed_entries(data: dict) -> dict:
     if not malformed:
         return data  # Nothing to repair
 
-    logger.info("ai_repair_malformed", fields=list(malformed.keys()), count=sum(len(v) for v in malformed.values()))
+    total_bad = sum(len(v) for v in malformed.values())
+    logger.info("ai_repair_malformed", fields=list(malformed.keys()), count=total_bad)
+
+    # Track in Firestore for admin dashboard
+    try:
+        from app.services.firestore import FirestoreService
+        fs = FirestoreService()
+        await fs.increment_ai_quality_issue("malformed_entries", total_bad)
+    except Exception:
+        pass  # Don't block on tracking failure
 
     try:
         repair_input = json.dumps(malformed, ensure_ascii=False, indent=2)
@@ -232,6 +241,12 @@ async def _repair_malformed_entries(data: dict) -> dict:
 
     except Exception as e:
         logger.warning("ai_repair_failed", error=str(e))
+        try:
+            from app.services.firestore import FirestoreService
+            fs = FirestoreService()
+            await fs.increment_ai_quality_issue("repair_failed", 1)
+        except Exception:
+            pass
         # Fallback: keep only valid dicts rather than crashing
         for field in malformed:
             original = data.get(field, [])

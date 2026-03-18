@@ -827,6 +827,30 @@ class FirestoreService:
         doc = await doc_ref.get()
         return doc.to_dict().get("totalGenerations", 0)
 
+    # --- AI Quality Tracking ---
+
+    async def increment_ai_quality_issue(self, issue_type: str, count: int = 1) -> None:
+        """Track AI quality issues (malformed entries, parse failures, repair failures)."""
+        try:
+            doc_ref = self.db.collection("platformStats").document("aiQuality")
+            await doc_ref.set(
+                {
+                    issue_type: firestore.Increment(count),
+                    "lastOccurrence": datetime.now(timezone.utc).isoformat(),
+                },
+                merge=True,
+            )
+        except Exception as e:
+            logger.warning("ai_quality_tracking_error", error=str(e))
+
+    async def get_ai_quality_stats(self) -> dict:
+        """Get AI quality issue counters."""
+        doc_ref = self.db.collection("platformStats").document("aiQuality")
+        doc = await doc_ref.get()
+        if doc.exists:
+            return doc.to_dict()
+        return {}
+
     # --- Denormalized Counter Helpers ---
 
     async def _increment_user_stat(self, uid: str, field: str, delta: int) -> None:
