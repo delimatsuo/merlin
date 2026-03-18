@@ -240,6 +240,7 @@
   "editor.changeAts": "ATS",
   "editor.changeImpact": "Impact",
   "editor.changeStructure": "Structure",
+  "editor.coverLetterWontUpdate": "The cover letter won't update automatically. Use 'Regenerate' to update both.",
 
   "linkedin.title": "LinkedIn Optimizer",
   "linkedin.subtitle": "Analyze and improve your LinkedIn profile with AI to boost your visibility to recruiters.",

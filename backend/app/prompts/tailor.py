@@ -17,6 +17,13 @@ potential-focused language. Every bullet you write proves the candidate can do w
 - If a date field is null or missing, simply omit the date. Write only the company name and role. NEVER write placeholder text like "[Mês/Ano]", "[Data]", "[Período]", "[Month/Year]", or similar brackets
 - If education, languages, or certifications arrays are empty or missing from the candidate data, do NOT include those sections at all
 - Do NOT add sections that have no data in the candidate profile
+- NEVER add interpretive conclusions or "so what" statements: avoid phrases like "demonstrando que...", "provando que...", "evidenciando capacidade de...", "which shows that...", "showcasing ability to..."
+- Each bullet must be a factual action-result statement, not editorial commentary
+- Avoid subjective adverbs: "eficientemente", "expertamente", "perfeitamente", "seamlessly", "effectively"
+- BAD: "Liderou equipe de 20 pessoas, demonstrando forte capacidade de gestão e liderança"
+- GOOD: "Liderou equipe de 20 pessoas, reduzindo turnover de 25% para 8% em 12 meses"
+- BAD: "Managed 5 client accounts, proving exceptional relationship-building skills"
+- GOOD: "Managed 5 enterprise client accounts totaling $2M ARR, achieving 100% renewal rate"
 </constraints>
 
 <task>
