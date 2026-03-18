@@ -1,5 +1,6 @@
 """Firebase authentication middleware."""
 
+import asyncio
 from typing import Optional
 
 import structlog
@@ -9,6 +10,10 @@ from firebase_admin import auth as firebase_auth
 from app.config import get_settings
 
 logger = structlog.get_logger()
+
+# In-memory set of UIDs whose user doc has been ensured this process lifetime.
+# Avoids a Firestore write on every request.
+_ensured_uids: set[str] = set()
 
 
 class AuthenticatedUser:
@@ -35,12 +40,26 @@ async def get_current_user(request: Request) -> AuthenticatedUser:
 
     try:
         decoded_token = firebase_auth.verify_id_token(token)
-        return AuthenticatedUser(
+        user = AuthenticatedUser(
             uid=decoded_token["uid"],
             email=decoded_token.get("email"),
             name=decoded_token.get("name"),
             email_verified=decoded_token.get("email_verified", False),
         )
+
+        # Ensure user doc exists in Firestore (fire-and-forget, once per process per UID)
+        if user.uid not in _ensured_uids:
+            _ensured_uids.add(user.uid)
+            try:
+                from app.services.firestore import FirestoreService
+                fs = FirestoreService()
+                asyncio.create_task(
+                    fs.ensure_user_doc(user.uid, email=user.email or "", name=user.name or "")
+                )
+            except Exception:
+                pass  # Non-blocking
+
+        return user
     except firebase_auth.ExpiredIdTokenError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
