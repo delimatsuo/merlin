@@ -172,7 +172,7 @@ async def _call_flash(
     return content
 
 
-_OBJECT_LIST_FIELDS = ["experience", "education", "certifications", "courses", "volunteerWork"]
+_OBJECT_LIST_FIELDS = ["experience", "education", "courses", "volunteerWork"]
 
 _REPAIR_PROMPT = """<task>
 The following JSON entries were returned as plain strings instead of structured objects.
@@ -183,7 +183,6 @@ Extract as much information as possible from each string.
 <rules>
 - For experience: {"company": "", "role": "", "startDate": null, "endDate": null, "description": ""}
 - For education: {"institution": "", "degree": "", "field": null, "startDate": null, "endDate": null}
-- For certifications: {"name": "", "issuer": null, "date": null}
 - For courses: {"name": "", "institution": null}
 - For volunteerWork: {"organization": "", "role": null, "description": null}
 </rules>
