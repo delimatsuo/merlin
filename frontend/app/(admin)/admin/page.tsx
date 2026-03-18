@@ -13,6 +13,7 @@ export default function AdminDashboard() {
   const { setStats, setDailyChart, setRecentGenerations, setGlobalGenerations, setGlobalLimit } = useAdminStore();
 
   const [loading, setLoading] = useState(!storeStats);
+  const [aiQuality, setAiQuality] = useState<Record<string, number | string>>({});
 
   // Always fetch fresh stats on mount
   useEffect(() => {
@@ -24,12 +25,14 @@ export default function AdminDashboard() {
           recentGenerations: { id: string; uid: string; userEmail: string; company: string; createdAt: string }[];
           globalGenerations: number;
           globalLimit: number;
+          aiQuality: Record<string, number | string>;
         }>("/api/admin/stats");
         setStats(data.stats);
         setDailyChart(data.dailyChart);
         setRecentGenerations(data.recentGenerations);
         setGlobalGenerations(data.globalGenerations);
         setGlobalLimit(data.globalLimit);
+        if (data.aiQuality) setAiQuality(data.aiQuality);
       } catch {
         // Use cached data if fetch fails
       } finally {
@@ -97,6 +100,33 @@ export default function AdminDashboard() {
           <span>{dailyChart[dailyChart.length - 1]?.date.slice(5)}</span>
         </div>
       </div>
+
+      {/* AI Quality */}
+      {(aiQuality.malformed_entries || aiQuality.repair_failed) && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-6">
+          <h2 className="text-sm font-medium mb-4">Qualidade da IA (estruturação)</h2>
+          <div className="grid grid-cols-3 gap-4 text-xs">
+            <div>
+              <p className="text-muted-foreground">Entradas malformadas</p>
+              <p className="text-lg font-semibold mt-1">{Number(aiQuality.malformed_entries || 0)}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Reparos falharam</p>
+              <p className="text-lg font-semibold mt-1">{Number(aiQuality.repair_failed || 0)}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">Última ocorrência</p>
+              <p className="text-sm mt-1 text-muted-foreground">
+                {aiQuality.lastOccurrence
+                  ? new Date(aiQuality.lastOccurrence as string).toLocaleString("pt-BR", {
+                      day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+                    })
+                  : "—"}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Recent Activity */}
       <div className="rounded-xl border border-border/50 p-6">

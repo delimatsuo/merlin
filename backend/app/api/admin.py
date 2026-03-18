@@ -67,12 +67,14 @@ async def get_stats(
     global_count = await fs.get_global_generation_count()
     admin_settings = await AdminSettingsService.get()
     global_limit = getattr(admin_settings, "global_generation_limit", 10000)
+    ai_quality = await fs.get_ai_quality_stats()
     return {
         "stats": stats,
         "dailyChart": daily,
         "recentGenerations": recent,
         "globalGenerations": global_count,
         "globalLimit": global_limit,
+        "aiQuality": ai_quality,
     }
 
 
