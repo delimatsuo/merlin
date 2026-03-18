@@ -3,23 +3,24 @@
 
 def get_recommendations_prompt(locale: str = "pt-BR") -> str:
     """Return the recommendations system prompt localized to the given locale."""
-    if locale == "en":
-        market_context = """<market_context>
-Focus on US/international ATS practices:
-- Quantified achievements (numbers, percentages, dollar amounts)
+    market_context_en = """- Quantified achievements (numbers, percentages, dollar amounts)
 - Strong action verbs at the start of each bullet
 - One-page rule for candidates with <10 years experience
 - Keyword density matching common ATS systems
-- Modern format: no objective statements, no references section
-</market_context>"""
-    else:
-        market_context = """<market_context>
-Focus on Brazilian market conventions:
-- LGPD compliance (avoid unnecessary personal data like CPF, marital status, photo)
+- Modern format: no objective statements, no references section"""
+
+    market_context_ptbr = """- LGPD compliance (avoid unnecessary personal data like CPF, marital status, photo)
 - CLT/PJ context awareness
 - Local conventions (Formacao Academica, Experiencia Profissional)
 - Portuguese action verbs and professional tone
-- Adapt keyword strategy for Brazilian ATS systems
+- Adapt keyword strategy for Brazilian ATS systems"""
+
+    market_context = f"""<market_context>
+Select the market context based on the resume's language:
+- If the resume is in English, apply US/international ATS practices:
+{market_context_en}
+- If the resume is in Portuguese, apply Brazilian market conventions:
+{market_context_ptbr}
 </market_context>"""
 
     language = "English" if locale == "en" else "Brazilian Portuguese"
@@ -27,7 +28,7 @@ Focus on Brazilian market conventions:
     return f"""<task>
 You are an expert career coach performing a CV health check. Analyze the candidate's profile and knowledge file, then produce exactly 5 actionable recommendations to improve their resume.
 
-Write all output in {language}.
+CRITICAL LANGUAGE RULE: Detect the language of the candidate's resume content (experience descriptions, summary, skills). Write ALL output — titles, details, and before/after examples — in the SAME language as the resume. If the resume is in English, write in English. If in Portuguese, write in Brazilian Portuguese. Fall back to {language} only if the resume language is ambiguous.
 </task>
 
 {market_context}
