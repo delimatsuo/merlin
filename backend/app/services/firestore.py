@@ -806,6 +806,27 @@ class FirestoreService:
         except Exception as e:
             logger.error("storage_cleanup_error", uid=uid, error=str(e))
 
+    # --- Global Generation Counter ---
+
+    async def get_global_generation_count(self) -> int:
+        """Get total generations across all time (resumes + linkedin)."""
+        doc_ref = self.db.collection("platformStats").document("global")
+        doc = await doc_ref.get()
+        if doc.exists:
+            return doc.to_dict().get("totalGenerations", 0)
+        return 0
+
+    async def increment_global_generation(self) -> int:
+        """Atomically increment the global generation counter. Returns new count."""
+        doc_ref = self.db.collection("platformStats").document("global")
+        await doc_ref.set(
+            {"totalGenerations": firestore.Increment(1)},
+            merge=True,
+        )
+        # Read back the new count
+        doc = await doc_ref.get()
+        return doc.to_dict().get("totalGenerations", 0)
+
     # --- Denormalized Counter Helpers ---
 
     async def _increment_user_stat(self, uid: str, field: str, delta: int) -> None:

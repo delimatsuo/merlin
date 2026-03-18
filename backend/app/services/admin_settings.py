@@ -18,6 +18,7 @@ _CACHE_TTL = 60  # seconds
 
 class AdminSettings(BaseModel):
     daily_limit: int = Field(default=5, ge=1, le=50)
+    global_generation_limit: int = Field(default=10000, ge=1)
     tts_enabled: bool = True
     interview_enabled: bool = True
     cover_letter_enabled: bool = True

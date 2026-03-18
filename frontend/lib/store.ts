@@ -277,6 +277,7 @@ export interface AdminGeneration {
 
 export interface AdminSettingsData {
   daily_limit: number;
+  global_generation_limit: number;
   tts_enabled: boolean;
   interview_enabled: boolean;
   cover_letter_enabled: boolean;
@@ -285,6 +286,8 @@ export interface AdminSettingsData {
 interface AdminState {
   isAdmin: boolean | null; // null = not checked yet
   stats: AdminStats | null;
+  globalGenerations: number;
+  globalLimit: number;
   dailyChart: AdminDailyPoint[];
   recentGenerations: AdminGeneration[];
   users: AdminUser[];
@@ -294,6 +297,8 @@ interface AdminState {
   loading: boolean;
   setIsAdmin: (v: boolean) => void;
   setStats: (s: AdminStats) => void;
+  setGlobalGenerations: (n: number) => void;
+  setGlobalLimit: (n: number) => void;
   setDailyChart: (d: AdminDailyPoint[]) => void;
   setRecentGenerations: (g: AdminGeneration[]) => void;
   setUsers: (u: AdminUser[]) => void;
@@ -307,6 +312,8 @@ interface AdminState {
 export const useAdminStore = create<AdminState>((set) => ({
   isAdmin: null,
   stats: null,
+  globalGenerations: 0,
+  globalLimit: 10000,
   dailyChart: [],
   recentGenerations: [],
   users: [],
@@ -316,6 +323,8 @@ export const useAdminStore = create<AdminState>((set) => ({
   loading: false,
   setIsAdmin: (isAdmin) => set({ isAdmin }),
   setStats: (stats) => set({ stats }),
+  setGlobalGenerations: (globalGenerations) => set({ globalGenerations }),
+  setGlobalLimit: (globalLimit) => set({ globalLimit }),
   setDailyChart: (dailyChart) => set({ dailyChart }),
   setRecentGenerations: (recentGenerations) => set({ recentGenerations }),
   setUsers: (users) => set({ users }),

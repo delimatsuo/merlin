@@ -8,6 +8,7 @@ from slowapi.util import get_remote_address
 
 from app.auth import AuthenticatedUser, get_current_user
 from app.config import get_settings
+from app.services.admin_settings import AdminSettingsService
 from app.schemas.api import (
     LinkedInAnalyzeRequest,
     LinkedInAnalyzeResponse,
@@ -224,6 +225,16 @@ async def analyze_linkedin(
 
     fs = FirestoreService()
 
+    # Check global generation limit
+    global_count = await fs.get_global_generation_count()
+    global_settings = await AdminSettingsService.get()
+    global_limit = getattr(global_settings, "global_generation_limit", 10000)
+    if global_count >= global_limit:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="O Merlin atingiu o limite de gerações disponíveis. Obrigado por participar!",
+        )
+
     # Guard: profile must exist (RA-6)
     profile = await fs.get_linkedin_profile(user.uid)
     if not profile:
@@ -258,8 +269,9 @@ async def analyze_linkedin(
             detail="Erro ao analisar o perfil LinkedIn. Tente novamente em alguns minutos.",
         )
 
-    # Save suggestions
+    # Save suggestions + increment global counter
     await fs.save_linkedin_suggestions(user.uid, suggestions, cross_ref, body.locale)
+    await fs.increment_global_generation()
 
     logger.info("linkedin_analyze_complete", uid=user.uid, suggestion_count=len(suggestions))
 

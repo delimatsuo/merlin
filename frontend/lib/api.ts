@@ -36,6 +36,8 @@ class ApiClient {
         message = detail;
       } else if (response.status === 429) {
         message = typeof detail === "string" ? detail : "Muitas requisicoes. Aguarde um momento.";
+      } else if (response.status === 503) {
+        message = typeof detail === "string" ? detail : "O serviço está temporariamente indisponível. Tente novamente mais tarde.";
       } else if (response.status === 413) {
         message = "Arquivo muito grande.";
       } else if (response.status >= 500) {
@@ -56,6 +58,9 @@ class ApiClient {
     }
     if (status === 429) {
       return typeof detail === "string" ? detail : "Muitas requisicoes. Aguarde um momento.";
+    }
+    if (status === 503) {
+      return typeof detail === "string" ? detail : "O serviço está temporariamente indisponível. Tente novamente mais tarde.";
     }
     if (status >= 500) return "Erro interno. Tente novamente em alguns minutos.";
     return `Erro ${status}. Tente novamente.`;
