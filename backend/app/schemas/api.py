@@ -292,6 +292,14 @@ class LinkedInStructured(BaseModel):
                 result.append(item)
         return result
 
+    @field_validator("experience", "education", "certifications", "courses", "volunteer_work", mode="before")
+    @classmethod
+    def coerce_object_list(cls, v: list) -> list:
+        """Skip non-dict entries — AI sometimes returns strings instead of objects."""
+        if not isinstance(v, list):
+            return []
+        return [item for item in v if isinstance(item, dict)]
+
 
 class LinkedInUploadResponse(BaseModel):
     structured: LinkedInStructured
