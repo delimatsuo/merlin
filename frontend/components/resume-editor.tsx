@@ -64,7 +64,7 @@ export function ResumeEditor({
   const handleStartEdit = () => {
     setEditContent(content);
     setEditing(true);
-    if (activeTab === "resume" && !coverLetterWarningShown.current) {
+    if (activeTab === "resume" && activeVersion?.coverLetterText && !coverLetterWarningShown.current) {
       toast.info(t("editor.coverLetterWontUpdate"));
       coverLetterWarningShown.current = true;
     }
