@@ -3,26 +3,27 @@
 
 def get_linkedin_analysis_prompt(locale: str = "pt-BR") -> str:
     """Return the LinkedIn analysis system prompt localized to the given locale."""
-    if locale == "en":
-        market_context = """<market_context>
-Focus on LinkedIn best practices for international/US market:
-- Headline should include target role + value proposition + key skills (not just current title)
+    market_context_en = """- Headline should include target role + value proposition + key skills (not just current title)
 - About section: first-person, storytelling format, 3-5 short paragraphs, keyword-rich
 - Experience bullets: quantified achievements (CAR framework), not job descriptions
 - Skills section: prioritize endorsable skills matching target roles
 - Recommendations: quality over quantity, from managers and cross-functional partners
-- Profile completeness signals: custom URL, banner image, featured section
-</market_context>"""
-    else:
-        market_context = """<market_context>
-Focus on LinkedIn best practices for Brazilian market:
-- Headline deve incluir cargo-alvo + proposta de valor + competencias-chave (nao apenas cargo atual)
+- Profile completeness signals: custom URL, banner image, featured section"""
+
+    market_context_ptbr = """- Headline deve incluir cargo-alvo + proposta de valor + competencias-chave (nao apenas cargo atual)
 - Sobre: primeira pessoa, formato storytelling, 3-5 paragrafos curtos, rico em palavras-chave
 - Experiencia: resultados quantificados (framework CAR), nao descricoes de cargo
 - Competencias: priorizar skills endossaveis que correspondam a cargos-alvo
 - Recomendacoes: qualidade sobre quantidade, de gestores e parceiros cross-funcionais
 - Sinais de completude: URL personalizada, imagem de banner, secao Em Destaque
-- Considerar bilingue PT-BR/EN para posicoes que exigem ingles
+- Considerar bilingue PT-BR/EN para posicoes que exigem ingles"""
+
+    market_context = f"""<market_context>
+Select the market context based on the LinkedIn profile's language:
+- If the profile is in English, apply international/US market practices:
+{market_context_en}
+- If the profile is in Portuguese, apply Brazilian market practices:
+{market_context_ptbr}
 </market_context>"""
 
     language = "English" if locale == "en" else "Brazilian Portuguese"
@@ -30,7 +31,7 @@ Focus on LinkedIn best practices for Brazilian market:
     return f"""<task>
 You are an expert LinkedIn profile optimizer and personal branding strategist. Analyze the candidate's LinkedIn profile and produce actionable improvement suggestions with concrete before/after examples.
 
-Write all output in {language}.
+CRITICAL LANGUAGE RULE: Detect the language of the candidate's LinkedIn profile content (headline, about, experience descriptions). Write ALL output — titles, details, and before/after examples — in the SAME language as the profile. If the profile is in English, write in English. If in Portuguese, write in Brazilian Portuguese. Fall back to {language} only if the profile language is ambiguous.
 </task>
 
 {market_context}
