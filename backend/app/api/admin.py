@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from app.auth import AuthenticatedUser, get_admin_user
+from app.auth import AuthenticatedUser, get_admin_user, get_current_user
 from app.services.admin_settings import AdminSettings, AdminSettingsService
 from app.services.audit import log_admin_action
 from app.services.firestore import FirestoreService
@@ -13,6 +13,34 @@ from app.services.firestore import FirestoreService
 logger = structlog.get_logger()
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
+
+
+@router.get("/service-status")
+async def get_service_status():
+    """Check if service is active. No auth required."""
+    fs = FirestoreService()
+    count = await fs.get_global_generation_count()
+    settings = await AdminSettingsService.get()
+    limit = getattr(settings, "global_generation_limit", 10000)
+    return {
+        "active": count < limit,
+        "totalGenerations": count,
+        "limit": limit,
+    }
+
+
+@router.get("/generation-count")
+@limiter.limit("20/minute")
+async def get_generation_count(
+    request: Request,
+    admin: AuthenticatedUser = Depends(get_admin_user),
+):
+    """Admin-only: get current global generation count."""
+    fs = FirestoreService()
+    count = await fs.get_global_generation_count()
+    settings = await AdminSettingsService.get()
+    limit = getattr(settings, "global_generation_limit", 10000)
+    return {"totalGenerations": count, "limit": limit}
 
 
 @router.get("/check")
@@ -36,10 +64,15 @@ async def get_stats(
     stats = await fs.get_platform_stats()
     daily = await fs.get_daily_generation_stats(30)
     recent = await fs.get_recent_generations(20)
+    global_count = await fs.get_global_generation_count()
+    admin_settings = await AdminSettingsService.get()
+    global_limit = getattr(admin_settings, "global_generation_limit", 10000)
     return {
         "stats": stats,
         "dailyChart": daily,
         "recentGenerations": recent,
+        "globalGenerations": global_count,
+        "globalLimit": global_limit,
     }
 
 

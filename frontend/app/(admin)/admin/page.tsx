@@ -8,7 +8,9 @@ export default function AdminDashboard() {
   const storeStats = useAdminStore((s) => s.stats);
   const storeDailyChart = useAdminStore((s) => s.dailyChart);
   const storeRecentGens = useAdminStore((s) => s.recentGenerations);
-  const { setStats, setDailyChart, setRecentGenerations } = useAdminStore();
+  const storeGlobalGens = useAdminStore((s) => s.globalGenerations);
+  const storeGlobalLimit = useAdminStore((s) => s.globalLimit);
+  const { setStats, setDailyChart, setRecentGenerations, setGlobalGenerations, setGlobalLimit } = useAdminStore();
 
   const [loading, setLoading] = useState(!storeStats);
 
@@ -20,17 +22,21 @@ export default function AdminDashboard() {
           stats: AdminStats;
           dailyChart: { date: string; count: number }[];
           recentGenerations: { id: string; uid: string; userEmail: string; company: string; createdAt: string }[];
+          globalGenerations: number;
+          globalLimit: number;
         }>("/api/admin/stats");
         setStats(data.stats);
         setDailyChart(data.dailyChart);
         setRecentGenerations(data.recentGenerations);
+        setGlobalGenerations(data.globalGenerations);
+        setGlobalLimit(data.globalLimit);
       } catch {
         // Use cached data if fetch fails
       } finally {
         setLoading(false);
       }
     })();
-  }, [setStats, setDailyChart, setRecentGenerations]);
+  }, [setStats, setDailyChart, setRecentGenerations, setGlobalGenerations, setGlobalLimit]);
 
   const stats = storeStats;
   const dailyChart = storeDailyChart;
@@ -47,11 +53,24 @@ export default function AdminDashboard() {
       <h1 className="text-xl font-semibold">Dashboard</h1>
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <StatCard label="Total de usuários" value={stats?.totalUsers ?? 0} />
         <StatCard label="Gerações hoje" value={stats?.generationsToday ?? 0} />
         <StatCard label="Gerações no mês" value={stats?.generationsMonth ?? 0} />
         <StatCard label="Signups no mês" value={stats?.signupsMonth ?? 0} />
+        <div className="rounded-xl border border-border/50 p-4">
+          <p className="text-xs text-muted-foreground">Gerações globais</p>
+          <p className="text-2xl font-semibold mt-1">
+            {storeGlobalGens.toLocaleString("pt-BR")}
+            <span className="text-sm font-normal text-muted-foreground">
+              {" / "}
+              {storeGlobalLimit.toLocaleString("pt-BR")}
+            </span>
+          </p>
+          {storeGlobalGens >= storeGlobalLimit && (
+            <p className="text-xs text-amber-500 mt-1 font-medium">Limite atingido</p>
+          )}
+        </div>
       </div>
 
       {/* Bar Chart */}

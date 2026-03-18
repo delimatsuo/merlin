@@ -32,6 +32,16 @@ async def generate_tailored_resume(
 
     fs = FirestoreService()
 
+    # Check global generation limit
+    global_count = await fs.get_global_generation_count()
+    global_settings = await AdminSettingsService.get()
+    global_limit = getattr(global_settings, "global_generation_limit", 10000)
+    if global_count >= global_limit:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="O Merlin atingiu o limite de gerações disponíveis. Obrigado por participar!",
+        )
+
     # Check daily usage limit (dynamic from admin settings)
     daily_limit = await AdminSettingsService.get_daily_limit()
     usage = await fs.get_daily_usage(user.uid)
@@ -112,8 +122,9 @@ async def generate_tailored_resume(
         changelog=changelog,
     )
 
-    # Increment daily usage + log generation for admin dashboard
+    # Increment daily usage + global counter + log generation for admin dashboard
     await fs.increment_daily_usage(user.uid)
+    await fs.increment_global_generation()
     await fs.log_generation(user.uid, user.email or "", company)
 
     log_data_access(user.uid, "ai_generate_resume", "application", resource_id=body.application_id)
@@ -160,6 +171,16 @@ async def regenerate_resume(
     logger.info("regenerate_start", uid=user.uid, application_id=body.application_id)
 
     fs = FirestoreService()
+
+    # Check global generation limit
+    global_count = await fs.get_global_generation_count()
+    global_settings = await AdminSettingsService.get()
+    global_limit = getattr(global_settings, "global_generation_limit", 10000)
+    if global_count >= global_limit:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="O Merlin atingiu o limite de gerações disponíveis. Obrigado por participar!",
+        )
 
     # Check daily usage limit (dynamic from admin settings)
     daily_limit = await AdminSettingsService.get_daily_limit()
@@ -224,8 +245,9 @@ async def regenerate_resume(
         changelog=changelog,
     )
 
-    # Increment daily usage + log generation
+    # Increment daily usage + global counter + log generation
     await fs.increment_daily_usage(user.uid)
+    await fs.increment_global_generation()
     company = application.get("jobAnalysis", {}).get("company", "")
     await fs.log_generation(user.uid, user.email or "", company)
 
