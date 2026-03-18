@@ -137,27 +137,132 @@ async def _call_flash_lite(
     return content
 
 
+async def _call_flash(
+    system: str,
+    user_content: str,
+    task: str,
+    temperature: float = 0.2,
+    response_mime_type: str = "application/json",
+) -> str:
+    """Call Gemini 3.1 Flash and return the text response."""
+    client = _get_gemini_client()
+    settings = get_settings()
+
+    user_content = _sanitize_input(user_content)
+
+    response = await client.aio.models.generate_content(
+        model=settings.model_gemini_flash,
+        contents=f"<user_input>\n{user_content}\n</user_input>",
+        config=types.GenerateContentConfig(
+            system_instruction=system,
+            response_mime_type=response_mime_type,
+            temperature=temperature,
+        ),
+    )
+
+    content = response.text
+    logger.info(
+        "ai_usage",
+        model=settings.model_gemini_flash,
+        tier="structuring",
+        task=task,
+        input_tokens=response.usage_metadata.prompt_token_count,
+        output_tokens=response.usage_metadata.candidates_token_count,
+    )
+    return content
+
+
+_OBJECT_LIST_FIELDS = ["experience", "education", "certifications", "courses", "volunteerWork"]
+
+_REPAIR_PROMPT = """<task>
+The following JSON entries were returned as plain strings instead of structured objects.
+Convert each string into the correct JSON object format based on the field name.
+Extract as much information as possible from each string.
+</task>
+
+<rules>
+- For experience: {"company": "", "role": "", "startDate": null, "endDate": null, "description": ""}
+- For education: {"institution": "", "degree": "", "field": null, "startDate": null, "endDate": null}
+- For certifications: {"name": "", "issuer": null, "date": null}
+- For courses: {"name": "", "institution": null}
+- For volunteerWork: {"organization": "", "role": null, "description": null}
+</rules>
+
+Return a JSON object with field names as keys and arrays of structured objects as values.
+Only include the fields that need repair."""
+
+
+async def _repair_malformed_entries(data: dict) -> dict:
+    """If any list fields contain non-dict entries, re-prompt the AI to structure them."""
+    malformed: dict[str, list[str]] = {}
+
+    for field in _OBJECT_LIST_FIELDS:
+        items = data.get(field, [])
+        if not isinstance(items, list):
+            continue
+        bad = [item for item in items if not isinstance(item, dict)]
+        if bad:
+            malformed[field] = [str(item) for item in bad]
+
+    if not malformed:
+        return data  # Nothing to repair
+
+    logger.info("ai_repair_malformed", fields=list(malformed.keys()), count=sum(len(v) for v in malformed.values()))
+
+    try:
+        repair_input = json.dumps(malformed, ensure_ascii=False, indent=2)
+        content = await _call_flash(
+            system=_REPAIR_PROMPT,
+            user_content=repair_input,
+            task="repair_malformed",
+        )
+
+        repaired = _parse_json_response(content)
+        if not repaired or not isinstance(repaired, dict):
+            repaired = json.loads(content)
+
+        # Merge repaired entries back: keep good dicts + add repaired ones
+        for field in malformed:
+            original = data.get(field, [])
+            good = [item for item in original if isinstance(item, dict)]
+            fixed = repaired.get(field, [])
+            if isinstance(fixed, list):
+                good.extend(item for item in fixed if isinstance(item, dict))
+            data[field] = good
+
+    except Exception as e:
+        logger.warning("ai_repair_failed", error=str(e))
+        # Fallback: keep only valid dicts rather than crashing
+        for field in malformed:
+            original = data.get(field, [])
+            data[field] = [item for item in original if isinstance(item, dict)]
+
+    return data
+
+
 # ===========================================================================
-# EXTRACTION TIER — Gemini 3.1 Flash-Lite
+# EXTRACTION TIER — Gemini 3.1 Flash-Lite (simple extraction)
 # ===========================================================================
 
 async def structure_resume(raw_text: str) -> dict:
-    """Structure raw resume text into a profile."""
-    content = await _call_flash_lite(
+    """Structure raw resume text into a profile. Uses Flash (not Flash-Lite) for accuracy."""
+    content = await _call_flash(
         system=PROFILE_STRUCTURING_PROMPT,
         user_content=raw_text,
         task="structure_resume",
     )
 
     result = _parse_json_response(content)
-    if result and isinstance(result, dict):
-        return result
+    if not result or not isinstance(result, dict):
+        try:
+            result = json.loads(content)
+        except json.JSONDecodeError:
+            logger.error("json_parse_error", content=content[:500])
+            return {"raw_text": raw_text, "parse_error": True}
 
-    try:
-        return json.loads(content)
-    except json.JSONDecodeError:
-        logger.error("json_parse_error", content=content[:500])
-        return {"raw_text": raw_text, "parse_error": True}
+    # Repair pass: if any list fields contain non-dict entries, re-structure them
+    result = await _repair_malformed_entries(result)
+    return result
 
 
 async def extract_ats_keywords(job_description: str) -> list[str]:
@@ -529,22 +634,24 @@ async def generate_recommendations(
 # ===========================================================================
 
 async def structure_linkedin_profile(raw_text: str) -> dict:
-    """Structure raw LinkedIn profile text into structured JSON."""
-    content = await _call_flash_lite(
+    """Structure raw LinkedIn profile text into structured JSON. Uses Flash (not Flash-Lite) for accuracy."""
+    content = await _call_flash(
         system=LINKEDIN_STRUCTURING_PROMPT,
         user_content=raw_text,
         task="structure_linkedin",
     )
 
     result = _parse_json_response(content)
-    if result and isinstance(result, dict):
-        return result
+    if not result or not isinstance(result, dict):
+        try:
+            result = json.loads(content)
+        except json.JSONDecodeError:
+            logger.error("linkedin_structure_parse_error", content=content[:500])
+            return {"raw_text": raw_text, "parse_error": True}
 
-    try:
-        return json.loads(content)
-    except json.JSONDecodeError:
-        logger.error("linkedin_structure_parse_error", content=content[:500])
-        return {"raw_text": raw_text, "parse_error": True}
+    # Repair pass: if any list fields contain non-dict entries, re-structure them
+    result = await _repair_malformed_entries(result)
+    return result
 
 
 async def analyze_linkedin_profile(

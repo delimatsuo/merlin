@@ -48,6 +48,7 @@ class Settings(BaseSettings):
 
     # Model configuration — Gemini
     model_gemini: str = "gemini-3.1-pro-preview"
+    model_gemini_flash: str = "gemini-3.1-flash-preview"
     model_gemini_flash_lite: str = "gemini-3.1-flash-lite-preview"
 
     model_config = {"env_file": ".env", "extra": "ignore"}
