@@ -201,7 +201,19 @@ export default function TermsEN() {
 
       <section>
         <h2 className="text-xl font-semibold text-foreground mb-3">
-          12. Contact
+          12. Regional Availability
+        </h2>
+        <p className="text-sm text-foreground/80 leading-relaxed">
+          The Service is designed for and available to users in the{" "}
+          <strong>United States</strong> and <strong>Brazil</strong>. Users from
+          other regions may access the Service at their own discretion, subject
+          to these Terms and applicable local laws.
+        </p>
+      </section>
+
+      <section>
+        <h2 className="text-xl font-semibold text-foreground mb-3">
+          13. Contact
         </h2>
         <p className="text-sm text-foreground/80 leading-relaxed">
           For questions about these terms, contact us:{" "}

@@ -58,6 +58,7 @@
   "signup.signIn": "Entrar",
   "signup.errorConsent": "Você precisa aceitar a Política de Privacidade para continuar.",
   "signup.errorCreate": "Erro ao criar conta. Verifique seus dados e tente novamente.",
+  "signup.regionNotice": "Disponivel no Brasil e nos Estados Unidos.",
   "signup.errorGoogle": "Erro ao entrar com Google. Tente novamente.",
 
   "dashboard.welcomeTitle": "Bem-vindo ao Merlin",

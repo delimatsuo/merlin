@@ -226,6 +226,9 @@ export default function CadastroPage() {
                 {t("signup.consentSuffix")}
               </span>
             </label>
+            <p className="text-xs text-muted-foreground/70 -mt-1">
+              {t("signup.regionNotice")}
+            </p>
             <Button
               type="submit"
               className="w-full h-12 rounded-xl text-sm font-semibold"

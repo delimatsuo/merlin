@@ -314,7 +314,30 @@ export default function PrivacyEN() {
           For users in Brazil, you also have the right to file a complaint with the
           Autoridade Nacional de Protecao de Dados (ANPD) if you believe your data
           processing violates the LGPD. For users in California, you may file a
-          complaint with the California Attorney General regarding CCPA violations.
+          complaint with the California Attorney General regarding CCPA violations
+          at{" "}
+          <a
+            href="https://oag.ca.gov/contact/consumer-complaint-against-business-702-service"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-foreground font-medium underline underline-offset-4 decoration-foreground/30 hover:decoration-foreground transition-colors"
+          >
+            oag.ca.gov
+          </a>
+          .
+        </p>
+      </section>
+
+      <section>
+        <h2 className="text-xl font-semibold text-foreground mb-3">
+          14. Regional Availability
+        </h2>
+        <p className="text-sm text-foreground/80 leading-relaxed">
+          The Merlin platform is currently available for users in the{" "}
+          <strong>United States</strong> and <strong>Brazil</strong>. Users from
+          other regions may access the Service, but should be aware that local
+          privacy laws outside these jurisdictions may not be specifically
+          addressed by this policy.
         </p>
       </section>
 
