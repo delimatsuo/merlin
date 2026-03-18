@@ -13,6 +13,8 @@ const nextConfig: NextConfig = {
       "https://identitytoolkit.googleapis.com",
       "https://merlin-backend-531233742939.southamerica-east1.run.app",
       "https://*.ingest.sentry.io",
+      "https://*.ingest.us.sentry.io",
+      "https://*.ingest.de.sentry.io",
       ...(isDev
         ? ["http://localhost:8000", "ws://localhost:8000"]
         : ["https://api.merlincv.com", "wss://api.merlincv.com"]),
