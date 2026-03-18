@@ -136,8 +136,11 @@ async def upload_linkedin_pdf(
             detail="Erro ao validar os dados do perfil. Tente novamente.",
         )
 
-    # Save to Firestore
+    # Track successful LLM call
     fs = FirestoreService()
+    await fs.increment_global_generation("linkedin_structuring")
+
+    # Save to Firestore
     await fs.save_linkedin_profile(
         uid=user.uid,
         raw_text=raw_text,
@@ -187,8 +190,11 @@ async def paste_linkedin_text(
             detail="Erro ao validar os dados do perfil. Tente novamente.",
         )
 
-    # Save to Firestore
+    # Track successful LLM call
     fs = FirestoreService()
+    await fs.increment_global_generation("linkedin_structuring")
+
+    # Save to Firestore
     await fs.save_linkedin_profile(
         uid=user.uid,
         raw_text=sanitized_text,
@@ -271,7 +277,7 @@ async def analyze_linkedin(
 
     # Save suggestions + increment global counter
     await fs.save_linkedin_suggestions(user.uid, suggestions, cross_ref, body.locale)
-    await fs.increment_global_generation()
+    await fs.increment_global_generation("linkedin_analysis")
 
     logger.info("linkedin_analyze_complete", uid=user.uid, suggestion_count=len(suggestions))
 

@@ -39,6 +39,10 @@ async def analyze_job(
             detail="Erro ao analisar a vaga. Tente novamente em alguns minutos.",
         )
 
+    # Track successful LLM call
+    fs = FirestoreService()
+    await fs.increment_global_generation("job_analysis")
+
     # Extract ATS keywords
     try:
         ats_keywords = await extract_ats_keywords(job_text)
@@ -47,7 +51,6 @@ async def analyze_job(
         ats_keywords = []
 
     # Get user's profile and knowledge for skills matching
-    fs = FirestoreService()
     profile = await fs.get_latest_profile(user.uid)
     knowledge = await fs.get_candidate_knowledge(user.uid)
 
@@ -131,6 +134,7 @@ async def analyze_job(
             questions = await generate_followup_questions(
                 knowledge or {}, analysis, gap_skills
             )
+            await fs.increment_global_generation("followup_questions")
             follow_up = FollowUpDecision(decision="text", questions=questions[:max_questions])
         except Exception as e:
             logger.warning("followup_generation_error", error=str(e))

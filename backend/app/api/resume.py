@@ -94,8 +94,11 @@ async def upload_resume(
             detail="Erro ao processar o currículo. Tente novamente em alguns minutos.",
         )
 
-    # Upload original file to Cloud Storage
+    # Track successful LLM call
     fs = FirestoreService()
+    await fs.increment_global_generation("resume_structuring")
+
+    # Upload original file to Cloud Storage
     file_url = await fs.upload_resume_file(user.uid, file.filename or "resume", content)
 
     # Save to Firestore

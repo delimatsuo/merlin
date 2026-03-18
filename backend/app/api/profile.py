@@ -275,6 +275,9 @@ async def get_profile_recommendations(
             detail="Erro ao gerar recomendações. Tente novamente.",
         )
 
+    # Track successful LLM call
+    await fs.increment_global_generation("cv_recommendations")
+
     # Save to profile doc cache
     await fs.save_recommendations(user.uid, profile_id, recommendations, body.locale)
 

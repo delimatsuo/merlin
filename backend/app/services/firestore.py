@@ -816,16 +816,28 @@ class FirestoreService:
             return doc.to_dict().get("totalGenerations", 0)
         return 0
 
-    async def increment_global_generation(self) -> int:
-        """Atomically increment the global generation counter. Returns new count."""
+    async def increment_global_generation(self, feature: str = "unknown") -> int:
+        """Atomically increment the global generation counter + per-feature counter."""
         doc_ref = self.db.collection("platformStats").document("global")
         await doc_ref.set(
-            {"totalGenerations": firestore.Increment(1)},
+            {
+                "totalGenerations": firestore.Increment(1),
+                f"feature_{feature}": firestore.Increment(1),
+            },
             merge=True,
         )
         # Read back the new count
         doc = await doc_ref.get()
         return doc.to_dict().get("totalGenerations", 0)
+
+    async def get_feature_counts(self) -> dict:
+        """Get per-feature generation counts."""
+        doc_ref = self.db.collection("platformStats").document("global")
+        doc = await doc_ref.get()
+        if not doc.exists:
+            return {}
+        data = doc.to_dict()
+        return {k.replace("feature_", ""): v for k, v in data.items() if k.startswith("feature_")}
 
     # --- AI Quality Tracking ---
 

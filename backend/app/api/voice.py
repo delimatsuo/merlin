@@ -190,6 +190,7 @@ async def get_interview_questions(
     enriched_data = profile.get("enrichedProfile", {})
 
     questions = await generate_interview_questions(structured_data, enriched_data, locale=body.locale)
+    await fs.increment_global_generation("interview_questions")
 
     # Create voice session
     session_id = await fs.create_voice_session(
@@ -257,6 +258,7 @@ async def voice_session(websocket: WebSocket):
                     questions = session.get("questions", [])
 
                     profile_update = await process_voice_answers(questions, answers)
+                    await fs.increment_global_generation("voice_processing")
 
                     profile_id = session.get("profileId", "")
                     if profile_id:
@@ -351,6 +353,7 @@ async def complete_interview(
 
     # Process answers with Claude
     profile_update = await process_voice_answers(questions, answers)
+    await fs.increment_global_generation("voice_processing")
 
     profile_id = session.get("profileId", "")
     if profile_id:
