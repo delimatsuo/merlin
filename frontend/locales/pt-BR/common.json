@@ -40,5 +40,17 @@
   "common.retry": "Tentar novamente",
 
   "legal.privacyTitle": "Politica de Privacidade",
-  "legal.termsTitle": "Termos de Uso"
+  "legal.termsTitle": "Termos de Uso",
+
+  "feedback.title": "Feedback",
+  "feedback.description": "Encontrou um problema ou tem uma sugestão?",
+  "feedback.bug": "Bug",
+  "feedback.suggestion": "Sugestão",
+  "feedback.placeholderBug": "Descreva o que aconteceu e o que esperava...",
+  "feedback.placeholderSuggestion": "Sua ideia ou sugestão...",
+  "feedback.cancel": "Cancelar",
+  "feedback.submit": "Enviar",
+  "feedback.sending": "Enviando...",
+  "feedback.success": "Obrigado pelo feedback!",
+  "feedback.error": "Erro ao enviar feedback. Tente novamente."
 }
