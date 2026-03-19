@@ -151,6 +151,8 @@ async def analyze_job(
         ats_keywords=ats_keywords,
     )
 
+    company = analysis.get("company", "")
+    await fs.log_activity(user.uid, user.email or "", "job_analysis", company=company)
     logger.info("job_analysis_complete", uid=user.uid, application_id=application_id, ats_score=ats_score)
 
     return JobAnalysisResponse(

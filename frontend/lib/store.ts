@@ -272,6 +272,7 @@ export interface AdminGeneration {
   uid: string;
   userEmail: string;
   company: string;
+  type?: string;
   createdAt: string;
 }
 

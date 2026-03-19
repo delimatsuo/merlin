@@ -119,6 +119,7 @@ async def upload_resume(
     except Exception as e:
         logger.warning("knowledge_merge_skipped", uid=user.uid, error=str(e))
 
+    await fs.log_activity(user.uid, user.email or "", "upload")
     logger.info("resume_upload_complete", uid=user.uid, profile_id=profile_id)
 
     return ProfileResponse(

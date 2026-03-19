@@ -23,7 +23,7 @@ export default function AdminDashboard() {
         const data = await api.get<{
           stats: AdminStats;
           dailyChart: { date: string; count: number }[];
-          recentGenerations: { id: string; uid: string; userEmail: string; company: string; createdAt: string }[];
+          recentGenerations: { id: string; uid: string; userEmail: string; company: string; type?: string; createdAt: string }[];
           globalGenerations: number;
           globalLimit: number;
           aiQuality: Record<string, number | string>;
@@ -204,14 +204,23 @@ export default function AdminDashboard() {
               <thead>
                 <tr className="border-b border-border/50 text-muted-foreground">
                   <th className="text-left py-2 font-medium">Email</th>
+                  <th className="text-left py-2 font-medium">Ação</th>
                   <th className="text-left py-2 font-medium">Empresa</th>
                   <th className="text-left py-2 font-medium">Data</th>
                 </tr>
               </thead>
               <tbody>
-                {recentGenerations.map((g) => (
+                {recentGenerations.map((g) => {
+                  const typeLabel: Record<string, string> = {
+                    generation: "Geração",
+                    upload: "Upload CV",
+                    job_analysis: "Análise de vaga",
+                    interview: "Entrevista",
+                  };
+                  return (
                   <tr key={g.id} className="border-b border-border/30">
                     <td className="py-2 font-mono">{g.userEmail}</td>
+                    <td className="py-2">{typeLabel[g.type || "generation"] || g.type || "Geração"}</td>
                     <td className="py-2">{g.company || "—"}</td>
                     <td className="py-2 text-muted-foreground">
                       {new Date(g.createdAt).toLocaleString("pt-BR", {
@@ -222,7 +231,8 @@ export default function AdminDashboard() {
                       })}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

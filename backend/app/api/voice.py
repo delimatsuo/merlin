@@ -199,6 +199,7 @@ async def get_interview_questions(
         questions=questions,
     )
 
+    await fs.log_activity(user.uid, user.email or "", "interview")
     return {"sessionId": session_id, "questions": questions, "status": "pending"}
 
 
