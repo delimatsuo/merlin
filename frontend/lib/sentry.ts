@@ -28,6 +28,8 @@ export function initSentry() {
       "Failed to fetch",
       "NetworkError",
       "AbortError",
+      "Failed to execute 'insertBefore' on 'Node'",
+      "Failed to execute 'removeChild' on 'Node'",
     ],
 
     beforeSend(event) {

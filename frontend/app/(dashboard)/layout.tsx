@@ -4,6 +4,7 @@ import { DashboardFooter } from "@/components/dashboard-footer";
 import { MobileNav } from "@/components/mobile-nav";
 import { ProcessingBar } from "@/components/processing-bar";
 import { ServiceBanner } from "@/components/service-banner";
+import { FeedbackWidget } from "@/components/feedback-widget";
 
 export default function DashboardLayout({
   children,
@@ -20,6 +21,7 @@ export default function DashboardLayout({
         </main>
         <DashboardFooter />
         <ProcessingBar />
+        <FeedbackWidget />
         <MobileNav />
       </div>
     </AuthGuard>
