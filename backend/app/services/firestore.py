@@ -896,16 +896,26 @@ class FirestoreService:
 
     async def log_generation(self, uid: str, user_email: str, company: str) -> None:
         """Write to top-level generationLog for admin dashboard."""
+        await self.log_activity(uid, user_email, "generation", company=company)
+
+    async def log_activity(
+        self, uid: str, user_email: str, activity_type: str, *, company: str = ""
+    ) -> None:
+        """Write to generationLog for admin dashboard activity feed.
+
+        activity_type: generation | upload | job_analysis | interview
+        """
         try:
             doc_id = str(uuid.uuid4())
             await self.db.collection("generationLog").document(doc_id).set({
                 "uid": uid,
                 "userEmail": user_email,
                 "company": company,
+                "type": activity_type,
                 "createdAt": datetime.now(timezone.utc).isoformat(),
             })
         except Exception as e:
-            logger.warning("generation_log_error", error=str(e))
+            logger.warning("activity_log_error", type=activity_type, error=str(e))
 
     # --- Admin Query Methods ---
 
