@@ -40,5 +40,17 @@
   "common.retry": "Retry",
 
   "legal.privacyTitle": "Privacy Policy",
-  "legal.termsTitle": "Terms of Service"
+  "legal.termsTitle": "Terms of Service",
+
+  "feedback.title": "Feedback",
+  "feedback.description": "Found an issue or have a suggestion?",
+  "feedback.bug": "Bug",
+  "feedback.suggestion": "Suggestion",
+  "feedback.placeholderBug": "Describe what happened and what you expected...",
+  "feedback.placeholderSuggestion": "Your idea or suggestion...",
+  "feedback.cancel": "Cancel",
+  "feedback.submit": "Send",
+  "feedback.sending": "Sending...",
+  "feedback.success": "Thank you for your feedback!",
+  "feedback.error": "Failed to send feedback. Please try again."
 }

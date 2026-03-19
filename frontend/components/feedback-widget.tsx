@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/lib/hooks/useTranslation";
 
 type FeedbackType = "bug" | "suggestion";
 
@@ -24,18 +25,19 @@ export function FeedbackWidget() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const pathname = usePathname();
+  const { t } = useTranslation();
 
   const handleSubmit = async () => {
     if (!message.trim() || message.trim().length < 5) return;
     try {
       setLoading(true);
       await api.post("/api/feedback", { type, message: message.trim(), page: pathname });
-      toast.success("Obrigado pelo feedback!");
+      toast.success(t("feedback.success"));
       setMessage("");
       setType("suggestion");
       setOpen(false);
     } catch {
-      toast.error("Erro ao enviar feedback. Tente novamente.");
+      toast.error(t("feedback.error"));
     } finally {
       setLoading(false);
     }
@@ -46,7 +48,7 @@ export function FeedbackWidget() {
       <button
         onClick={() => setOpen(true)}
         className="fixed bottom-20 right-4 md:bottom-6 md:right-6 z-40 flex h-10 w-10 items-center justify-center rounded-full bg-foreground/10 text-foreground/60 ring-1 ring-foreground/10 backdrop-blur-sm transition-all hover:bg-foreground/15 hover:text-foreground/80 hover:scale-105 active:scale-95"
-        aria-label="Enviar feedback"
+        aria-label={t("feedback.title")}
       >
         <MessageCircle className="h-4 w-4" />
       </button>
@@ -54,9 +56,9 @@ export function FeedbackWidget() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Feedback</DialogTitle>
+            <DialogTitle>{t("feedback.title")}</DialogTitle>
             <DialogDescription>
-              Encontrou um problema ou tem uma sugestão?
+              {t("feedback.description")}
             </DialogDescription>
           </DialogHeader>
 
@@ -71,7 +73,7 @@ export function FeedbackWidget() {
               )}
             >
               <Bug className="h-3.5 w-3.5" />
-              Bug
+              {t("feedback.bug")}
             </button>
             <button
               onClick={() => setType("suggestion")}
@@ -83,7 +85,7 @@ export function FeedbackWidget() {
               )}
             >
               <Lightbulb className="h-3.5 w-3.5" />
-              Sugestão
+              {t("feedback.suggestion")}
             </button>
           </div>
 
@@ -92,8 +94,8 @@ export function FeedbackWidget() {
             onChange={(e) => setMessage(e.target.value)}
             placeholder={
               type === "bug"
-                ? "Descreva o que aconteceu e o que esperava..."
-                : "Sua ideia ou sugestão..."
+                ? t("feedback.placeholderBug")
+                : t("feedback.placeholderSuggestion")
             }
             className="min-h-[100px] w-full resize-none rounded-lg border border-border/50 bg-background p-3 text-sm placeholder:text-muted-foreground/60 focus:border-foreground/20 focus:outline-none"
             maxLength={2000}
@@ -105,7 +107,7 @@ export function FeedbackWidget() {
               onClick={() => setOpen(false)}
               disabled={loading}
             >
-              Cancelar
+              {t("feedback.cancel")}
             </Button>
             <Button
               onClick={handleSubmit}
@@ -114,10 +116,10 @@ export function FeedbackWidget() {
               {loading ? (
                 <>
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Enviando...
+                  {t("feedback.sending")}
                 </>
               ) : (
-                "Enviar"
+                t("feedback.submit")
               )}
             </Button>
           </DialogFooter>
