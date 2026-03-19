@@ -14,6 +14,11 @@ class ExperienceItem(BaseModel):
     end_date: Optional[str] = Field(alias="endDate", default=None)
     description: str = ""
 
+    @field_validator("company", "role", "description", mode="before")
+    @classmethod
+    def _none_to_empty(cls, v: object) -> object:
+        return "" if v is None else v
+
     model_config = {"populate_by_name": True, "extra": "ignore"}
 
 
@@ -24,12 +29,22 @@ class EducationItem(BaseModel):
     start_date: Optional[str] = Field(alias="startDate", default=None)
     end_date: Optional[str] = Field(alias="endDate", default=None)
 
+    @field_validator("institution", "degree", "field", mode="before")
+    @classmethod
+    def _none_to_empty(cls, v: object) -> object:
+        return "" if v is None else v
+
     model_config = {"populate_by_name": True, "extra": "ignore"}
 
 
 class LanguageItem(BaseModel):
     language: str = ""
     level: str = ""
+
+    @field_validator("language", "level", mode="before")
+    @classmethod
+    def _none_to_empty(cls, v: object) -> object:
+        return "" if v is None else v
 
     model_config = {"extra": "ignore"}
 
