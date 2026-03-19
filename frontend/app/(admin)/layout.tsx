@@ -4,11 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AdminGuard } from "@/components/admin-guard";
 import { cn } from "@/lib/utils";
-import { BarChart3, Users, DollarSign, Settings, ArrowLeft } from "lucide-react";
+import { BarChart3, Users, DollarSign, Settings, ArrowLeft, MessageCircle } from "lucide-react";
 
 const adminNav = [
   { href: "/admin", label: "Dashboard", icon: BarChart3 },
   { href: "/admin/usuarios", label: "Usuários", icon: Users },
+  { href: "/admin/feedback", label: "Feedback", icon: MessageCircle },
   { href: "/admin/custos", label: "Custos", icon: DollarSign },
   { href: "/admin/configuracoes", label: "Configurações", icon: Settings },
 ];
