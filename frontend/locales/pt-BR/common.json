@@ -7,7 +7,7 @@
   "nav.newJob": "Nova Vaga",
   "nav.linkedin": "LinkedIn",
   "nav.admin": "Admin",
-  "nav.settings": "Configuracoes",
+  "nav.settings": "Configurações",
   "nav.signOut": "Sair",
 
   "mobileNav.applications": "Candidaturas",
@@ -29,7 +29,7 @@
   "common.loading": "Carregando...",
   "common.error": "Erro",
   "common.or": "ou",
-  "common.next": "Proxima",
+  "common.next": "Próxima",
   "common.previous": "Anterior",
   "common.close": "Fechar",
   "common.download": "Baixar",
@@ -39,7 +39,7 @@
   "common.characters": "caracteres",
   "common.retry": "Tentar novamente",
 
-  "legal.privacyTitle": "Politica de Privacidade",
+  "legal.privacyTitle": "Política de Privacidade",
   "legal.termsTitle": "Termos de Uso",
 
   "feedback.title": "Feedback",
