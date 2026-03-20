@@ -38,16 +38,10 @@ class Settings(BaseSettings):
     # Admin
     admin_emails: str = os.environ.get("ADMIN_EMAILS", "deli@ellaexecutivesearch.com")
 
-    # AI backend switch: "gemini" or "claude"
-    ai_backend: str = "gemini"
-
-    # Model configuration — Claude (fallback)
-    model_opus: str = "claude-opus-4-6"
+    # Model configuration — Claude Sonnet (writing/reasoning)
     model_sonnet: str = "claude-sonnet-4-6"
-    model_haiku: str = "claude-haiku-4-5-20251001"
 
-    # Model configuration — Gemini
-    model_gemini: str = "gemini-3.1-pro-preview"
+    # Model configuration — Gemini (structuring + extraction)
     model_gemini_flash: str = "gemini-3-flash-preview"
     model_gemini_flash_lite: str = "gemini-3.1-flash-lite-preview"
 

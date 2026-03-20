@@ -1,4 +1,4 @@
-"""Tiered AI service — Claude Sonnet 4.6 for writing/reasoning, Gemini Flash-Lite for extraction."""
+"""Tiered AI service — Claude Sonnet for writing/reasoning, Gemini Flash for structuring, Flash-Lite for extraction."""
 
 import json
 import re
