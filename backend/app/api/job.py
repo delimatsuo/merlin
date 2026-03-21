@@ -7,6 +7,7 @@ from app.auth import AuthenticatedUser, get_current_user
 from app.config import get_settings
 from app.schemas.api import JobAnalysisRequest, JobAnalysisResponse, FollowUpDecision
 from app.services.gemini_ai import (
+    AIProviderOverloadedError,
     analyze_job_description,
     extract_ats_keywords,
     semantic_skill_match,
@@ -32,6 +33,12 @@ async def analyze_job(
     try:
         # Analyze with Gemini
         analysis = await analyze_job_description(job_text)
+    except AIProviderOverloadedError as e:
+        logger.warning("job_analysis_overloaded", uid=user.uid, error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="O serviço de IA está temporariamente sobrecarregado. Tente novamente em alguns minutos.",
+        )
     except Exception as e:
         logger.error("job_analysis_error", uid=user.uid, error=str(e))
         raise HTTPException(
