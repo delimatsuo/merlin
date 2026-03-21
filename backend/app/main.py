@@ -7,11 +7,13 @@ import firebase_admin
 import structlog
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from app.config import get_settings, load_secrets_from_gcp, validate_secrets
+from app.services.gemini_ai import AIProviderOverloadedError
 
 # Load secrets from GCP Secret Manager if in production
 load_secrets_from_gcp()
@@ -66,6 +68,17 @@ app = FastAPI(
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+@app.exception_handler(AIProviderOverloadedError)
+async def ai_overloaded_handler(request: Request, exc: AIProviderOverloadedError):
+    """Return 503 when the AI provider is temporarily overloaded."""
+    logger.warning("ai_provider_overloaded", path=request.url.path, error=str(exc))
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "O serviço de IA está temporariamente sobrecarregado. Tente novamente em alguns minutos."},
+        headers={"Retry-After": "30"},
+    )
 
 # CORS — explicit methods and headers
 origins = settings.allowed_origins.split(",")

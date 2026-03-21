@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     model_gemini_flash: str = "gemini-3-flash-preview"
     model_gemini_flash_lite: str = "gemini-3.1-flash-lite-preview"
 
+    # Fallback model — used when Claude Sonnet is unavailable
+    model_fallback: str = "gemini-2.5-pro-preview-05-06"
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 

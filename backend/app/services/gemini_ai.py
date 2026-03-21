@@ -5,8 +5,10 @@ import re
 from typing import Optional
 
 import anthropic
+import httpx
 import structlog
 from google import genai
+from google.api_core import exceptions as google_exceptions
 from google.genai import types
 
 from app.config import get_settings
@@ -22,6 +24,16 @@ from app.prompts.linkedin_structure import LINKEDIN_STRUCTURING_PROMPT
 from app.prompts.linkedin_analysis import get_linkedin_analysis_prompt
 
 logger = structlog.get_logger()
+
+
+# ---------------------------------------------------------------------------
+# Custom exception for transient AI provider errors
+# ---------------------------------------------------------------------------
+
+class AIProviderOverloadedError(Exception):
+    """Raised when the AI provider is temporarily overloaded (429/529)."""
+    pass
+
 
 # ---------------------------------------------------------------------------
 # Clients (lazy singletons)
@@ -43,7 +55,11 @@ def _get_anthropic_client() -> anthropic.AsyncAnthropic:
     global _anthropic_client
     if _anthropic_client is None:
         settings = get_settings()
-        _anthropic_client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+        _anthropic_client = anthropic.AsyncAnthropic(
+            api_key=settings.anthropic_api_key,
+            max_retries=3,
+            timeout=httpx.Timeout(settings.generation_timeout, connect=10.0),
+        )
     return _anthropic_client
 
 
@@ -69,6 +85,60 @@ def _parse_json_response(content: str) -> dict | list | None:
         return None
 
 
+async def _call_gemini_fallback(
+    system: str,
+    user_content: str,
+    task: str,
+    temperature: float = 1.0,
+    max_output_tokens: int | None = None,
+) -> str:
+    """Fallback to Gemini Pro when Claude Sonnet is unavailable.
+
+    Callers must pre-sanitize user_content via _sanitize_input().
+    """
+    client = _get_gemini_client()
+    settings = get_settings()
+
+    logger.warning("ai_fallback_activated", task=task, fallback_model=settings.model_fallback)
+
+    try:
+        response = await client.aio.models.generate_content(
+            model=settings.model_fallback,
+            contents=f"<user_input>\n{user_content}\n</user_input>",
+            config=types.GenerateContentConfig(
+                system_instruction=system,
+                temperature=temperature,
+                max_output_tokens=max_output_tokens,
+            ),
+        )
+    except (google_exceptions.ResourceExhausted, google_exceptions.ServiceUnavailable, google_exceptions.TooManyRequests) as e:
+        logger.error("gemini_fallback_also_failed", task=task, error=str(e))
+        raise AIProviderOverloadedError(f"Both Anthropic and Gemini unavailable: {e}") from e
+    except Exception as e:
+        logger.error("gemini_fallback_unexpected", task=task, error=str(e), error_type=type(e).__name__)
+        raise AIProviderOverloadedError(f"Gemini fallback failed: {e}") from e
+
+    try:
+        content = response.text
+    except ValueError as e:
+        logger.error("gemini_fallback_empty_response", task=task, error=str(e))
+        raise AIProviderOverloadedError(f"Gemini fallback returned no content: {e}") from e
+
+    if not content:
+        raise AIProviderOverloadedError("Gemini fallback returned empty response")
+
+    if response.usage_metadata:
+        logger.info(
+            "ai_usage",
+            model=settings.model_fallback,
+            tier="writing_reasoning_fallback",
+            task=task,
+            input_tokens=response.usage_metadata.prompt_token_count,
+            output_tokens=response.usage_metadata.candidates_token_count,
+        )
+    return content
+
+
 async def _call_sonnet(
     system: str,
     user_content: str,
@@ -76,19 +146,37 @@ async def _call_sonnet(
     max_tokens: int = 4096,
     temperature: float = 1.0,
 ) -> str:
-    """Call Claude Sonnet 4.6 and return the text response."""
+    """Call Claude Sonnet 4.6, falling back to Gemini Pro if unavailable."""
     client = _get_anthropic_client()
     settings = get_settings()
 
     user_content = _sanitize_input(user_content)
 
-    response = await client.messages.create(
-        model=settings.model_sonnet,
-        max_tokens=max_tokens,
-        system=system,
-        messages=[{"role": "user", "content": f"<user_input>\n{user_content}\n</user_input>"}],
-        temperature=temperature,
-    )
+    try:
+        response = await client.messages.create(
+            model=settings.model_sonnet,
+            max_tokens=max_tokens,
+            system=system,
+            messages=[{"role": "user", "content": f"<user_input>\n{user_content}\n</user_input>"}],
+            temperature=temperature,
+        )
+    except anthropic.APIStatusError as e:
+        logger.error(
+            "anthropic_api_error",
+            task=task,
+            status_code=e.status_code,
+            error_type=type(e).__name__,
+            message=str(e),
+        )
+        if isinstance(e, (anthropic.OverloadedError, anthropic.RateLimitError)):
+            return await _call_gemini_fallback(system, user_content, task, temperature, max_tokens)
+        raise
+    except anthropic.APIConnectionError as e:
+        logger.error("anthropic_connection_error", task=task, message=str(e))
+        return await _call_gemini_fallback(system, user_content, task, temperature, max_tokens)
+    except anthropic.APITimeoutError as e:
+        logger.error("anthropic_timeout_error", task=task, message=str(e))
+        return await _call_gemini_fallback(system, user_content, task, temperature, max_tokens)
 
     content = response.content[0].text
     logger.info(
@@ -115,15 +203,19 @@ async def _call_flash_lite(
 
     user_content = _sanitize_input(user_content)
 
-    response = await client.aio.models.generate_content(
-        model=settings.model_gemini_flash_lite,
-        contents=f"<user_input>\n{user_content}\n</user_input>",
-        config=types.GenerateContentConfig(
-            system_instruction=system,
-            response_mime_type=response_mime_type,
-            temperature=temperature,
-        ),
-    )
+    try:
+        response = await client.aio.models.generate_content(
+            model=settings.model_gemini_flash_lite,
+            contents=f"<user_input>\n{user_content}\n</user_input>",
+            config=types.GenerateContentConfig(
+                system_instruction=system,
+                response_mime_type=response_mime_type,
+                temperature=temperature,
+            ),
+        )
+    except (google_exceptions.ResourceExhausted, google_exceptions.ServiceUnavailable, google_exceptions.TooManyRequests) as e:
+        logger.error("gemini_overloaded", task=task, error_type=type(e).__name__, message=str(e))
+        raise AIProviderOverloadedError(f"Gemini API temporarily unavailable: {e}") from e
 
     content = response.text
     logger.info(
@@ -150,15 +242,19 @@ async def _call_flash(
 
     user_content = _sanitize_input(user_content)
 
-    response = await client.aio.models.generate_content(
-        model=settings.model_gemini_flash,
-        contents=f"<user_input>\n{user_content}\n</user_input>",
-        config=types.GenerateContentConfig(
-            system_instruction=system,
-            response_mime_type=response_mime_type,
-            temperature=temperature,
-        ),
-    )
+    try:
+        response = await client.aio.models.generate_content(
+            model=settings.model_gemini_flash,
+            contents=f"<user_input>\n{user_content}\n</user_input>",
+            config=types.GenerateContentConfig(
+                system_instruction=system,
+                response_mime_type=response_mime_type,
+                temperature=temperature,
+            ),
+        )
+    except (google_exceptions.ResourceExhausted, google_exceptions.ServiceUnavailable, google_exceptions.TooManyRequests) as e:
+        logger.error("gemini_overloaded", task=task, error_type=type(e).__name__, message=str(e))
+        raise AIProviderOverloadedError(f"Gemini API temporarily unavailable: {e}") from e
 
     content = response.text
     logger.info(
