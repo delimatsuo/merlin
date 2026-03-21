@@ -11,7 +11,7 @@ from app.config import get_settings
 from app.schemas.api import TailorRequest, TailorResponse, RegenerateRequest
 from app.services.admin_settings import AdminSettingsService
 from app.services.audit import log_data_access
-from app.services.gemini_ai import AIProviderOverloadedError, rewrite_resume, generate_cover_letter
+from app.services.gemini_ai import rewrite_resume, generate_cover_letter
 from app.services.firestore import FirestoreService
 
 logger = structlog.get_logger()
@@ -84,12 +84,6 @@ async def generate_tailored_resume(
             ats_keywords=ats_keywords,
             knowledge=knowledge,
             enrichment=enrichment,
-        )
-    except AIProviderOverloadedError as e:
-        logger.warning("tailor_resume_overloaded", uid=user.uid, error=str(e))
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="O serviço de IA está temporariamente sobrecarregado. Tente novamente em alguns minutos.",
         )
     except Exception as e:
         logger.error("tailor_resume_error", uid=user.uid, error=str(e))
@@ -230,12 +224,6 @@ async def regenerate_resume(
             additional_instructions=body.instructions,
             knowledge=knowledge,
             enrichment=enrichment,
-        )
-    except AIProviderOverloadedError as e:
-        logger.warning("regenerate_overloaded", uid=user.uid, error=str(e))
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="O serviço de IA está temporariamente sobrecarregado. Tente novamente em alguns minutos.",
         )
     except Exception as e:
         logger.error("regenerate_error", uid=user.uid, error=str(e))

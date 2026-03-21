@@ -8,6 +8,7 @@ import anthropic
 import httpx
 import structlog
 from google import genai
+from google.api_core import exceptions as google_exceptions
 from google.genai import types
 
 from app.config import get_settings
@@ -150,15 +151,19 @@ async def _call_flash_lite(
 
     user_content = _sanitize_input(user_content)
 
-    response = await client.aio.models.generate_content(
-        model=settings.model_gemini_flash_lite,
-        contents=f"<user_input>\n{user_content}\n</user_input>",
-        config=types.GenerateContentConfig(
-            system_instruction=system,
-            response_mime_type=response_mime_type,
-            temperature=temperature,
-        ),
-    )
+    try:
+        response = await client.aio.models.generate_content(
+            model=settings.model_gemini_flash_lite,
+            contents=f"<user_input>\n{user_content}\n</user_input>",
+            config=types.GenerateContentConfig(
+                system_instruction=system,
+                response_mime_type=response_mime_type,
+                temperature=temperature,
+            ),
+        )
+    except (google_exceptions.ResourceExhausted, google_exceptions.ServiceUnavailable, google_exceptions.TooManyRequests) as e:
+        logger.error("gemini_overloaded", task=task, error_type=type(e).__name__, message=str(e))
+        raise AIProviderOverloadedError(f"Gemini API temporarily unavailable: {e}") from e
 
     content = response.text
     logger.info(
@@ -185,15 +190,19 @@ async def _call_flash(
 
     user_content = _sanitize_input(user_content)
 
-    response = await client.aio.models.generate_content(
-        model=settings.model_gemini_flash,
-        contents=f"<user_input>\n{user_content}\n</user_input>",
-        config=types.GenerateContentConfig(
-            system_instruction=system,
-            response_mime_type=response_mime_type,
-            temperature=temperature,
-        ),
-    )
+    try:
+        response = await client.aio.models.generate_content(
+            model=settings.model_gemini_flash,
+            contents=f"<user_input>\n{user_content}\n</user_input>",
+            config=types.GenerateContentConfig(
+                system_instruction=system,
+                response_mime_type=response_mime_type,
+                temperature=temperature,
+            ),
+        )
+    except (google_exceptions.ResourceExhausted, google_exceptions.ServiceUnavailable, google_exceptions.TooManyRequests) as e:
+        logger.error("gemini_overloaded", task=task, error_type=type(e).__name__, message=str(e))
+        raise AIProviderOverloadedError(f"Gemini API temporarily unavailable: {e}") from e
 
     content = response.text
     logger.info(
