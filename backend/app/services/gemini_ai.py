@@ -85,6 +85,43 @@ def _parse_json_response(content: str) -> dict | list | None:
         return None
 
 
+async def _call_gemini_fallback(
+    system: str,
+    user_content: str,
+    task: str,
+    temperature: float = 1.0,
+) -> str:
+    """Fallback to Gemini Pro when Claude Sonnet is unavailable."""
+    client = _get_gemini_client()
+    settings = get_settings()
+
+    logger.warning("ai_fallback_activated", task=task, fallback_model=settings.model_fallback)
+
+    try:
+        response = await client.aio.models.generate_content(
+            model=settings.model_fallback,
+            contents=f"<user_input>\n{user_content}\n</user_input>",
+            config=types.GenerateContentConfig(
+                system_instruction=system,
+                temperature=temperature,
+            ),
+        )
+    except (google_exceptions.ResourceExhausted, google_exceptions.ServiceUnavailable, google_exceptions.TooManyRequests) as e:
+        logger.error("gemini_fallback_also_failed", task=task, error=str(e))
+        raise AIProviderOverloadedError(f"Both Anthropic and Gemini unavailable: {e}") from e
+
+    content = response.text
+    logger.info(
+        "ai_usage",
+        model=settings.model_fallback,
+        tier="writing_reasoning_fallback",
+        task=task,
+        input_tokens=response.usage_metadata.prompt_token_count,
+        output_tokens=response.usage_metadata.candidates_token_count,
+    )
+    return content
+
+
 async def _call_sonnet(
     system: str,
     user_content: str,
@@ -92,7 +129,7 @@ async def _call_sonnet(
     max_tokens: int = 4096,
     temperature: float = 1.0,
 ) -> str:
-    """Call Claude Sonnet 4.6 and return the text response."""
+    """Call Claude Sonnet 4.6, falling back to Gemini Pro if unavailable."""
     client = _get_anthropic_client()
     settings = get_settings()
 
@@ -115,16 +152,14 @@ async def _call_sonnet(
             message=str(e),
         )
         if isinstance(e, (anthropic.OverloadedError, anthropic.RateLimitError)):
-            raise AIProviderOverloadedError(
-                f"Anthropic API temporarily unavailable ({e.status_code})"
-            ) from e
+            return await _call_gemini_fallback(system, user_content, task, temperature)
         raise
     except anthropic.APIConnectionError as e:
         logger.error("anthropic_connection_error", task=task, message=str(e))
-        raise AIProviderOverloadedError("Anthropic API connection failed") from e
+        return await _call_gemini_fallback(system, user_content, task, temperature)
     except anthropic.APITimeoutError as e:
         logger.error("anthropic_timeout_error", task=task, message=str(e))
-        raise AIProviderOverloadedError("Anthropic API request timed out") from e
+        return await _call_gemini_fallback(system, user_content, task, temperature)
 
     content = response.content[0].text
     logger.info(
