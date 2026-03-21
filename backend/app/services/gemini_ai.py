@@ -90,8 +90,12 @@ async def _call_gemini_fallback(
     user_content: str,
     task: str,
     temperature: float = 1.0,
+    max_output_tokens: int | None = None,
 ) -> str:
-    """Fallback to Gemini Pro when Claude Sonnet is unavailable."""
+    """Fallback to Gemini Pro when Claude Sonnet is unavailable.
+
+    Callers must pre-sanitize user_content via _sanitize_input().
+    """
     client = _get_gemini_client()
     settings = get_settings()
 
@@ -104,21 +108,34 @@ async def _call_gemini_fallback(
             config=types.GenerateContentConfig(
                 system_instruction=system,
                 temperature=temperature,
+                max_output_tokens=max_output_tokens,
             ),
         )
     except (google_exceptions.ResourceExhausted, google_exceptions.ServiceUnavailable, google_exceptions.TooManyRequests) as e:
         logger.error("gemini_fallback_also_failed", task=task, error=str(e))
         raise AIProviderOverloadedError(f"Both Anthropic and Gemini unavailable: {e}") from e
+    except Exception as e:
+        logger.error("gemini_fallback_unexpected", task=task, error=str(e), error_type=type(e).__name__)
+        raise AIProviderOverloadedError(f"Gemini fallback failed: {e}") from e
 
-    content = response.text
-    logger.info(
-        "ai_usage",
-        model=settings.model_fallback,
-        tier="writing_reasoning_fallback",
-        task=task,
-        input_tokens=response.usage_metadata.prompt_token_count,
-        output_tokens=response.usage_metadata.candidates_token_count,
-    )
+    try:
+        content = response.text
+    except ValueError as e:
+        logger.error("gemini_fallback_empty_response", task=task, error=str(e))
+        raise AIProviderOverloadedError(f"Gemini fallback returned no content: {e}") from e
+
+    if not content:
+        raise AIProviderOverloadedError("Gemini fallback returned empty response")
+
+    if response.usage_metadata:
+        logger.info(
+            "ai_usage",
+            model=settings.model_fallback,
+            tier="writing_reasoning_fallback",
+            task=task,
+            input_tokens=response.usage_metadata.prompt_token_count,
+            output_tokens=response.usage_metadata.candidates_token_count,
+        )
     return content
 
 
@@ -152,14 +169,14 @@ async def _call_sonnet(
             message=str(e),
         )
         if isinstance(e, (anthropic.OverloadedError, anthropic.RateLimitError)):
-            return await _call_gemini_fallback(system, user_content, task, temperature)
+            return await _call_gemini_fallback(system, user_content, task, temperature, max_tokens)
         raise
     except anthropic.APIConnectionError as e:
         logger.error("anthropic_connection_error", task=task, message=str(e))
-        return await _call_gemini_fallback(system, user_content, task, temperature)
+        return await _call_gemini_fallback(system, user_content, task, temperature, max_tokens)
     except anthropic.APITimeoutError as e:
         logger.error("anthropic_timeout_error", task=task, message=str(e))
-        return await _call_gemini_fallback(system, user_content, task, temperature)
+        return await _call_gemini_fallback(system, user_content, task, temperature, max_tokens)
 
     content = response.content[0].text
     logger.info(
