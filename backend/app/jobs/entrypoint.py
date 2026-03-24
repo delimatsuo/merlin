@@ -44,6 +44,13 @@ async def main():
     logger.info("job_pipeline_start")
 
     try:
+        # Kill switch check
+        from app.services.admin_settings import AdminSettingsService
+        admin_settings = await AdminSettingsService.get()
+        if not admin_settings.job_matching_enabled:
+            logger.info("job_pipeline_disabled_by_admin")
+            return
+
         # Phase 1: Scrape job boards
         from app.jobs.scraper import run_scraping_pipeline
         scrape_stats = await run_scraping_pipeline()
@@ -53,6 +60,12 @@ async def main():
         from app.jobs.matcher import run_matching_pipeline
         match_stats = await run_matching_pipeline()
         logger.info("job_pipeline_match_done", **match_stats)
+
+        # Phase 3: Cleanup expired jobs
+        from app.services.firestore import FirestoreService
+        fs = FirestoreService()
+        expired = await fs.cleanup_expired_jobs()
+        logger.info("job_pipeline_cleanup_done", expired_jobs=expired)
 
         logger.info("job_pipeline_complete")
 
