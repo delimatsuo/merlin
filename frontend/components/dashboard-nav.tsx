@@ -35,11 +35,9 @@ export function DashboardNav() {
   const { t } = useTranslation();
 
   const navItems = [
-    { href: "/dashboard", label: t("nav.applications"), icon: Briefcase },
-    { href: "/dashboard/profile", label: t("nav.profile"), icon: UserIcon },
     { href: "/dashboard/vagas", label: t("nav.jobs"), icon: Search },
+    { href: "/dashboard", label: t("nav.applications"), icon: Briefcase },
     { href: "/dashboard/job", label: t("nav.newJob"), icon: Plus },
-    { href: "/dashboard/linkedin", label: t("nav.linkedin"), icon: Linkedin },
   ];
   const { user } = useAuthStore();
   const { isAdmin, setIsAdmin } = useAdminStore();
@@ -140,6 +138,20 @@ export function DashboardNav() {
                 <DropdownMenuItem className="rounded-lg text-xs py-2.5 px-3 font-medium cursor-default">
                   <User className="mr-2.5 h-3.5 w-3.5 text-muted-foreground" />
                   {user?.displayName || user?.email}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => router.push("/dashboard/profile")}
+                  className="rounded-lg text-xs py-2.5 px-3 cursor-pointer"
+                >
+                  <UserIcon className="mr-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                  {t("nav.profile")}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => router.push("/dashboard/linkedin")}
+                  className="rounded-lg text-xs py-2.5 px-3 cursor-pointer"
+                >
+                  <Linkedin className="mr-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                  {t("nav.linkedin")}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => router.push("/dashboard/settings")}
