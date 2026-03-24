@@ -14,6 +14,7 @@ from app.schemas.jobs import (
     JobPreferencesResponse,
     MatchedJob,
 )
+from app.services.email import verify_unsubscribe_token
 from app.services.firestore import FirestoreService, _brazil_today
 
 logger = structlog.get_logger()
@@ -157,3 +158,23 @@ async def get_job(
             detail="Vaga não encontrada.",
         )
     return job
+
+
+@router.get("/unsubscribe")
+async def unsubscribe_digest(token: str):
+    """Unsubscribe from email digest via signed HMAC token (no auth required)."""
+    uid = verify_unsubscribe_token(token)
+    if not uid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Link inválido ou expirado.",
+        )
+
+    fs = FirestoreService()
+    prefs = await fs.get_job_preferences(uid)
+    if prefs:
+        prefs["email_digest"] = False
+        await fs.save_job_preferences(uid, prefs)
+        logger.info("email_digest_unsubscribed", uid_hash=uid[:8])
+
+    return {"message": "Você não receberá mais e-mails de vagas."}

@@ -11,6 +11,7 @@ import structlog
 from app.config import get_settings
 from app.services.firestore import FirestoreService
 from app.services.gemini_ai import semantic_skill_match
+from app.services.email import send_job_digest
 
 logger = structlog.get_logger()
 
@@ -315,12 +316,31 @@ async def run_matching_pipeline() -> dict:
                     await fs.save_matched_jobs(uid, today, matches, len(matches))
                     total_matches += len(matches)
 
+                    # Send email digest (idempotent — checks email_sent_at)
+                    if preferences.get("email_digest", True):
+                        existing = await fs.get_matched_jobs(uid, today)
+                        if existing and not existing.get("email_sent_at"):
+                            email = user_data.get("email", "")
+                            name = user_data.get("name", "")
+                            if email:
+                                sent = await send_job_digest(
+                                    email=email, name=name, uid=uid,
+                                    matches=matches, date=today,
+                                )
+                                if sent:
+                                    # Mark as sent (idempotency gate)
+                                    doc_ref = (
+                                        fs.db.collection("users").document(uid)
+                                        .collection("matchedJobs").document(today)
+                                    )
+                                    await doc_ref.update({"email_sent_at": datetime.now(_BRT).isoformat()})
+                                    emails_sent += 1
+
                 total_users_processed += 1
 
                 logger.info(
                     "match_user_done",
                     uid_hash=uid[:8],
-                    filtered=len(filter_by_preferences(all_jobs, preferences)),
                     matched=len(matches),
                     top_score=matches[0]["ats_score"] if matches else 0,
                 )
