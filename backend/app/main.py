@@ -135,6 +135,7 @@ from app.api.applications import router as applications_router
 from app.api.admin import router as admin_router
 from app.api.linkedin import router as linkedin_router
 from app.api.feedback import router as feedback_router
+from app.api.jobs import router as jobs_router
 
 app.include_router(resume_router, prefix="/api/resume", tags=["resume"])
 app.include_router(voice_router, prefix="/api/voice", tags=["voice"])
@@ -147,6 +148,7 @@ app.include_router(applications_router, prefix="/api/applications", tags=["appli
 app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
 app.include_router(linkedin_router, prefix="/api/linkedin", tags=["linkedin"])
 app.include_router(feedback_router, prefix="/api/feedback", tags=["feedback"])
+app.include_router(jobs_router, prefix="/api/jobs", tags=["jobs"])
 
 
 @app.on_event("startup")

@@ -22,6 +22,7 @@ from app.prompts.enrichment import ENRICHMENT_PROMPT
 from app.prompts.recommendations import get_recommendations_prompt
 from app.prompts.linkedin_structure import LINKEDIN_STRUCTURING_PROMPT
 from app.prompts.linkedin_analysis import get_linkedin_analysis_prompt
+from app.prompts.job_extraction import JOB_EXTRACTION_PROMPT
 
 logger = structlog.get_logger()
 
@@ -801,3 +802,48 @@ async def analyze_linkedin_profile(
     except json.JSONDecodeError:
         logger.error("linkedin_analysis_parse_error", content=content[:500])
         return [], []
+
+
+# ---------------------------------------------------------------------------
+# Job Extraction (for scraping pipeline — cheap Flash-Lite)
+# ---------------------------------------------------------------------------
+
+async def extract_job_data(raw_text: str) -> dict:
+    """Extract structured job fields from raw scraped text.
+
+    Uses Flash-Lite (~$0.0001/call) for bulk processing.
+    Returns dict with: title, company, required_skills, preferred_skills,
+    location, seniority, salary_range, work_mode, posted_date.
+    """
+    content = await _call_flash_lite(
+        system=JOB_EXTRACTION_PROMPT,
+        user_content=raw_text[:5000],  # Cap input to avoid excessive tokens
+        task="job_extraction",
+    )
+
+    result = _parse_json_response(content)
+    if result and isinstance(result, dict):
+        return {
+            "title": result.get("title", ""),
+            "company": result.get("company"),
+            "required_skills": result.get("required_skills", [])[:15],
+            "preferred_skills": result.get("preferred_skills", [])[:10],
+            "location": result.get("location", ""),
+            "seniority": result.get("seniority", "mid"),
+            "salary_range": result.get("salary_range"),
+            "work_mode": result.get("work_mode", "onsite"),
+            "posted_date": result.get("posted_date"),
+        }
+
+    logger.warning("job_extraction_parse_fallback", content=content[:200])
+    return {
+        "title": "",
+        "company": None,
+        "required_skills": [],
+        "preferred_skills": [],
+        "location": "",
+        "seniority": "mid",
+        "salary_range": None,
+        "work_mode": "onsite",
+        "posted_date": None,
+    }

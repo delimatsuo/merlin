@@ -22,6 +22,7 @@ class AdminSettings(BaseModel):
     tts_enabled: bool = True
     interview_enabled: bool = True
     cover_letter_enabled: bool = True
+    job_matching_enabled: bool = False
 
 
 class AdminSettingsService:

@@ -6,6 +6,7 @@
   "nav.profile": "My Profile",
   "nav.newJob": "New Job",
   "nav.linkedin": "LinkedIn",
+  "nav.jobs": "Jobs",
   "nav.admin": "Admin",
   "nav.settings": "Settings",
   "nav.signOut": "Sign Out",
@@ -14,6 +15,7 @@
   "mobileNav.profile": "Profile",
   "mobileNav.newJob": "New Job",
   "mobileNav.linkedin": "LinkedIn",
+  "mobileNav.jobs": "Jobs",
 
   "footer.allRightsReserved": "All rights reserved.",
   "footer.privacy": "Privacy",
