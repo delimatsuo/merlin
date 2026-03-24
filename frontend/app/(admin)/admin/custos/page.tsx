@@ -7,8 +7,10 @@ interface CostData {
   unitCosts: Record<string, number>;
   generationsToday: number;
   generationsMonth: number;
+  generationsAllTime: number;
   estimatedCostToday: number;
   estimatedCostMonth: number;
+  estimatedCostAllTime: number;
   costPerGeneration: number;
   dailyChart: { date: string; count: number }[];
 }
@@ -67,16 +69,21 @@ export default function AdminCustos() {
       <h1 className="text-xl font-semibold">Custos</h1>
 
       {/* Projections */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <CostCard label="Gerações hoje" value={data.generationsToday} />
+        <CostCard label="Gerações no mês" value={data.generationsMonth} />
+        <CostCard label="Gerações total" value={data.generationsAllTime} />
         <CostCard
           label="Custo estimado hoje"
           value={`$${data.estimatedCostToday.toFixed(2)}`}
         />
-        <CostCard label="Gerações no mês" value={data.generationsMonth} />
         <CostCard
           label="Custo estimado mês"
           value={`$${data.estimatedCostMonth.toFixed(2)}`}
+        />
+        <CostCard
+          label="Custo estimado total"
+          value={`$${data.estimatedCostAllTime.toFixed(2)}`}
         />
       </div>
 

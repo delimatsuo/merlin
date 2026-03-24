@@ -197,6 +197,7 @@ async def get_costs(
 
     gen_today = stats.get("generationsToday", 0)
     gen_month = stats.get("generationsMonth", 0)
+    gen_all_time = stats.get("generationsAllTime", 0)
 
     # Each generation pipeline: rewrite + cover letter + analysis + ATS + skill match
     cost_per_generation = (
@@ -211,8 +212,10 @@ async def get_costs(
         "unitCosts": unit_costs,
         "generationsToday": gen_today,
         "generationsMonth": gen_month,
+        "generationsAllTime": gen_all_time,
         "estimatedCostToday": round(gen_today * cost_per_generation, 4),
         "estimatedCostMonth": round(gen_month * cost_per_generation, 4),
+        "estimatedCostAllTime": round(gen_all_time * cost_per_generation, 4),
         "costPerGeneration": round(cost_per_generation, 4),
         "dailyChart": daily,
     }
