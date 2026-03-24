@@ -49,10 +49,10 @@ async def main():
         scrape_stats = await run_scraping_pipeline()
         logger.info("job_pipeline_scrape_done", **scrape_stats)
 
-        # Phase 2: Match against users (to be implemented in Phase 3)
-        # from app.jobs.matcher import run_matching_pipeline
-        # match_stats = await run_matching_pipeline()
-        # logger.info("job_pipeline_match_done", **match_stats)
+        # Phase 2: Match against users
+        from app.jobs.matcher import run_matching_pipeline
+        match_stats = await run_matching_pipeline()
+        logger.info("job_pipeline_match_done", **match_stats)
 
         logger.info("job_pipeline_complete")
 
