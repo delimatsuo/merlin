@@ -222,8 +222,7 @@ jobs:
               --cpu 1 \
               --task-timeout 900 \
               --max-retries 1 \
-              --command "python" \
-              --args "-m,app.jobs.entrypoint" \
+              --command "python,-m,app.jobs.entrypoint" \
               --quiet
           else
             gcloud run jobs create ${{ env.CLOUD_RUN_JOB }} \
@@ -235,7 +234,6 @@ jobs:
               --cpu 1 \
               --task-timeout 900 \
               --max-retries 1 \
-              --command "python" \
-              --args "-m,app.jobs.entrypoint" \
+              --command "python,-m,app.jobs.entrypoint" \
               --quiet
           fi
