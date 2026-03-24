@@ -14,13 +14,6 @@ const WORK_MODES = [
   { value: "onsite", labelKey: "vagas.prefs.onsite" },
 ] as const;
 
-const SENIORITY_LEVELS = [
-  { value: "junior", labelKey: "vagas.prefs.junior" },
-  { value: "mid", labelKey: "vagas.prefs.mid" },
-  { value: "senior", labelKey: "vagas.prefs.senior" },
-  { value: "lead", labelKey: "vagas.prefs.lead" },
-] as const;
-
 interface Props {
   initial?: JobPreferences | null;
   onSaved?: () => void;
@@ -35,7 +28,6 @@ export function JobPreferencesForm({ initial, onSaved }: Props) {
   const [locations, setLocations] = useState<string[]>(initial?.locations || []);
   const [locationInput, setLocationInput] = useState("");
   const [workMode, setWorkMode] = useState<string[]>(initial?.work_mode || []);
-  const [seniority, setSeniority] = useState<string[]>(initial?.seniority || []);
   const [emailDigest, setEmailDigest] = useState(initial?.email_digest ?? true);
   const [saving, setSaving] = useState(false);
 
@@ -90,7 +82,7 @@ export function JobPreferencesForm({ initial, onSaved }: Props) {
         desired_titles: titles,
         locations,
         work_mode: workMode,
-        seniority,
+        seniority: [],
         min_score: 50,
         email_digest: emailDigest,
       });
@@ -217,28 +209,6 @@ export function JobPreferencesForm({ initial, onSaved }: Props) {
                 }`}
               >
                 {t(mode.labelKey)}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Seniority (toggle pills) */}
-        <div>
-          <label className="text-xs font-medium text-foreground mb-2 block">
-            {t("vagas.prefs.seniorityLabel")}
-          </label>
-          <div className="flex flex-wrap gap-2">
-            {SENIORITY_LEVELS.map((level) => (
-              <button
-                key={level.value}
-                onClick={() => toggleOption(level.value, seniority, setSeniority)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
-                  seniority.includes(level.value)
-                    ? "bg-foreground text-background"
-                    : "bg-secondary text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {t(level.labelKey)}
               </button>
             ))}
           </div>

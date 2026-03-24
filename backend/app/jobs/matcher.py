@@ -36,22 +36,65 @@ def _normalize(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Title synonym groups — maps related job titles for broader matching
+# ---------------------------------------------------------------------------
+
+# Each group is a set of normalized terms that should match each other.
+# If the user searches for any term in a group, jobs with any other term
+# in that group should also match.
+_SYNONYM_GROUPS: list[set[str]] = [
+    {"software engineer", "engenheiro de software", "developer", "desenvolvedor", "dev", "programador", "software developer", "full stack", "fullstack", "backend developer", "frontend developer"},
+    {"data engineer", "engenheiro de dados", "data developer"},
+    {"data scientist", "cientista de dados", "data science"},
+    {"data analyst", "analista de dados", "data analytics", "bi analyst", "analista de bi"},
+    {"product manager", "gerente de produto", "product owner", "pm", "po"},
+    {"project manager", "gerente de projetos", "gerente de projeto", "coordenador de projetos"},
+    {"designer", "ux designer", "ui designer", "product designer", "ux/ui", "web designer"},
+    {"devops", "sre", "site reliability", "platform engineer", "engenheiro de plataforma", "infrastructure engineer"},
+    {"qa", "quality assurance", "test engineer", "analista de qualidade", "analista de testes", "qe"},
+    {"scrum master", "agile coach", "agilista"},
+    {"tech lead", "lider tecnico", "engineering manager", "gerente de engenharia"},
+    {"marketing", "analista de marketing", "marketing analyst", "growth", "marketing digital"},
+    {"hr", "rh", "recursos humanos", "human resources", "people", "analista de rh", "gerente de rh", "diretor de rh"},
+    {"sales", "vendas", "executivo de vendas", "account executive", "sdr", "bdr"},
+    {"finance", "financeiro", "analista financeiro", "gerente financeiro", "controller", "fp&a"},
+    {"operations", "operacoes", "analista de operacoes", "gerente de operacoes"},
+    {"cto", "vp engineering", "vp de engenharia", "diretor de tecnologia"},
+    {"cfo", "diretor financeiro", "vp finance"},
+    {"coo", "diretor de operacoes", "vp operations"},
+]
+
+
+def _expand_with_synonyms(titles: list[str]) -> set[str]:
+    """Expand a list of normalized titles with synonyms from known groups."""
+    expanded = set(titles)
+    for title in titles:
+        for group in _SYNONYM_GROUPS:
+            # Check if any term in the group matches (substring in either direction)
+            if any(title in term or term in title for term in group):
+                expanded.update(group)
+    return expanded
+
+
+# ---------------------------------------------------------------------------
 # Deterministic filter (Phase A — zero AI cost)
 # ---------------------------------------------------------------------------
 
 def filter_by_preferences(jobs: list[dict], preferences: dict) -> list[dict]:
     """Filter jobs by user preferences using deterministic matching.
 
-    Returns only jobs that match at least one desired title keyword
-    and satisfy location/work_mode/seniority constraints.
+    Uses synonym expansion so "software engineer" also matches "desenvolvedor",
+    "developer", "dev full stack", etc.
     """
-    desired_titles = [_normalize(t) for t in preferences.get("desired_titles", [])]
+    raw_titles = [_normalize(t) for t in preferences.get("desired_titles", [])]
     pref_locations = [_normalize(loc) for loc in preferences.get("locations", [])]
     pref_work_modes = set(preferences.get("work_mode", []))
-    pref_seniority = set(preferences.get("seniority", []))
 
-    if not desired_titles:
+    if not raw_titles:
         return []
+
+    # Expand titles with synonyms
+    expanded_titles = _expand_with_synonyms(raw_titles)
 
     filtered = []
     for job in jobs:
@@ -59,17 +102,27 @@ def filter_by_preferences(jobs: list[dict], preferences: dict) -> list[dict]:
         if not job_title:
             continue
 
-        # Title match: any desired title keyword appears as substring
-        title_match = any(dt in job_title or job_title in dt for dt in desired_titles)
+        # Title match: any expanded title keyword appears as substring (either direction)
+        title_match = any(
+            dt in job_title or job_title in dt
+            for dt in expanded_titles
+        )
         if not title_match:
-            # Also check word-level overlap (e.g., "product manager" matches "gerente de produto"?)
-            # For now, keep it simple — substring match only
-            continue
+            # Also try word-level: check if significant words overlap
+            job_words = set(job_title.split())
+            title_words = set()
+            for dt in expanded_titles:
+                title_words.update(dt.split())
+            # Remove common stop words
+            stop = {"de", "da", "do", "e", "em", "para", "the", "and", "of", "in", "a", "o"}
+            job_significant = job_words - stop
+            title_significant = title_words - stop
+            if not (job_significant & title_significant):
+                continue
 
         # Work mode filter (if specified)
         if pref_work_modes:
             job_work_mode = job.get("work_mode", "onsite")
-            # "Remoto" in locations implies remote is acceptable
             has_remote_location = any("remoto" in loc for loc in pref_locations)
             if job_work_mode not in pref_work_modes and not (has_remote_location and job_work_mode == "remote"):
                 continue
@@ -78,17 +131,10 @@ def filter_by_preferences(jobs: list[dict], preferences: dict) -> list[dict]:
         if pref_locations:
             job_location = _normalize(job.get("location", ""))
             job_work_mode = job.get("work_mode", "onsite")
-            # Remote jobs match any location preference
             if job_work_mode != "remote":
                 location_match = any(loc in job_location or job_location in loc for loc in pref_locations)
                 if not location_match:
                     continue
-
-        # Seniority filter (if specified)
-        if pref_seniority:
-            job_seniority = job.get("seniority", "")
-            if job_seniority and job_seniority not in pref_seniority:
-                continue
 
         filtered.append(job)
 
