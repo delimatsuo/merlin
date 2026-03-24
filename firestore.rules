@@ -29,6 +29,17 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // Job preferences — user can read/write their own
+      match /jobPreferences/{doc} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+
+      // Matched jobs — read-only for user, write by batch job via Admin SDK
+      match /matchedJobs/{date} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow write: if false;
+      }
+
       // Applications subcollection
       match /applications/{applicationId} {
         allow read, write: if request.auth != null && request.auth.uid == uid;
@@ -52,6 +63,17 @@ service cloud.firestore {
     match /companyCache/{companyId} {
       allow read: if request.auth != null;
       allow write: if false; // Only backend service account via Admin SDK
+    }
+
+    // Jobs catalog — read-only for authenticated users, write by batch job via Admin SDK
+    match /jobs/{jobId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // Batch run tracking — backend-only via Admin SDK
+    match /jobs/batchRuns/{date} {
+      allow read, write: if false;
     }
 
     // Platform stats — backend-only via Admin SDK
