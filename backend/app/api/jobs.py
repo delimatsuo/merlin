@@ -142,24 +142,6 @@ async def get_feed_by_date(
     )
 
 
-@router.get("/{job_id}")
-@limiter.limit("30/minute")
-async def get_job(
-    request: Request,
-    job_id: str,
-    user: AuthenticatedUser = Depends(get_current_user),
-):
-    """Return a single job from the global jobs collection."""
-    fs = FirestoreService()
-    job = await fs.get_job(job_id)
-    if not job:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Vaga não encontrada.",
-        )
-    return job
-
-
 @router.get("/unsubscribe")
 async def unsubscribe_digest(token: str):
     """Unsubscribe from email digest via signed HMAC token (no auth required)."""
@@ -178,3 +160,21 @@ async def unsubscribe_digest(token: str):
         logger.info("email_digest_unsubscribed", uid_hash=uid[:8])
 
     return {"message": "Você não receberá mais e-mails de vagas."}
+
+
+@router.get("/{job_id}")
+@limiter.limit("30/minute")
+async def get_job(
+    request: Request,
+    job_id: str,
+    user: AuthenticatedUser = Depends(get_current_user),
+):
+    """Return a single job from the global jobs collection."""
+    fs = FirestoreService()
+    job = await fs.get_job(job_id)
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Vaga não encontrada.",
+        )
+    return job

@@ -47,8 +47,9 @@ def _make_job_id(source: str, source_id: str) -> str:
         # Use source + native ID for stable dedup
         safe_id = re.sub(r"[/\.]", "_", str(source_id))
         return f"{source}_{safe_id}"
-    # Fallback: hash-based ID if no source_id available
-    return f"{source}_{hashlib.sha256(str(source_id).encode()).hexdigest()[:16]}"
+    # Fallback: random UUID if no source_id available (no dedup possible)
+    import uuid
+    return f"{source}_{uuid.uuid4().hex[:16]}"
 
 
 async def run_scraping_pipeline() -> dict:
@@ -145,15 +146,16 @@ async def run_scraping_pipeline() -> dict:
             continue  # Skip jobs we can't identify
 
         # Calculate expiry (14 days from posted date or now)
+        # Store as native datetime for Firestore queries (not ISO string)
         try:
             if posted_date:
                 posted_dt = datetime.fromisoformat(posted_date.replace("Z", "+00:00"))
             else:
                 posted_dt = datetime.now(timezone.utc)
-            expires_at = (posted_dt + timedelta(days=14)).isoformat()
+            expires_at = posted_dt + timedelta(days=14)
         except (ValueError, TypeError):
             posted_dt = datetime.now(timezone.utc)
-            expires_at = (posted_dt + timedelta(days=14)).isoformat()
+            expires_at = posted_dt + timedelta(days=14)
             posted_date = posted_dt.strftime("%Y-%m-%d")
 
         # Store in Firestore
