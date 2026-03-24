@@ -21,6 +21,7 @@ import {
   User,
   Settings,
   Linkedin,
+  Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
@@ -36,6 +37,7 @@ export function DashboardNav() {
   const navItems = [
     { href: "/dashboard", label: t("nav.applications"), icon: Briefcase },
     { href: "/dashboard/profile", label: t("nav.profile"), icon: UserIcon },
+    { href: "/dashboard/vagas", label: t("nav.jobs"), icon: Search },
     { href: "/dashboard/job", label: t("nav.newJob"), icon: Plus },
     { href: "/dashboard/linkedin", label: t("nav.linkedin"), icon: Linkedin },
   ];

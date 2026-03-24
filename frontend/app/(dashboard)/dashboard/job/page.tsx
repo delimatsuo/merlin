@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { useApplicationStore, useWorkflowStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
@@ -32,8 +32,9 @@ interface AnalysisResult {
   followUp: { decision: string; questions: string[] } | null;
 }
 
-export default function VagaPage() {
+function VagaPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { t, locale } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -51,11 +52,33 @@ export default function VagaPage() {
   reset,
   } = useApplicationStore();
 
-  // Reset store on fresh navigation so user gets a clean form
+  // Reset store on fresh navigation (skip if pre-filling from job feed)
+  const prefillJobId = searchParams?.get("prefill");
   useEffect(() => {
-    reset();
+    if (!prefillJobId) {
+      reset();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Pre-fill from job feed: fetch job raw_text and auto-trigger analysis
+  useEffect(() => {
+    if (!prefillJobId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const job = await api.get<{ raw_text: string }>(`/api/jobs/${prefillJobId}`);
+        if (!cancelled && job?.raw_text) {
+          reset();
+          setJobDescription(job.raw_text);
+        }
+      } catch {
+        // Job not found — user can still paste manually
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillJobId]);
 
   // Analysis results (inline)
   const [result, setResult] = useState<AnalysisResult | null>(null);
@@ -497,5 +520,13 @@ export default function VagaPage() {
         </>
       )}
     </div>
+  );
+}
+
+export default function VagaPage() {
+  return (
+    <Suspense>
+      <VagaPageContent />
+    </Suspense>
   );
 }
