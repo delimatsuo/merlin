@@ -4,6 +4,7 @@ import asyncio
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 import structlog
 from firebase_admin import auth as firebase_auth, firestore, storage, get_app
@@ -12,6 +13,18 @@ from google.cloud.firestore_v1.async_client import AsyncClient
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 logger = structlog.get_logger()
+
+_BRT = ZoneInfo("America/Sao_Paulo")
+
+
+def _brazil_today() -> str:
+    """Return today's date string in Brazil timezone (for stats bucketing)."""
+    return datetime.now(_BRT).strftime("%Y-%m-%d")
+
+
+def _brazil_now() -> datetime:
+    """Return current datetime in Brazil timezone (for stats bucketing)."""
+    return datetime.now(_BRT)
 
 # Module-level async client singleton
 _async_db: Optional[AsyncClient] = None
@@ -624,7 +637,7 @@ class FirestoreService:
 
     async def get_daily_usage(self, uid: str) -> int:
         """Get today's usage count for a user."""
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today = _brazil_today()
         doc_ref = self.db.collection("users").document(uid)
         doc = await doc_ref.get()
 
@@ -650,7 +663,7 @@ class FirestoreService:
         Resets the counter when the date changes. The transaction prevents
         race conditions where two concurrent requests both read the same count.
         """
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today = _brazil_today()
         doc_ref = self.db.collection("users").document(uid)
 
         transaction = self.db.transaction()
@@ -889,7 +902,7 @@ class FirestoreService:
 
     async def increment_platform_signup(self) -> None:
         """Increment daily signup counter."""
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today = _brazil_today()
         await self._increment_platform_stat(today, "signupCount")
 
     # --- Generation Activity Log ---
@@ -990,7 +1003,7 @@ class FirestoreService:
 
         Uses batch get for monthly stats to minimize Firestore reads.
         """
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today = _brazil_today()
         month_prefix = today[:7]  # YYYY-MM
 
         # Batch read all days of this month in one call
@@ -1021,16 +1034,23 @@ class FirestoreService:
         if month_generations == 0 and total_generations > 0:
             month_generations = total_generations
 
+        # All-time totals from global counter
+        all_time_generations = await self.get_global_generation_count()
+        # Use user-level sum as fallback if global counter not populated
+        if all_time_generations == 0 and total_generations > 0:
+            all_time_generations = total_generations
+
         return {
             "totalUsers": total_users,
             "generationsToday": today_data.get("generationCount", 0),
             "generationsMonth": month_generations,
+            "generationsAllTime": all_time_generations,
             "signupsMonth": month_signups,
         }
 
     async def get_daily_generation_stats(self, days: int = 30) -> list[dict]:
         """Daily generation counts for the last N days. Uses batch get."""
-        today = datetime.now(timezone.utc)
+        today = _brazil_now()
         dates = [
             (today - timedelta(days=i)).strftime("%Y-%m-%d")
             for i in range(days - 1, -1, -1)
@@ -1135,7 +1155,7 @@ class FirestoreService:
             total_signups += 1
 
         # Backfill platformStats for today with accumulated totals
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today = _brazil_today()
         await self.db.collection("platformStats").document(today).set({
             "generationCount": total_generations,
             "signupCount": total_signups,
