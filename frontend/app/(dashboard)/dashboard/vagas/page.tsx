@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { ChevronLeft, ChevronRight, SlidersHorizontal, Search, Sparkles } from "lucide-react";
+import { ChevronLeft, ChevronRight, SlidersHorizontal, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { JobCard } from "@/components/job-card";
 import { JobPreferencesForm } from "@/components/job-preferences-form";
@@ -40,12 +40,14 @@ function VagasContent() {
         setPrefsLoading(false);
       }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Load feed when preferences exist
   useEffect(() => {
     if (!preferences) return;
     loadFeed();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preferences]);
 
   // Check for date param
@@ -54,6 +56,7 @@ function VagasContent() {
     if (dateParam && preferences) {
       loadFeedForDate(dateParam);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, preferences]);
 
   const loadFeed = async () => {
