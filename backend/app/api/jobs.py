@@ -41,18 +41,10 @@ async def save_preferences(
     body: JobPreferencesRequest,
     user: AuthenticatedUser = Depends(get_current_user),
 ):
-    """Save job matching preferences. Requires LGPD consent."""
-    if not body.consent_granted:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="É necessário consentir com o matching automático de perfil (LGPD).",
-        )
-
+    """Save job matching preferences."""
     fs = FirestoreService()
     prefs_data = body.model_dump()
-    # Remove consent_granted flag, store timestamp instead
-    prefs_data.pop("consent_granted", None)
-    prefs_data["consent_granted_at"] = datetime.now().astimezone().isoformat()
+    prefs_data["last_updated"] = datetime.now().astimezone().isoformat()
 
     await fs.save_job_preferences(user.uid, prefs_data)
     logger.info("preferences_saved", uid=user.uid)

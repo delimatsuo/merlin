@@ -36,11 +36,6 @@ class JobPreferencesRequest(BaseModel):
         default=True,
         description="Receive daily email digest of matched jobs",
     )
-    consent_granted: bool = Field(
-        ...,
-        description="LGPD consent for automated profile matching",
-    )
-
     @field_validator("desired_titles")
     @classmethod
     def validate_titles(cls, v: list[str]) -> list[str]:
@@ -69,7 +64,6 @@ class JobPreferencesResponse(BaseModel):
     seniority: list[str] = []
     min_score: int = 50
     email_digest: bool = True
-    consent_granted_at: Optional[str] = None
     last_updated: Optional[str] = None
 
 

@@ -37,7 +37,6 @@ export function JobPreferencesForm({ initial, onSaved }: Props) {
   const [workMode, setWorkMode] = useState<string[]>(initial?.work_mode || []);
   const [seniority, setSeniority] = useState<string[]>(initial?.seniority || []);
   const [emailDigest, setEmailDigest] = useState(initial?.email_digest ?? true);
-  const [consent, setConsent] = useState(!!initial?.consent_granted_at);
   const [saving, setSaving] = useState(false);
 
   const addChip = (
@@ -84,7 +83,6 @@ export function JobPreferencesForm({ initial, onSaved }: Props) {
 
   const handleSave = async () => {
     if (titles.length === 0) return;
-    if (!consent) return;
 
     setSaving(true);
     try {
@@ -95,7 +93,6 @@ export function JobPreferencesForm({ initial, onSaved }: Props) {
         seniority,
         min_score: 50,
         email_digest: emailDigest,
-        consent_granted: true,
       });
       setPreferences(result);
       onSaved?.();
@@ -264,39 +261,10 @@ export function JobPreferencesForm({ initial, onSaved }: Props) {
           </span>
         </label>
 
-        {/* LGPD consent */}
-        <label className="flex items-start gap-3 cursor-pointer rounded-xl border border-border/50 p-4 bg-secondary/30">
-          <div className="relative mt-0.5 shrink-0">
-            <input
-              type="checkbox"
-              checked={consent}
-              onChange={(e) => setConsent(e.target.checked)}
-              className="peer sr-only"
-            />
-            <div className="h-5 w-5 rounded-md border-2 border-muted-foreground/30 transition-all duration-200 peer-checked:border-foreground peer-checked:bg-foreground" />
-            <svg
-              className="absolute top-0.5 left-0.5 h-4 w-4 text-background opacity-0 peer-checked:opacity-100 transition-opacity duration-200"
-              viewBox="0 0 16 16"
-              fill="none"
-            >
-              <path
-                d="M4 8L7 11L12 5"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </div>
-          <span className="text-xs text-muted-foreground leading-relaxed">
-            {t("vagas.prefs.consent")}
-          </span>
-        </label>
-
         {/* Save button */}
         <Button
           onClick={handleSave}
-          disabled={titles.length === 0 || !consent || saving}
+          disabled={titles.length === 0 || saving}
           className="h-11 px-6 rounded-full text-sm font-semibold w-full"
         >
           {saving ? (
