@@ -67,7 +67,7 @@ def get_settings() -> Settings:
 
 def load_secrets_from_gcp() -> None:
     """Load secrets from GCP Secret Manager (production only)."""
-    if os.getenv("K_SERVICE"):  # Running on Cloud Run
+    if os.getenv("K_SERVICE") or os.getenv("CLOUD_RUN_JOB"):  # Cloud Run Service or Job
         try:
             from google.cloud import secretmanager
 
