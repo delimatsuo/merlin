@@ -216,6 +216,13 @@ async def match_user_jobs(
 
     # Phase A: Deterministic filter
     filtered = filter_by_preferences(all_jobs, preferences)
+
+    # Fallback: if title filter is too strict and returns nothing,
+    # send all jobs to AI matching (the skill match will filter by relevance)
+    if not filtered and len(all_jobs) <= 200:
+        logger.info("match_title_filter_fallback", uid_hash=uid[:8], all_jobs=len(all_jobs))
+        filtered = all_jobs
+
     # Cap per-user to avoid excessive AI calls
     filtered = filtered[:settings.max_jobs_per_digest]
 
