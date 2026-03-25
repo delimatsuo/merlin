@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Loader2,
+  ArrowLeft,
   ArrowRight,
   CheckCircle2,
   XCircle,
@@ -201,6 +202,15 @@ function VagaPageContent() {
     <div className="max-w-2xl mx-auto space-y-8">
       {/* Header */}
       <div className="pt-4">
+        {prefillJobId && (
+          <button
+            onClick={() => router.push("/dashboard/vagas")}
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors mb-3"
+          >
+            <ArrowLeft className="h-3 w-3" />
+            {t("nav.search")}
+          </button>
+        )}
         <h1 className="text-3xl font-bold tracking-tight text-foreground">
           {t("job.title")}
         </h1>

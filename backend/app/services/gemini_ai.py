@@ -847,3 +847,44 @@ async def extract_job_data(raw_text: str) -> dict:
         "work_mode": "onsite",
         "posted_date": None,
     }
+
+
+# ---------------------------------------------------------------------------
+# Job Relevance Filter (for matching pipeline — cheap Flash-Lite)
+# ---------------------------------------------------------------------------
+
+async def check_job_relevance(
+    desired_titles: list[str],
+    job_title: str,
+    job_seniority: str = "",
+) -> bool:
+    """Check if a job is relevant to the user's desired roles.
+
+    Uses Flash-Lite to understand role-level fit, not just keyword matching.
+    Returns True if the job is relevant, False otherwise.
+    """
+    titles_str = ", ".join(desired_titles[:5])
+
+    content = await _call_flash_lite(
+        system="""<task>
+Determine if a job posting is relevant for a candidate based on their desired roles.
+Consider seniority level, role scope, and career trajectory — NOT just keyword overlap.
+
+Rules:
+- A director/gerente should NOT see intern/estagiário/auxiliar/assistente positions
+- A senior professional should NOT see junior/trainee positions
+- Related roles at the SAME level are relevant (e.g., "Gerente de RH" → "Gerente de People" = yes)
+- Completely different functions are NOT relevant (e.g., "Gerente de RH" → "Analista Financeiro" = no)
+
+Return ONLY a JSON object: {"relevant": true} or {"relevant": false}
+</task>""",
+        user_content=f"Candidate wants: {titles_str}\nJob posting: {job_title} (seniority: {job_seniority})",
+        task="job_relevance",
+    )
+
+    result = _parse_json_response(content)
+    if result and isinstance(result, dict):
+        return result.get("relevant", False)
+
+    # Fallback: check if any keyword appears
+    return False

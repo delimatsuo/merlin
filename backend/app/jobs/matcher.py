@@ -10,7 +10,7 @@ import structlog
 
 from app.config import get_settings
 from app.services.firestore import FirestoreService
-from app.services.gemini_ai import semantic_skill_match
+from app.services.gemini_ai import semantic_skill_match, check_job_relevance
 from app.services.email import send_job_digest
 
 logger = structlog.get_logger()
@@ -214,24 +214,58 @@ async def match_user_jobs(
         logger.info("match_skip_no_skills", uid_hash=uid[:8])
         return []
 
-    # Phase A: Deterministic filter
+    desired_titles = preferences.get("desired_titles", [])
+
+    # Phase A: Deterministic filter (location + work mode)
     filtered = filter_by_preferences(all_jobs, preferences)
 
-    # Fallback: if title filter is too strict and returns nothing,
-    # send all jobs to AI matching (the skill match will filter by relevance)
+    # If deterministic filter is too strict, start from all jobs
     if not filtered and len(all_jobs) <= 200:
-        logger.info("match_title_filter_fallback", uid_hash=uid[:8], all_jobs=len(all_jobs))
         filtered = all_jobs
 
-    # Cap per-user to avoid excessive AI calls
-    filtered = filtered[:settings.max_jobs_per_digest]
+    # Cap to avoid excessive AI calls
+    filtered = filtered[:100]
 
     if not filtered:
         return []
 
+    # Phase A.5: AI relevance filter — checks role-level fit, not just skills
+    # This prevents a Director from seeing Intern/Assistant positions
+    relevant_jobs = []
+    relevance_tasks = []
+    for job in filtered:
+        if ai_call_counter["count"] >= settings.job_match_max_ai_calls:
+            break
+        ai_call_counter["count"] += 1
+        relevance_tasks.append(
+            check_job_relevance(
+                desired_titles=desired_titles,
+                job_title=job.get("title", ""),
+                job_seniority=job.get("seniority", ""),
+            )
+        )
+
+    relevance_results = await asyncio.gather(*relevance_tasks)
+    for job, is_relevant in zip(filtered[:len(relevance_results)], relevance_results):
+        if is_relevant:
+            relevant_jobs.append(job)
+
+    logger.info(
+        "match_relevance_filter",
+        uid_hash=uid[:8],
+        input=len(filtered),
+        relevant=len(relevant_jobs),
+    )
+
+    if not relevant_jobs:
+        return []
+
+    # Cap per-user for skill matching
+    relevant_jobs = relevant_jobs[:settings.max_jobs_per_digest]
+
     # Phase B: AI skill match (with circuit breaker check)
     tasks = []
-    for job in filtered:
+    for job in relevant_jobs:
         # Circuit breaker: check global AI call budget
         if ai_call_counter["count"] >= settings.job_match_max_ai_calls:
             logger.warning("match_circuit_breaker", uid_hash=uid[:8], calls=ai_call_counter["count"])
