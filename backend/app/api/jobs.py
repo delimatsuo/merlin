@@ -87,10 +87,17 @@ async def get_feed(
     if not result:
         return JobFeedResponse(date=today, matches=[], total_matches=0)
 
+    matches = []
+    for m in result.get("matches", []):
+        try:
+            matches.append(MatchedJob(**m))
+        except Exception:
+            logger.warning("match_parse_skip", job_id=m.get("job_id", ""))
+
     return JobFeedResponse(
         date=today,
-        matches=[MatchedJob(**m) for m in result.get("matches", [])],
-        total_matches=result.get("total_matches", 0),
+        matches=matches,
+        total_matches=len(matches),
         generated_at=result.get("generated_at"),
     )
 
@@ -113,8 +120,8 @@ async def get_feed_by_date(
         )
 
     # Reject dates older than 30 days
-    today = datetime.strptime(_brazil_today(), "%Y-%m-%d")
-    if (today - parsed_date).days > 30:
+    today_dt = datetime.strptime(_brazil_today(), "%Y-%m-%d")
+    if (today_dt - parsed_date).days > 30:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Não é possível consultar vagas com mais de 30 dias.",
@@ -126,10 +133,17 @@ async def get_feed_by_date(
     if not result:
         return JobFeedResponse(date=date, matches=[], total_matches=0)
 
+    matches = []
+    for m in result.get("matches", []):
+        try:
+            matches.append(MatchedJob(**m))
+        except Exception:
+            logger.warning("match_parse_skip", job_id=m.get("job_id", ""))
+
     return JobFeedResponse(
         date=date,
-        matches=[MatchedJob(**m) for m in result.get("matches", [])],
-        total_matches=result.get("total_matches", 0),
+        matches=matches,
+        total_matches=len(matches),
         generated_at=result.get("generated_at"),
     )
 
