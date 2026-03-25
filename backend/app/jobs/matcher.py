@@ -128,10 +128,11 @@ def filter_by_preferences(jobs: list[dict], preferences: dict) -> list[dict]:
                 continue
 
         # Location filter (if specified and not remote-only)
+        # Jobs with empty/unknown location are NOT filtered out
         if pref_locations:
             job_location = _normalize(job.get("location", ""))
             job_work_mode = job.get("work_mode", "onsite")
-            if job_work_mode != "remote":
+            if job_location and job_work_mode != "remote":
                 location_match = any(loc in job_location or job_location in loc for loc in pref_locations)
                 if not location_match:
                     continue
