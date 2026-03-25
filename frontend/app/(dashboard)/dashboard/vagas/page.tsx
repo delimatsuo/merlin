@@ -2,13 +2,14 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { ChevronLeft, ChevronRight, SlidersHorizontal, Search } from "lucide-react";
+import { SlidersHorizontal, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { JobCard } from "@/components/job-card";
 import { JobPreferencesForm } from "@/components/job-preferences-form";
 import { useJobFeedStore, type JobPreferences, type MatchedJobItem } from "@/lib/store";
 import { api } from "@/lib/api";
 import { useTranslation } from "@/lib/hooks/useTranslation";
+import { cn } from "@/lib/utils";
 
 interface FeedResponse {
   date: string;
@@ -17,11 +18,18 @@ interface FeedResponse {
   generated_at: string | null;
 }
 
+const TIME_RANGES = [
+  { value: 1, label: "24h" },
+  { value: 3, label: "3 dias" },
+  { value: 7, label: "7 dias" },
+  { value: 14, label: "14 dias" },
+] as const;
+
 function VagasContent() {
   const { t } = useTranslation();
   const {
-    preferences, matches, date, loading, prefsLoading,
-    setPreferences, setMatches, setDate, setLoading, setPrefsLoading,
+    preferences, matches, days, loading, prefsLoading,
+    setPreferences, setMatches, setDays, setLoading, setPrefsLoading,
   } = useJobFeedStore();
 
   const [showPrefsEditor, setShowPrefsEditor] = useState(false);
@@ -43,28 +51,18 @@ function VagasContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load feed when preferences exist
+  // Load feed when preferences exist or days change
   useEffect(() => {
     if (!preferences) return;
-    loadFeed();
+    loadFeed(days);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preferences]);
+  }, [preferences, days]);
 
-  // Check for date param
-  useEffect(() => {
-    const dateParam = searchParams?.get("date");
-    if (dateParam && preferences) {
-      loadFeedForDate(dateParam);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, preferences]);
-
-  const loadFeed = async () => {
+  const loadFeed = async (numDays: number) => {
     setLoading(true);
     try {
-      const result = await api.get<FeedResponse>("/api/jobs/feed");
+      const result = await api.get<FeedResponse>(`/api/jobs/feed?days=${numDays}`);
       setMatches(result.matches);
-      setDate(result.date);
     } catch {
       setMatches([]);
     } finally {
@@ -72,44 +70,8 @@ function VagasContent() {
     }
   };
 
-  const loadFeedForDate = async (targetDate: string) => {
-    setLoading(true);
-    try {
-      const result = await api.get<FeedResponse>(`/api/jobs/feed/${targetDate}`);
-      setMatches(result.matches);
-      setDate(result.date);
-    } catch {
-      setMatches([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const navigateDate = (direction: -1 | 1) => {
-    if (!date) return;
-    const current = new Date(date + "T12:00:00");
-    current.setDate(current.getDate() + direction);
-    const newDate = current.toISOString().split("T")[0];
-
-    // Don't go into the future
-    const today = new Date().toISOString().split("T")[0];
-    if (newDate > today) return;
-
-    // Don't go more than 30 days back
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    if (current < thirtyDaysAgo) return;
-
-    loadFeedForDate(newDate);
-  };
-
-  const formatDateDisplay = (dateStr: string) => {
-    try {
-      const d = new Date(dateStr + "T12:00:00");
-      return d.toLocaleDateString("pt-BR", { day: "numeric", month: "short" });
-    } catch {
-      return dateStr;
-    }
+  const handleDaysChange = (newDays: number) => {
+    setDays(newDays);
   };
 
   // Loading state
@@ -195,26 +157,23 @@ function VagasContent() {
         </Button>
       </div>
 
-      {/* Date navigation */}
-      {date && (
-        <div className="flex items-center justify-center gap-1">
+      {/* Time range selector */}
+      <div className="flex items-center justify-center gap-1.5">
+        {TIME_RANGES.map((range) => (
           <button
-            onClick={() => navigateDate(-1)}
-            className="h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            key={range.value}
+            onClick={() => handleDaysChange(range.value)}
+            className={cn(
+              "px-3.5 py-1.5 rounded-full text-xs font-medium transition-all duration-200",
+              days === range.value
+                ? "bg-foreground text-background"
+                : "text-muted-foreground hover:text-foreground"
+            )}
           >
-            <ChevronLeft className="h-4 w-4" />
+            {range.label}
           </button>
-          <span className="px-4 py-1.5 rounded-full bg-secondary text-xs font-medium text-foreground min-w-[80px] text-center">
-            {formatDateDisplay(date)}
-          </span>
-          <button
-            onClick={() => navigateDate(1)}
-            className="h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
-      )}
+        ))}
+      </div>
 
       {/* Loading */}
       {loading && (
@@ -234,17 +193,17 @@ function VagasContent() {
         </div>
       )}
 
-      {/* Empty state — preferences set but no matches */}
+      {/* Empty state */}
       {!loading && matches.length === 0 && (
         <div className="apple-shadow rounded-2xl bg-card p-12 text-center">
           <div className="mx-auto h-16 w-16 rounded-2xl bg-secondary flex items-center justify-center mb-4">
             <Search className="h-7 w-7 text-muted-foreground" />
           </div>
           <h3 className="text-base font-semibold text-foreground">
-            {date ? t("vagas.noMatches") : t("vagas.pendingTitle")}
+            {t("vagas.noMatches")}
           </h3>
           <p className="text-sm text-muted-foreground mt-1.5 max-w-sm mx-auto">
-            {date ? t("vagas.noMatchesSub") : t("vagas.pendingSub")}
+            {t("vagas.noMatchesSub")}
           </p>
         </div>
       )}

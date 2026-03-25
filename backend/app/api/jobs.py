@@ -1,13 +1,15 @@
 """Job matching and preferences endpoints."""
 
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from app.auth import AuthenticatedUser, get_current_user
+from app.jobs.matcher import match_user_jobs
 from app.schemas.jobs import (
     JobFeedResponse,
     JobPreferencesRequest,
@@ -15,7 +17,9 @@ from app.schemas.jobs import (
     MatchedJob,
 )
 from app.services.email import verify_unsubscribe_token
-from app.services.firestore import FirestoreService, _brazil_today
+from app.services.firestore import FirestoreService, _brazil_today, _brazil_now
+
+_BRT = ZoneInfo("America/Sao_Paulo")
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -67,84 +71,68 @@ async def delete_preferences(
 @limiter.limit("60/minute")
 async def get_feed(
     request: Request,
+    days: int = Query(default=1, ge=1, le=14),
     user: AuthenticatedUser = Depends(get_current_user),
 ):
-    """Return today's matched jobs. Falls back to yesterday if today not found."""
+    """Return matched jobs for the last N days (default 1). Deduplicates across days.
+
+    If preferences were updated after the last match, re-matches inline.
+    """
+    if days not in (1, 3, 7, 14):
+        days = 1
+
     fs = FirestoreService()
-
     today = _brazil_today()
-    result = await fs.get_matched_jobs(user.uid, today)
 
-    if not result:
-        # Fall back to yesterday
-        yesterday = (
-            datetime.strptime(today, "%Y-%m-%d") - timedelta(days=1)
-        ).strftime("%Y-%m-%d")
-        result = await fs.get_matched_jobs(user.uid, yesterday)
-        if result:
-            today = yesterday
+    # Check if we need on-demand re-matching (preferences changed after last match)
+    prefs = await fs.get_job_preferences(user.uid)
+    if prefs:
+        today_result = await fs.get_matched_jobs(user.uid, today)
+        prefs_updated = prefs.get("last_updated", "")
+        matches_generated = today_result.get("generated_at", "") if today_result else ""
 
-    if not result:
-        return JobFeedResponse(date=today, matches=[], total_matches=0)
+        if not today_result or (prefs_updated and prefs_updated > matches_generated):
+            # Re-match this user against existing job pool
+            logger.info("feed_on_demand_rematch", uid=user.uid)
+            knowledge = await fs.get_candidate_knowledge(user.uid)
+            all_jobs = await fs.get_active_jobs(limit=500)
+            if knowledge and all_jobs:
+                ai_counter = {"count": 0}
+                fresh_matches = await match_user_jobs(
+                    uid=user.uid,
+                    knowledge=knowledge,
+                    preferences=prefs,
+                    all_jobs=all_jobs,
+                    ai_call_counter=ai_counter,
+                )
+                await fs.save_matched_jobs(user.uid, today, fresh_matches, len(fresh_matches))
 
-    matches = []
-    for m in result.get("matches", []):
-        try:
-            matches.append(MatchedJob(**m))
-        except Exception:
-            logger.warning("match_parse_skip", job_id=m.get("job_id", ""))
+    # Read matched jobs for the last N days, deduplicated
+    now = _brazil_now()
+    all_matches = []
+    seen_job_ids: set[str] = set()
+
+    for i in range(days):
+        date = (now - timedelta(days=i)).strftime("%Y-%m-%d")
+        result = await fs.get_matched_jobs(user.uid, date)
+        if not result:
+            continue
+        for m in result.get("matches", []):
+            job_id = m.get("job_id", "")
+            if job_id and job_id not in seen_job_ids:
+                seen_job_ids.add(job_id)
+                try:
+                    all_matches.append(MatchedJob(**m))
+                except Exception:
+                    logger.warning("match_parse_skip", job_id=job_id)
+
+    # Sort by ATS score descending
+    all_matches.sort(key=lambda x: x.ats_score, reverse=True)
 
     return JobFeedResponse(
         date=today,
-        matches=matches,
-        total_matches=len(matches),
-        generated_at=result.get("generated_at"),
-    )
-
-
-@router.get("/feed/{date}", response_model=JobFeedResponse)
-@limiter.limit("60/minute")
-async def get_feed_by_date(
-    request: Request,
-    date: str,
-    user: AuthenticatedUser = Depends(get_current_user),
-):
-    """Return matched jobs for a specific date."""
-    # Validate date format
-    try:
-        parsed_date = datetime.strptime(date, "%Y-%m-%d")
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Formato de data inválido. Use YYYY-MM-DD.",
-        )
-
-    # Reject dates older than 30 days
-    today_dt = datetime.strptime(_brazil_today(), "%Y-%m-%d")
-    if (today_dt - parsed_date).days > 30:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Não é possível consultar vagas com mais de 30 dias.",
-        )
-
-    fs = FirestoreService()
-    result = await fs.get_matched_jobs(user.uid, date)
-
-    if not result:
-        return JobFeedResponse(date=date, matches=[], total_matches=0)
-
-    matches = []
-    for m in result.get("matches", []):
-        try:
-            matches.append(MatchedJob(**m))
-        except Exception:
-            logger.warning("match_parse_skip", job_id=m.get("job_id", ""))
-
-    return JobFeedResponse(
-        date=date,
-        matches=matches,
-        total_matches=len(matches),
-        generated_at=result.get("generated_at"),
+        matches=all_matches,
+        total_matches=len(all_matches),
     )
 
 

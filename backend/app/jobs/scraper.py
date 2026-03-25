@@ -52,6 +52,75 @@ def _make_job_id(source: str, source_id: str) -> str:
     return f"{source}_{uuid.uuid4().hex[:16]}"
 
 
+# ---------------------------------------------------------------------------
+# Top 100 Brazilian job categories — rotated in 3-day batches
+# ---------------------------------------------------------------------------
+
+BRAZILIAN_JOB_CATEGORIES = [
+    # Tech (1-15)
+    "desenvolvedor", "engenheiro de software", "analista de sistemas",
+    "devops", "data engineer", "cientista de dados", "analista de dados",
+    "product manager", "ux designer", "qa", "frontend", "backend",
+    "full stack", "tech lead", "scrum master",
+    # Admin/Operations (16-25)
+    "assistente administrativo", "auxiliar administrativo", "recepcionista",
+    "analista administrativo", "coordenador administrativo",
+    "gerente administrativo", "secretária", "auxiliar de escritório",
+    "analista de processos", "gerente de operações",
+    # HR/People (26-35)
+    "analista de rh", "gerente de rh", "recrutador", "business partner",
+    "diretor de rh", "coordenador de rh", "analista de departamento pessoal",
+    "gerente de people", "talent acquisition", "treinamento e desenvolvimento",
+    # Finance/Accounting (36-47)
+    "analista financeiro", "controller", "analista contábil", "tesoureiro",
+    "gerente financeiro", "auditor", "analista fiscal", "contador",
+    "coordenador financeiro", "diretor financeiro", "fp&a", "analista de custos",
+    # Marketing/Communications (48-57)
+    "analista de marketing", "gerente de marketing", "social media",
+    "analista de comunicação", "designer gráfico", "copywriter",
+    "marketing digital", "growth", "brand manager", "analista de conteúdo",
+    # Sales/Commercial (58-67)
+    "executivo de vendas", "sdr", "analista comercial", "gerente comercial",
+    "representante comercial", "key account", "inside sales",
+    "diretor comercial", "coordenador de vendas", "bdr",
+    # Engineering (68-77)
+    "engenheiro civil", "engenheiro mecânico", "engenheiro elétrico",
+    "engenheiro de produção", "engenheiro químico", "engenheiro ambiental",
+    "técnico de segurança", "técnico de manutenção", "projetista",
+    "coordenador de obras",
+    # Legal (78-82)
+    "advogado", "analista jurídico", "paralegal", "compliance",
+    "gerente jurídico",
+    # Supply Chain/Logistics (83-88)
+    "analista de logística", "coordenador de supply chain",
+    "gerente de logística", "comprador", "analista de compras",
+    "planejamento de demanda",
+    # Healthcare (89-93)
+    "enfermeiro", "farmacêutico", "nutricionista", "fisioterapeuta",
+    "médico do trabalho",
+    # Entry Level (94-97)
+    "estagiário", "jovem aprendiz", "trainee", "aprendiz",
+    # Management/Executive (98-102)
+    "coordenador", "gerente", "diretor", "supervisor", "head",
+]
+
+
+def _get_daily_search_terms() -> list[str]:
+    """Return ~33 search terms for today based on 3-day rotation."""
+    from datetime import datetime
+    day_of_year = datetime.now().timetuple().tm_yday
+    batch_index = day_of_year % 3  # 0, 1, or 2
+
+    total = len(BRAZILIAN_JOB_CATEGORIES)
+    batch_size = (total + 2) // 3  # ceiling division
+    start = batch_index * batch_size
+    end = min(start + batch_size, total)
+
+    terms = BRAZILIAN_JOB_CATEGORIES[start:end]
+    logger.info("scrape_batch_selected", batch=batch_index, terms=len(terms), range=f"{start}-{end}")
+    return terms
+
+
 async def run_scraping_pipeline() -> dict:
     """Main scraping pipeline. Returns stats dict."""
     settings = get_settings()
@@ -60,21 +129,9 @@ async def run_scraping_pipeline() -> dict:
     from app.services.firestore import FirestoreService
     fs = FirestoreService()
 
-    # Get aggregated search terms from all users with preferences
-    users_with_prefs = await fs.get_all_users_with_preferences()
-    if not users_with_prefs:
-        logger.warning("scrape_no_users_with_preferences")
-        return {"jobs_new": 0, "jobs_total": 0, "sources_ok": 0, "sources_failed": 0}
-
-    # Aggregate and deduplicate desired titles across all users
-    all_titles: set[str] = set()
-    for user_data in users_with_prefs:
-        prefs = user_data.get("preferences", {})
-        for title in prefs.get("desired_titles", []):
-            all_titles.add(title.strip().lower())
-
-    search_terms = list(all_titles)[:20]  # Cap total search terms
-    logger.info("scrape_start", search_terms=len(search_terms), users=len(users_with_prefs))
+    # Use static job categories with daily rotation (not user preferences)
+    search_terms = _get_daily_search_terms()
+    logger.info("scrape_start", search_terms=len(search_terms))
 
     # Scrape all sources (failures are per-source, not fatal)
     all_raw_jobs: list[dict] = []

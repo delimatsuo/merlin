@@ -505,12 +505,12 @@ export interface JobPreferences {
 interface JobFeedState {
   preferences: JobPreferences | null;
   matches: MatchedJobItem[];
-  date: string;
+  days: number;
   loading: boolean;
   prefsLoading: boolean;
   setPreferences: (prefs: JobPreferences | null) => void;
   setMatches: (matches: MatchedJobItem[]) => void;
-  setDate: (date: string) => void;
+  setDays: (days: number) => void;
   setLoading: (loading: boolean) => void;
   setPrefsLoading: (loading: boolean) => void;
 }
@@ -518,12 +518,12 @@ interface JobFeedState {
 export const useJobFeedStore = create<JobFeedState>((set) => ({
   preferences: null,
   matches: [],
-  date: "",
+  days: 1,
   loading: false,
   prefsLoading: true,
   setPreferences: (preferences) => set({ preferences }),
   setMatches: (matches) => set({ matches }),
-  setDate: (date) => set({ date }),
+  setDays: (days) => set({ days }),
   setLoading: (loading) => set({ loading }),
   setPrefsLoading: (prefsLoading) => set({ prefsLoading }),
 }));
