@@ -282,6 +282,7 @@ export interface AdminSettingsData {
   tts_enabled: boolean;
   interview_enabled: boolean;
   cover_letter_enabled: boolean;
+  job_matching_enabled: boolean;
 }
 
 interface AdminState {
