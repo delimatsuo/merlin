@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
 import { SlidersHorizontal, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { JobCard } from "@/components/job-card";
@@ -33,7 +32,6 @@ function VagasContent() {
   } = useJobFeedStore();
 
   const [showPrefsEditor, setShowPrefsEditor] = useState(false);
-  const searchParams = useSearchParams();
 
   // Load preferences on mount
   useEffect(() => {
