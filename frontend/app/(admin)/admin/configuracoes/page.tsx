@@ -97,7 +97,7 @@ export default function AdminConfiguracoes() {
           />
           <Toggle
             label="Job matching (busca diária de vagas)"
-            checked={form.job_matching_enabled}
+            checked={form.job_matching_enabled ?? false}
             onChange={(v) => setForm({ ...form, job_matching_enabled: v })}
           />
         </div>
