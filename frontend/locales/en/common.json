@@ -4,7 +4,7 @@
 
   "nav.applications": "Applications",
   "nav.profile": "My Profile",
-  "nav.newJob": "New Job",
+  "nav.newJob": "+ New",
   "nav.linkedin": "LinkedIn",
   "nav.jobs": "Jobs",
   "nav.admin": "Admin",
@@ -13,7 +13,7 @@
 
   "mobileNav.applications": "Applications",
   "mobileNav.profile": "Profile",
-  "mobileNav.newJob": "New Job",
+  "mobileNav.newJob": "+ New",
   "mobileNav.linkedin": "LinkedIn",
   "mobileNav.jobs": "Jobs",
 
