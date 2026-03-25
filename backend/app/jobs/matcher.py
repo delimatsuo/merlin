@@ -276,9 +276,8 @@ async def match_user_jobs(
 
     results = await asyncio.gather(*tasks)
 
-    # Filter out None results and low scores
-    min_score = preferences.get("min_score", settings.job_match_min_score)
-    matches = [r for r in results if r is not None and r["ats_score"] >= min_score]
+    # Include all matched results (no min_score filter — user decides what to apply to)
+    matches = [r for r in results if r is not None]
 
     # Sort by ATS score descending
     matches.sort(key=lambda x: x["ats_score"], reverse=True)

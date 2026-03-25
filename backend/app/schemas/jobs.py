@@ -86,14 +86,14 @@ class ExtractedJob(BaseModel):
 # --- Matched Job (in user's daily feed) ---
 
 class MatchedJob(BaseModel):
-    job_id: str
-    title: str
-    company: str
-    ats_score: float
+    job_id: str = ""
+    title: str = ""
+    company: Optional[str] = ""
+    ats_score: float = 0
     matched_skills: list[str] = []
     missing_skills: list[str] = []
-    source: str
-    source_url: str
+    source: str = ""
+    source_url: str = ""
     posted_date: Optional[str] = None
     work_mode: str = "onsite"
     location: str = ""
