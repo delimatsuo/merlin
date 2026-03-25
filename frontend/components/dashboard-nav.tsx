@@ -16,7 +16,6 @@ import {
 import {
   Briefcase,
   User as UserIcon,
-  Plus,
   LogOut,
   User,
   Settings,

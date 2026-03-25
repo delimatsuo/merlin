@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Briefcase, Plus, Search } from "lucide-react";
+import { Briefcase, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/hooks/useTranslation";
 
