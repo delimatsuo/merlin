@@ -35,9 +35,8 @@ export function DashboardNav() {
   const { t } = useTranslation();
 
   const navItems = [
-    { href: "/dashboard/vagas", label: t("nav.jobs"), icon: Search },
-    { href: "/dashboard", label: t("nav.applications"), icon: Briefcase },
-    { href: "/dashboard/job", label: t("nav.newJob"), icon: Plus },
+    { href: "/dashboard/vagas", label: t("nav.search"), icon: Search },
+    { href: "/dashboard", label: t("nav.jobs"), icon: Briefcase },
   ];
   const { user } = useAuthStore();
   const { isAdmin, setIsAdmin } = useAdminStore();

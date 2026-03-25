@@ -2,19 +2,15 @@
   "meta.defaultTitle": "Merlin — AI-Tailored Resumes",
   "meta.defaultDescription": "Transform your resume with artificial intelligence. Upload, quick interview, and get a personalized ATS-optimized resume.",
 
-  "nav.applications": "Applications",
-  "nav.profile": "My Profile",
-  "nav.newJob": "+ New",
-  "nav.linkedin": "LinkedIn",
+  "nav.search": "Search",
   "nav.jobs": "Jobs",
+  "nav.profile": "My Profile",
+  "nav.linkedin": "LinkedIn",
   "nav.admin": "Admin",
   "nav.settings": "Settings",
   "nav.signOut": "Sign Out",
 
-  "mobileNav.applications": "Applications",
-  "mobileNav.profile": "Profile",
-  "mobileNav.newJob": "+ New",
-  "mobileNav.linkedin": "LinkedIn",
+  "mobileNav.search": "Search",
   "mobileNav.jobs": "Jobs",
 
   "footer.allRightsReserved": "All rights reserved.",

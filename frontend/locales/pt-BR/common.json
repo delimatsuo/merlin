@@ -2,19 +2,15 @@
   "meta.defaultTitle": "Merlin — Currículo sob medida com IA",
   "meta.defaultDescription": "Transforme seu currículo com inteligência artificial. Upload, entrevista por voz, e receba um currículo personalizado e otimizado para ATS.",
 
-  "nav.applications": "Candidaturas",
-  "nav.profile": "Meu Perfil",
-  "nav.newJob": "+ Nova",
-  "nav.linkedin": "LinkedIn",
+  "nav.search": "Buscar",
   "nav.jobs": "Vagas",
+  "nav.profile": "Meu Perfil",
+  "nav.linkedin": "LinkedIn",
   "nav.admin": "Admin",
   "nav.settings": "Configurações",
   "nav.signOut": "Sair",
 
-  "mobileNav.applications": "Candidaturas",
-  "mobileNav.profile": "Perfil",
-  "mobileNav.newJob": "+ Nova",
-  "mobileNav.linkedin": "LinkedIn",
+  "mobileNav.search": "Buscar",
   "mobileNav.jobs": "Vagas",
 
   "footer.allRightsReserved": "Todos os direitos reservados.",
