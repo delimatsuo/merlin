@@ -32,7 +32,9 @@ async def _run_actor(
 
     async with httpx.AsyncClient(timeout=timeout) as client:
         # Start actor run and wait for it to finish
-        url = f"{APIFY_BASE_URL}/acts/{actor_id}/run-sync-get-dataset-items"
+        # Apify uses ~ instead of / for username/actor-name in URLs
+        safe_actor_id = actor_id.replace("/", "~")
+        url = f"{APIFY_BASE_URL}/acts/{safe_actor_id}/run-sync-get-dataset-items"
         response = await client.post(
             url,
             headers=headers,
