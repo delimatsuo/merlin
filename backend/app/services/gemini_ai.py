@@ -441,9 +441,13 @@ async def semantic_skill_match(
     candidate_skills: list[str],
     required_skills: list[str],
     candidate_experience: list[dict] | None = None,
+    desired_titles: list[str] | None = None,
+    job_title: str = "",
 ) -> dict:
-    """Semantic skill matching."""
+    """Semantic skill matching with seniority awareness."""
     context = json.dumps({
+        "candidate_desired_titles": desired_titles or [],
+        "job_title": job_title,
         "candidate_skills": candidate_skills,
         "required_skills": required_skills,
         "candidate_experience": candidate_experience or [],
@@ -451,7 +455,7 @@ async def semantic_skill_match(
 
     content = await _call_flash_lite(
         system="""<task>
-Semantically match candidate skills against job requirements. The input contains candidate_skills, required_skills, and candidate_experience.
+Semantically match candidate skills against job requirements. The input contains the candidate's desired titles, the job title, candidate_skills, required_skills, and candidate_experience.
 </task>
 
 <matching_rules>
@@ -459,6 +463,14 @@ Semantically match candidate skills against job requirements. The input contains
 - Consider skills implied by work experience
 - Consider related skills (e.g., React implies JavaScript)
 </matching_rules>
+
+<seniority_rules>
+- Compare the candidate's desired titles against the job title for seniority fit
+- If the candidate wants director/head roles, an intern/junior/analyst job is a severe mismatch — cap score at 20
+- If the candidate wants senior roles, an intern/entry job is a severe mismatch — cap score at 30
+- If the candidate wants entry/junior roles, a director/VP job is also a mismatch — cap score at 30
+- Only penalize when there is a clear level gap (2+ levels apart)
+</seniority_rules>
 
 <schema>
 {

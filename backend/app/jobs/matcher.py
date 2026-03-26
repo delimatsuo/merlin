@@ -22,7 +22,8 @@ from app.services.email import send_job_digest
 # User types "Diretor de RH" → maps to tags ["hr", "director"]
 # Firestore query: categories array-contains any of those tags → instant match
 
-_TITLE_TO_TAGS: dict[str, list[str]] = {
+# Department tags — what area the job belongs to
+_TITLE_TO_DEPT: dict[str, list[str]] = {
     # Tech
     "software": ["tech"], "developer": ["tech"], "desenvolvedor": ["tech"],
     "engenheiro de software": ["tech"], "engineer": ["tech"],
@@ -30,7 +31,7 @@ _TITLE_TO_TAGS: dict[str, list[str]] = {
     "fullstack": ["tech"], "devops": ["tech"], "sre": ["tech"],
     "data engineer": ["tech"], "data scientist": ["tech"],
     "programador": ["tech"], "arquiteto de software": ["tech"],
-    "tech lead": ["tech", "lead"], "mobile": ["tech"],
+    "tech lead": ["tech"], "mobile": ["tech"],
     "python": ["tech"], "java": ["tech"], "react": ["tech"],
     "node": ["tech"], "cloud": ["tech"], "ios": ["tech"], "android": ["tech"],
     # HR
@@ -50,7 +51,7 @@ _TITLE_TO_TAGS: dict[str, list[str]] = {
     "vendas": ["sales"], "comercial": ["sales"], "sales": ["sales"],
     "sdr": ["sales"], "bdr": ["sales"], "account": ["sales"],
     # Product
-    "product manager": ["tech", "manager"], "product owner": ["tech"],
+    "product manager": ["tech"], "product owner": ["tech"],
     "pm": ["tech"], "produto": ["tech"],
     # Design
     "designer": ["design"], "ux": ["design"], "ui": ["design"],
@@ -71,10 +72,42 @@ _TITLE_TO_TAGS: dict[str, list[str]] = {
     # Healthcare
     "enfermeiro": ["healthcare"], "farmaceutico": ["healthcare"],
     "nutricionista": ["healthcare"],
-    # Entry level
+}
+
+# Level tags — seniority/level of the role
+_TITLE_TO_LEVEL: dict[str, str] = {
+    "estagiario": "intern", "jovem aprendiz": "intern", "aprendiz": "intern",
+    "trainee": "entry", "junior": "entry",
+    "pleno": "mid",
+    "senior": "senior", "especialista": "senior",
+    "supervisor": "manager", "coordenador": "manager", "gerente": "manager",
+    "lider": "lead", "tech lead": "lead",
+    "diretor": "director", "head": "director",
+    "vp": "executive", "vice presidente": "executive",
+    "c-level": "executive", "cto": "executive", "cfo": "executive", "coo": "executive",
+    "product manager": "manager",
+}
+
+# Which levels are compatible with a given search level.
+# Director should see director/executive, not intern.
+# No level detected → accept all (no filtering).
+_LEVEL_COMPAT: dict[str, set[str]] = {
+    "intern":    {"intern"},
+    "entry":     {"intern", "entry"},
+    "mid":       {"entry", "mid"},
+    "senior":    {"mid", "senior"},
+    "lead":      {"senior", "lead", "manager"},
+    "manager":   {"lead", "manager", "senior"},
+    "director":  {"director", "executive", "manager"},
+    "executive": {"director", "executive"},
+}
+
+# Combined mapping for backward compatibility (batch tag filter uses flat tags)
+_TITLE_TO_TAGS: dict[str, list[str]] = {
+    **{k: v for k, v in _TITLE_TO_DEPT.items()},
+    # Level keywords as tags too (for Firestore category field)
     "estagiario": ["intern"], "jovem aprendiz": ["intern"],
     "trainee": ["entry"], "aprendiz": ["intern"],
-    # Level keywords
     "junior": ["entry"], "pleno": ["mid"], "senior": ["senior"],
     "gerente": ["manager"], "coordenador": ["manager"],
     "diretor": ["director"], "head": ["director"],
@@ -95,6 +128,49 @@ def _titles_to_tags(desired_titles: list[str]) -> set[str]:
             if keyword in normalized:
                 tags.update(keyword_tags)
     return tags
+
+
+def _titles_to_dept_and_level(desired_titles: list[str]) -> tuple[set[str], set[str]]:
+    """Extract department tags and level tags separately from desired titles.
+
+    Returns (dept_tags, level_tags). Level tags are used for seniority filtering.
+    """
+    dept_tags = set()
+    level_tags = set()
+    for title in desired_titles:
+        normalized = _normalize(title)
+        for keyword, tags in _TITLE_TO_DEPT.items():
+            if keyword in normalized:
+                dept_tags.update(tags)
+        for keyword, level in _TITLE_TO_LEVEL.items():
+            if keyword in normalized:
+                level_tags.add(level)
+    return dept_tags, level_tags
+
+
+def _is_level_compatible(job_categories: set[str], desired_levels: set[str]) -> bool:
+    """Check if a job's level is compatible with the desired search level.
+
+    If no desired level is detected (user just typed 'rh'), accept all.
+    If the job has no level tag, accept it (benefit of the doubt).
+    """
+    if not desired_levels:
+        return True  # No level preference → accept all
+
+    # Build the set of acceptable levels from all desired levels
+    acceptable = set()
+    for level in desired_levels:
+        acceptable.update(_LEVEL_COMPAT.get(level, {level}))
+
+    # All known level tag values
+    all_levels = {"intern", "entry", "mid", "senior", "lead", "manager", "director", "executive"}
+    job_levels = job_categories & all_levels
+
+    if not job_levels:
+        return True  # Job has no level tag → accept (benefit of the doubt)
+
+    # At least one job level must be in the acceptable set
+    return bool(job_levels & acceptable)
 
 logger = structlog.get_logger()
 
@@ -233,6 +309,7 @@ async def _match_single_job(
     job: dict,
     candidate_skills: list[str],
     candidate_experience: list[dict],
+    desired_titles: list[str] | None = None,
 ) -> dict | None:
     """Run semantic skill match for a single job. Returns match result or None."""
     required_skills = job.get("required_skills", [])
@@ -245,6 +322,8 @@ async def _match_single_job(
                 candidate_skills=candidate_skills,
                 required_skills=required_skills,
                 candidate_experience=candidate_experience,
+                desired_titles=desired_titles,
+                job_title=job.get("title", ""),
             )
         except Exception as e:
             logger.warning("match_ai_error", job_id=job.get("id", ""), error=str(e))
@@ -303,22 +382,48 @@ async def match_user_jobs(
         return []
 
     desired_titles = preferences.get("desired_titles", [])
+    dept_tags, level_tags = _titles_to_dept_and_level(desired_titles)
     user_tags = _titles_to_tags(desired_titles)
     pref_work_modes = list(preferences.get("work_mode", []))
 
+    # Use department tags for Firestore query (broad pool), level for filtering
+    query_tags = list(dept_tags) if dept_tags else list(user_tags)
+
     if all_jobs is None:
-        # On-demand: query Firestore directly (fast, indexed)
+        # On-demand: query Firestore by department tags (broad pool)
         fs = FirestoreService()
-        relevant_jobs = await fs.query_jobs_by_tags(
-            tags=list(user_tags),
+        raw_jobs = await fs.query_jobs_by_tags(
+            tags=query_tags,
             work_modes=pref_work_modes if pref_work_modes else None,
-            limit=settings.max_jobs_per_digest,
+            limit=settings.max_jobs_per_digest * 3,  # Fetch more, filter down
         )
         logger.info(
             "match_query_firestore",
             uid_hash=uid[:8],
-            user_tags=list(user_tags),
-            results=len(relevant_jobs),
+            dept_tags=list(dept_tags),
+            level_tags=list(level_tags),
+            raw_results=len(raw_jobs),
+        )
+
+        # Apply level compatibility filter
+        level_filtered = [
+            job for job in raw_jobs
+            if _is_level_compatible(set(job.get("categories", [])), level_tags)
+        ]
+        logger.info(
+            "match_level_filter",
+            uid_hash=uid[:8],
+            before=len(raw_jobs),
+            after=len(level_filtered),
+        )
+
+        # Apply deterministic title/synonym filter
+        relevant_jobs = filter_by_preferences(level_filtered, preferences)
+        logger.info(
+            "match_title_filter",
+            uid_hash=uid[:8],
+            before=len(level_filtered),
+            after=len(relevant_jobs),
         )
     else:
         # Batch pipeline: filter from pre-loaded job list
@@ -334,6 +439,10 @@ async def match_user_jobs(
             elif user_tags and not job_categories:
                 continue  # Skip untagged jobs in batch mode
 
+            # Level compatibility filter (also for batch)
+            if not _is_level_compatible(job_categories, level_tags):
+                continue
+
             if pref_work_modes_set:
                 job_work_mode = job.get("work_mode", "onsite")
                 has_remote = any("remoto" in loc for loc in pref_locations)
@@ -348,10 +457,14 @@ async def match_user_jobs(
 
             relevant_jobs.append(job)
 
+        # Apply deterministic title filter for batch too
+        relevant_jobs = filter_by_preferences(relevant_jobs, preferences)
+
         logger.info(
             "match_tag_filter",
             uid_hash=uid[:8],
-            user_tags=list(user_tags),
+            dept_tags=list(dept_tags),
+            level_tags=list(level_tags),
             total_jobs=len(all_jobs),
             relevant=len(relevant_jobs),
         )
@@ -369,12 +482,19 @@ async def match_user_jobs(
             logger.warning("match_circuit_breaker", uid_hash=uid[:8], calls=ai_call_counter["count"])
             break
         ai_call_counter["count"] += 1
-        tasks.append(_match_single_job(job, candidate_skills, candidate_experience))
+        tasks.append(_match_single_job(
+            job, candidate_skills, candidate_experience,
+            desired_titles=desired_titles,
+        ))
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     # Include all matched results, skip exceptions and None
     matches = [r for r in results if r is not None and not isinstance(r, Exception)]
+
+    # Apply min_score threshold
+    min_score = preferences.get("min_score", 50)
+    matches = [m for m in matches if m["ats_score"] >= min_score]
 
     # Sort by ATS score descending
     matches.sort(key=lambda x: x["ats_score"], reverse=True)
