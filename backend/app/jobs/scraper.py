@@ -58,11 +58,17 @@ def _make_job_id(source: str, source_id: str) -> str:
 # ---------------------------------------------------------------------------
 
 BRAZILIAN_JOB_CATEGORIES = [
-    # Tech (1-15)
+    # Tech - General (1-15)
     "desenvolvedor", "engenheiro de software", "analista de sistemas",
     "devops", "data engineer", "cientista de dados", "analista de dados",
     "product manager", "ux designer", "qa", "frontend", "backend",
     "full stack", "tech lead", "scrum master",
+    # Tech - Specific (16-30)
+    "desenvolvedor python", "desenvolvedor java", "desenvolvedor react",
+    "desenvolvedor node", "desenvolvedor mobile", "desenvolvedor senior",
+    "engenheiro de dados", "arquiteto de software", "analista de ti",
+    "desenvolvedor .net", "desenvolvedor angular", "desenvolvedor ios",
+    "desenvolvedor android", "cloud engineer", "sre",
     # Admin/Operations (16-25)
     "assistente administrativo", "auxiliar administrativo", "recepcionista",
     "analista administrativo", "coordenador administrativo",
