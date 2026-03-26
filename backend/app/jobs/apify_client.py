@@ -62,13 +62,13 @@ async def _run_actor(
 async def scrape_gupy(search_terms: list[str], locations: list[str] | None = None) -> list[dict]:
     """Scrape job listings from Gupy."""
     results = []
-    for term in search_terms[:10]:  # Cap to avoid excessive Apify usage
+    for term in search_terms[:34]:  # Support broad category rotation (~34/day)
         try:
             items = await _run_actor(
                 ACTORS["gupy"],
                 run_input={
                     "searchQuery": term,
-                    "maxItems": 50,
+                    "maxItems": 30,  # 30 per term × 34 terms = ~1000 max
                 },
             )
             for item in items:
