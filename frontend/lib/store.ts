@@ -499,6 +499,7 @@ export interface JobPreferences {
   seniority: string[];
   min_score: number;
   email_digest: boolean;
+  email_frequency: "daily" | "weekly" | "off";
   consent_granted_at: string | null;
 }
 

@@ -651,8 +651,20 @@ async def run_matching_pipeline() -> dict:
                     await fs.save_matched_jobs(uid, today, matches, len(matches))
                     total_matches += len(matches)
 
-                    # Send email digest (idempotent — checks email_sent_at)
-                    if preferences.get("email_digest", True):
+                    # Send email digest based on frequency preference
+                    # Backward compat: old email_digest=True → "daily"
+                    freq = preferences.get("email_frequency", "")
+                    if not freq:
+                        freq = "daily" if preferences.get("email_digest", True) else "off"
+
+                    should_send = False
+                    if freq == "daily":
+                        should_send = True
+                    elif freq == "weekly":
+                        # Send on Mondays only
+                        should_send = datetime.now(_BRT).weekday() == 0
+
+                    if should_send:
                         existing = await fs.get_matched_jobs(uid, today)
                         if existing and not existing.get("email_sent_at"):
                             email = user_data.get("email", "")

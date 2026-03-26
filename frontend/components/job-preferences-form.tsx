@@ -14,6 +14,14 @@ const WORK_MODES = [
   { value: "onsite", labelKey: "vagas.prefs.onsite" },
 ] as const;
 
+type EmailFrequency = "daily" | "weekly" | "off";
+
+const EMAIL_FREQ_OPTIONS: { value: EmailFrequency; labelKey: string }[] = [
+  { value: "daily", labelKey: "vagas.prefs.emailDaily" },
+  { value: "weekly", labelKey: "vagas.prefs.emailWeekly" },
+  { value: "off", labelKey: "vagas.prefs.emailOff" },
+];
+
 interface Props {
   initial?: JobPreferences | null;
   onSaved?: () => void;
@@ -28,7 +36,9 @@ export function JobPreferencesForm({ initial, onSaved }: Props) {
   const [locations, setLocations] = useState<string[]>(initial?.locations || []);
   const [locationInput, setLocationInput] = useState("");
   const [workMode, setWorkMode] = useState<string[]>(initial?.work_mode || []);
-  const [emailDigest, setEmailDigest] = useState(initial?.email_digest ?? true);
+  const [emailFrequency, setEmailFrequency] = useState<EmailFrequency>(
+    initial?.email_frequency ?? (initial?.email_digest === false ? "off" : "daily")
+  );
   const [saving, setSaving] = useState(false);
 
   const addChip = (
@@ -84,7 +94,8 @@ export function JobPreferencesForm({ initial, onSaved }: Props) {
         work_mode: workMode,
         seniority: [],
         min_score: 50,
-        email_digest: emailDigest,
+        email_digest: emailFrequency !== "off",
+        email_frequency: emailFrequency,
       });
       setPreferences(result);
       onSaved?.();
@@ -214,22 +225,27 @@ export function JobPreferencesForm({ initial, onSaved }: Props) {
           </div>
         </div>
 
-        {/* Email digest toggle */}
-        <label className="flex items-center gap-3 cursor-pointer group">
-          <div className="relative">
-            <input
-              type="checkbox"
-              checked={emailDigest}
-              onChange={(e) => setEmailDigest(e.target.checked)}
-              className="peer sr-only"
-            />
-            <div className="h-6 w-10 rounded-full bg-secondary transition-colors duration-200 peer-checked:bg-foreground" />
-            <div className="absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 peer-checked:translate-x-4" />
+        {/* Email frequency */}
+        <div>
+          <label className="text-xs font-medium text-foreground mb-2 block">
+            {t("vagas.prefs.emailFreqLabel")}
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {EMAIL_FREQ_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setEmailFrequency(opt.value)}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
+                  emailFrequency === opt.value
+                    ? "bg-foreground text-background"
+                    : "bg-secondary text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {t(opt.labelKey)}
+              </button>
+            ))}
           </div>
-          <span className="text-sm text-foreground">
-            {t("vagas.prefs.emailDigest")}
-          </span>
-        </label>
+        </div>
 
         {/* Save button */}
         <Button

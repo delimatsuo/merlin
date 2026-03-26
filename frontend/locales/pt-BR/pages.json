@@ -345,6 +345,10 @@
   "vagas.prefs.senior": "Sênior",
   "vagas.prefs.lead": "Lead",
   "vagas.prefs.emailDigest": "Receber e-mail diário com vagas",
+  "vagas.prefs.emailFreqLabel": "E-mail com vagas",
+  "vagas.prefs.emailDaily": "Diário",
+  "vagas.prefs.emailWeekly": "Semanal",
+  "vagas.prefs.emailOff": "Desligado",
   "vagas.prefs.save": "Salvar preferências",
   "vagas.prefs.saving": "Salvando..."
 }

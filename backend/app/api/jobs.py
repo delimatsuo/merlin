@@ -162,6 +162,7 @@ async def unsubscribe_digest(token: str):
     prefs = await fs.get_job_preferences(uid)
     if prefs:
         prefs["email_digest"] = False
+        prefs["email_frequency"] = "off"
         await fs.save_job_preferences(uid, prefs)
         logger.info("email_digest_unsubscribed", uid_hash=uid[:8])
 

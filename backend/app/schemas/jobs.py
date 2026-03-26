@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, field_validator
 
 WorkMode = Literal["remote", "hybrid", "onsite"]
 Seniority = Literal["junior", "mid", "senior", "lead"]
+EmailFrequency = Literal["daily", "weekly", "off"]
 
 
 class JobPreferencesRequest(BaseModel):
@@ -34,7 +35,11 @@ class JobPreferencesRequest(BaseModel):
     )
     email_digest: bool = Field(
         default=True,
-        description="Receive daily email digest of matched jobs",
+        description="Deprecated — use email_frequency instead",
+    )
+    email_frequency: EmailFrequency = Field(
+        default="daily",
+        description="Email digest frequency: daily, weekly, or off",
     )
     @field_validator("desired_titles")
     @classmethod
@@ -64,6 +69,7 @@ class JobPreferencesResponse(BaseModel):
     seniority: list[str] = []
     min_score: int = 50
     email_digest: bool = True
+    email_frequency: str = "daily"
     last_updated: Optional[str] = None
 
 
