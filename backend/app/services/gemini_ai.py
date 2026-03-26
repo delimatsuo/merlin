@@ -465,7 +465,9 @@ Semantically match candidate skills against job requirements. The input contains
 </matching_rules>
 
 <seniority_rules>
-- Compare the candidate's desired titles against the job title for seniority fit
+- If candidate_desired_titles is empty, skip seniority evaluation entirely
+- Otherwise, compare the candidate's desired titles against the job title for seniority fit
+- Level ordering (lowest to highest): intern < entry/junior < mid/pleno < senior < lead < manager/coordinator < director/head < executive/VP/C-level
 - If the candidate wants director/head roles, an intern/junior/analyst job is a severe mismatch — cap score at 20
 - If the candidate wants senior roles, an intern/entry job is a severe mismatch — cap score at 30
 - If the candidate wants entry/junior roles, a director/VP job is also a mismatch — cap score at 30

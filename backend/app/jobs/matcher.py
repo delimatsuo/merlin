@@ -398,14 +398,11 @@ async def match_user_jobs(
     user_tags = _titles_to_tags(desired_titles)
     pref_work_modes = list(preferences.get("work_mode", []))
 
-    # Use department tags for Firestore query (broad pool), level for filtering
-    query_tags = list(dept_tags) if dept_tags else list(user_tags)
-
     if all_jobs is None:
-        # On-demand: query Firestore by department tags (broad pool)
+        # On-demand: query Firestore with all tags (broad pool), filter post-query
         fs = FirestoreService()
         raw_jobs = await fs.query_jobs_by_tags(
-            tags=query_tags,
+            tags=list(user_tags),
             work_modes=pref_work_modes if pref_work_modes else None,
             limit=settings.max_jobs_per_digest * 3,  # Fetch more, filter down
         )
