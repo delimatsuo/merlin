@@ -123,8 +123,8 @@ async def get_feed(
                 seen_job_ids.add(job_id)
                 try:
                     all_matches.append(MatchedJob(**m))
-                except Exception:
-                    logger.warning("match_parse_skip", job_id=job_id)
+                except (ValueError, TypeError, KeyError):
+                    pass  # Skip malformed matches silently
 
     # Sort by ATS score descending
     all_matches.sort(key=lambda x: x.ats_score, reverse=True)
