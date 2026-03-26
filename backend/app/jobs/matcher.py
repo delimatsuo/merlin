@@ -279,16 +279,23 @@ def filter_by_preferences(jobs: list[dict], preferences: dict) -> list[dict]:
             for dt in expanded_titles
         )
         if not title_match:
-            # Also try word-level: check if significant words overlap
+            # Word-level fallback: require at least 2 significant words overlap,
+            # or 1 word that is specific to a department (not a generic level word).
             job_words = set(job_title.split())
             title_words = set()
             for dt in expanded_titles:
                 title_words.update(dt.split())
-            # Remove common stop words
             stop = {"de", "da", "do", "e", "em", "para", "the", "and", "of", "in", "a", "o"}
+            # Level words are too generic to match alone (e.g., "diretor" appears in many titles)
+            level_words = {"diretor", "gerente", "coordenador", "supervisor", "analista",
+                           "estagiario", "senior", "junior", "pleno", "lider", "head",
+                           "auxiliar", "assistente", "trainee", "especialista", "vp"}
             job_significant = job_words - stop
             title_significant = title_words - stop
-            if not (job_significant & title_significant):
+            overlap = job_significant & title_significant
+            # Require either 2+ words overlap, or 1 department-specific word
+            dept_overlap = overlap - level_words
+            if len(overlap) < 2 and not dept_overlap:
                 continue
 
         # Work mode filter (if specified)

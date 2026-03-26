@@ -105,6 +105,20 @@ async def get_feed(
                 )
                 await fs.save_matched_jobs(user.uid, today, fresh_matches, len(fresh_matches))
 
+                # Clear stale cached results from previous days so only
+                # fresh matches (from updated algorithm/preferences) show
+                now = _brazil_now()
+                for i in range(1, 15):  # Clear up to 14 days back
+                    old_date = (now - timedelta(days=i)).strftime("%Y-%m-%d")
+                    old_result = await fs.get_matched_jobs(user.uid, old_date)
+                    if old_result:
+                        doc_ref = (
+                            fs.db.collection("users").document(user.uid)
+                            .collection("matchedJobs").document(old_date)
+                        )
+                        await doc_ref.delete()
+                        logger.info("feed_cleared_stale", uid=user.uid, date=old_date)
+
     # Read matched jobs for the last N days, deduplicated
     now = _brazil_now()
     all_matches = []
