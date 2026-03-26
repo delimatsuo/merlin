@@ -34,6 +34,9 @@ _TITLE_TO_DEPT: dict[str, list[str]] = {
     "tech lead": ["tech"], "mobile": ["tech"],
     "python": ["tech"], "java": ["tech"], "react": ["tech"],
     "node": ["tech"], "cloud": ["tech"], "ios": ["tech"], "android": ["tech"],
+    "tecnologia": ["tech"], "informatica": ["tech"],
+    "tecnologia da informacao": ["tech"], "de ti": ["tech"],
+    "cto": ["tech"], "cio": ["tech"],
     # HR
     "rh": ["hr"], "recursos humanos": ["hr"], "human resources": ["hr"],
     "hr": ["hr"], "people": ["hr"], "recrutador": ["hr"],
@@ -43,6 +46,7 @@ _TITLE_TO_DEPT: dict[str, list[str]] = {
     "financeiro": ["finance"], "finance": ["finance"], "contabil": ["finance"],
     "contador": ["finance"], "controller": ["finance"], "fiscal": ["finance"],
     "tesoureiro": ["finance"], "fp&a": ["finance"], "custos": ["finance"],
+    "cfo": ["finance"],
     # Marketing
     "marketing": ["marketing"], "social media": ["marketing"],
     "comunicacao": ["marketing"], "copywriter": ["marketing"],
@@ -57,7 +61,7 @@ _TITLE_TO_DEPT: dict[str, list[str]] = {
     "designer": ["design"], "ux": ["design"], "ui": ["design"],
     # Operations
     "operacoes": ["operations"], "operations": ["operations"],
-    "processos": ["operations"],
+    "processos": ["operations"], "coo": ["operations"],
     # Admin
     "administrativo": ["admin"], "secretaria": ["admin"],
     "recepcao": ["admin"], "escritorio": ["admin"],
@@ -118,6 +122,14 @@ _TITLE_TO_TAGS: dict[str, list[str]] = {
 }
 
 
+def _keyword_in(keyword: str, text: str) -> bool:
+    """Check if keyword appears in text. Uses word boundaries for short keywords
+    (<=4 chars) to avoid false positives like 'coo' matching 'coordenador'."""
+    if len(keyword) <= 4:
+        return bool(re.search(rf"\b{re.escape(keyword)}\b", text))
+    return keyword in text
+
+
 def _titles_to_tags(desired_titles: list[str]) -> set[str]:
     """Convert user's desired titles to category tags. Zero AI cost."""
     tags = set()
@@ -125,7 +137,7 @@ def _titles_to_tags(desired_titles: list[str]) -> set[str]:
         normalized = _normalize(title)
         # Check each keyword mapping
         for keyword, keyword_tags in _TITLE_TO_TAGS.items():
-            if keyword in normalized:
+            if _keyword_in(keyword, normalized):
                 tags.update(keyword_tags)
     return tags
 
@@ -140,10 +152,10 @@ def _titles_to_dept_and_level(desired_titles: list[str]) -> tuple[set[str], set[
     for title in desired_titles:
         normalized = _normalize(title)
         for keyword, tags in _TITLE_TO_DEPT.items():
-            if keyword in normalized:
+            if _keyword_in(keyword, normalized):
                 dept_tags.update(tags)
         for keyword, level in _TITLE_TO_LEVEL.items():
-            if keyword in normalized:
+            if _keyword_in(keyword, normalized):
                 level_tags.add(level)
     return dept_tags, level_tags
 
