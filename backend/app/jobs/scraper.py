@@ -107,19 +107,9 @@ BRAZILIAN_JOB_CATEGORIES = [
 
 
 def _get_daily_search_terms() -> list[str]:
-    """Return ~33 search terms for today based on 3-day rotation."""
-    from datetime import datetime
-    day_of_year = datetime.now().timetuple().tm_yday
-    batch_index = day_of_year % 3  # 0, 1, or 2
-
-    total = len(BRAZILIAN_JOB_CATEGORIES)
-    batch_size = (total + 2) // 3  # ceiling division
-    start = batch_index * batch_size
-    end = min(start + batch_size, total)
-
-    terms = BRAZILIAN_JOB_CATEGORIES[start:end]
-    logger.info("scrape_batch_selected", batch=batch_index, terms=len(terms), range=f"{start}-{end}")
-    return terms
+    """Return all job categories. Scrape everything daily with lower per-term volume."""
+    logger.info("scrape_terms_selected", terms=len(BRAZILIAN_JOB_CATEGORIES))
+    return list(BRAZILIAN_JOB_CATEGORIES)
 
 
 async def run_scraping_pipeline() -> dict:
