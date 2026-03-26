@@ -77,6 +77,8 @@
   "dashboard.version": "versão",
   "dashboard.versions": "versões",
   "dashboard.candidate": "Candidato",
+  "dashboard.viewResume": "Ver currículo",
+  "dashboard.deleteApp": "Excluir vaga",
 
   "profile.title": "Meu Perfil",
   "profile.subtitle": "Envie currículos para enriquecer seu perfil. Quanto mais dados, melhor a personalização.",

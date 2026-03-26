@@ -230,15 +230,17 @@ export default function DashboardPage() {
       ) : (
         <div className="space-y-3">
           {applications.map((app) => (
-            <Link
+            <div
               key={app.id}
-              href={`/dashboard/application?id=${app.id}`}
-              className="block group"
+              className="group apple-shadow-sm rounded-2xl bg-card p-5 transition-all duration-300 hover:apple-shadow hover:scale-[1.005]"
             >
-              <div className="apple-shadow-sm rounded-2xl bg-card p-5 transition-all duration-300 hover:apple-shadow hover:scale-[1.005]">
-                <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4">
+                <Link
+                  href={`/dashboard/application?id=${app.id}`}
+                  className="flex items-center gap-4 flex-1 min-w-0"
+                >
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-secondary">
-                    <FileText className="h-5 w-5 text-foreground/60" />
+                    <Briefcase className="h-5 w-5 text-foreground/60" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
@@ -276,13 +278,19 @@ export default function DashboardPage() {
                       )}
                     </div>
                   </div>
+                </Link>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Link
+                    href={`/dashboard/application?id=${app.id}`}
+                    className="h-9 w-9 rounded-lg flex items-center justify-center text-foreground/50 hover:text-foreground hover:bg-secondary transition-all"
+                    title={t("dashboard.viewResume")}
+                  >
+                    <FileText className="h-4 w-4" />
+                  </Link>
                   <button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleDelete(app.id);
-                    }}
-                    className="shrink-0 h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-all opacity-0 group-hover:opacity-100"
+                    onClick={() => handleDelete(app.id)}
+                    className="h-9 w-9 rounded-lg flex items-center justify-center text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-all opacity-0 group-hover:opacity-100"
+                    title={t("dashboard.deleteApp")}
                   >
                     {deleting === app.id ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -292,7 +300,7 @@ export default function DashboardPage() {
                   </button>
                 </div>
               </div>
-            </Link>
+            </div>
           ))}
 
           {hasMore && (

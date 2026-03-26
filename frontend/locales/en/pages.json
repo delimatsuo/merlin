@@ -77,6 +77,8 @@
   "dashboard.version": "version",
   "dashboard.versions": "versions",
   "dashboard.candidate": "Candidate",
+  "dashboard.viewResume": "View resume",
+  "dashboard.deleteApp": "Delete application",
 
   "profile.title": "My Profile",
   "profile.subtitle": "Upload resumes to enrich your profile. The more data, the better the personalization.",
