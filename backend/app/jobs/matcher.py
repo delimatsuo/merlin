@@ -217,21 +217,41 @@ async def match_user_jobs(
 
     desired_titles = preferences.get("desired_titles", [])
 
-    # Phase A: Deterministic filter (location + work mode)
-    filtered = filter_by_preferences(all_jobs, preferences)
+    # Phase A: Light pre-filter (location + work mode only, NO title filter)
+    # Title matching is too rigid with substring/synonym approach.
+    # Let AI handle title relevance — it understands that
+    # "Diretor de RH" = "Head of People" = "VP Gente e Gestão"
+    pref_locations = [_normalize(loc) for loc in preferences.get("locations", [])]
+    pref_work_modes = set(preferences.get("work_mode", []))
 
-    # If deterministic filter is too strict, start from all jobs
-    if not filtered and len(all_jobs) <= 200:
-        filtered = all_jobs
+    filtered = []
+    for job in all_jobs:
+        # Work mode filter
+        if pref_work_modes:
+            job_work_mode = job.get("work_mode", "onsite")
+            has_remote_location = any("remoto" in loc for loc in pref_locations)
+            if job_work_mode not in pref_work_modes and not (has_remote_location and job_work_mode == "remote"):
+                continue
 
-    # Cap to avoid excessive AI calls
-    filtered = filtered[:100]
+        # Location filter (skip jobs with known non-matching location)
+        if pref_locations:
+            job_location = _normalize(job.get("location", ""))
+            job_work_mode = job.get("work_mode", "onsite")
+            if job_location and job_work_mode != "remote":
+                location_match = any(loc in job_location or job_location in loc for loc in pref_locations)
+                if not location_match:
+                    continue
+
+        filtered.append(job)
+
+    # Cap to keep AI costs reasonable
+    filtered = filtered[:500]
 
     if not filtered:
         return []
 
-    # Phase A.5: AI relevance filter — checks role-level fit, not just skills
-    # This prevents a Director from seeing Intern/Assistant positions
+    # Phase B: AI relevance filter — the ONLY title matching step
+    # Understands role semantics, seniority, and cross-language equivalents
     relevant_jobs = []
     relevance_tasks = []
     for job in filtered:
