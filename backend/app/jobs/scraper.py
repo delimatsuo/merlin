@@ -1,5 +1,6 @@
 """Job scraping pipeline — scrapes job boards, extracts structured data, stores in Firestore."""
 
+import asyncio
 import hashlib
 import re
 from datetime import datetime, timedelta, timezone
@@ -10,7 +11,7 @@ from firebase_admin import firestore as fb_firestore
 
 from app.config import get_settings
 from app.jobs.apify_client import scrape_gupy, scrape_linkedin, scrape_vagas
-from app.services.gemini_ai import extract_job_data
+from app.services.gemini_ai import extract_job_data_batch
 
 logger = structlog.get_logger()
 
@@ -161,10 +162,9 @@ async def run_scraping_pipeline() -> dict:
         # TODO: Fire Sentry alert
         return {"jobs_new": 0, "jobs_total": 0, "sources_ok": sources_ok, "sources_failed": sources_failed}
 
-    # Process and store jobs
-    jobs_new = 0
+    # Phase 1: Dedup — filter out jobs already in Firestore (cheap Firestore reads)
+    new_raw_jobs = []
     jobs_duplicate = 0
-    now_iso = datetime.now(_BRT).isoformat()
 
     for raw_job in all_raw_jobs:
         source = raw_job.get("source", "unknown")
@@ -175,70 +175,94 @@ async def run_scraping_pipeline() -> dict:
             continue
 
         job_id = _make_job_id(source, source_id)
-
-        # Check if already exists
         existing = await fs.get_job(job_id)
         if existing:
             jobs_duplicate += 1
             continue
 
-        # Sanitize raw text (strip HTML)
         clean_text = _strip_html(raw_text)
         if not clean_text or len(clean_text) < 30:
             continue
 
-        # Extract structured data via Flash-Lite
-        try:
-            extracted = await extract_job_data(clean_text)
-        except Exception as e:
-            logger.warning("job_extraction_failed", job_id=job_id, error=str(e))
-            continue
+        raw_job["_job_id"] = job_id
+        raw_job["_clean_text"] = clean_text
+        new_raw_jobs.append(raw_job)
 
-        # Use hints from scraper if extraction missed fields
-        title = extracted.get("title") or _sanitize_field(raw_job.get("title_hint", ""))
-        company = extracted.get("company") or _sanitize_field(raw_job.get("company_hint", ""))
-        posted_date = extracted.get("posted_date") or raw_job.get("posted_date_hint")
+    logger.info("scrape_dedup_done", new=len(new_raw_jobs), duplicates=jobs_duplicate)
 
-        if not title:
-            continue  # Skip jobs we can't identify
+    # Phase 2: Batch extract — 10 jobs per Flash-Lite call, 5 calls in parallel
+    BATCH_SIZE = 10
+    PARALLEL_BATCHES = 5
+    jobs_new = 0
+    now_iso = datetime.now(_BRT).isoformat()
 
-        # Calculate expiry (14 days from posted date or now)
-        # Store as native datetime for Firestore queries (not ISO string)
-        try:
-            if posted_date:
-                posted_dt = datetime.fromisoformat(posted_date.replace("Z", "+00:00"))
-            else:
-                posted_dt = datetime.now(timezone.utc)
-            expires_at = posted_dt + timedelta(days=14)
-        except (ValueError, TypeError):
-            posted_dt = datetime.now(timezone.utc)
-            expires_at = posted_dt + timedelta(days=14)
-            posted_date = posted_dt.strftime("%Y-%m-%d")
+    # Split into batches of 10
+    batches = [new_raw_jobs[i:i + BATCH_SIZE] for i in range(0, len(new_raw_jobs), BATCH_SIZE)]
+    logger.info("scrape_extraction_start", jobs=len(new_raw_jobs), batches=len(batches))
 
-        # Store in Firestore
-        job_doc = {
-            "title": _sanitize_field(title),
-            "company": _sanitize_field(company) if company else None,
-            "required_skills": [_sanitize_field(s, 100) for s in extracted.get("required_skills", [])],
-            "preferred_skills": [_sanitize_field(s, 100) for s in extracted.get("preferred_skills", [])],
-            "location": _sanitize_field(extracted.get("location", "")),
-            "seniority": extracted.get("seniority", "mid"),
-            "salary_range": extracted.get("salary_range"),
-            "work_mode": extracted.get("work_mode", "onsite"),
-            "posted_date": posted_date,
-            "source": source,
-            "source_url": raw_job.get("source_url", ""),
-            "raw_text": clean_text[:10000],  # Cap stored text
-            "extracted_at": now_iso,
-            "expires_at": expires_at,
-        }
+    # Process batches in parallel groups of 5
+    for group_start in range(0, len(batches), PARALLEL_BATCHES):
+        group = batches[group_start:group_start + PARALLEL_BATCHES]
 
-        try:
-            db = fs.db
-            await db.collection("jobs").document(job_id).set(job_doc)
-            jobs_new += 1
-        except Exception as e:
-            logger.error("job_store_error", job_id=job_id, error=str(e))
+        async def _extract_batch(batch: list[dict]) -> list[tuple[dict, dict]]:
+            """Extract a batch and return (raw_job, extracted) pairs."""
+            texts = [job["_clean_text"] for job in batch]
+            try:
+                results = await extract_job_data_batch(texts)
+            except Exception as e:
+                logger.warning("batch_extraction_failed", count=len(batch), error=str(e))
+                return []
+            return list(zip(batch, results))
+
+        # Run up to 5 batches in parallel
+        group_results = await asyncio.gather(*[_extract_batch(b) for b in group])
+
+        # Store results
+        for pairs in group_results:
+            for raw_job, extracted in pairs:
+                job_id = raw_job["_job_id"]
+                clean_text = raw_job["_clean_text"]
+
+                title = extracted.get("title") or _sanitize_field(raw_job.get("title_hint", ""))
+                company = extracted.get("company") or _sanitize_field(raw_job.get("company_hint", ""))
+                posted_date = extracted.get("posted_date") or raw_job.get("posted_date_hint")
+
+                if not title:
+                    continue
+
+                try:
+                    if posted_date:
+                        posted_dt = datetime.fromisoformat(posted_date.replace("Z", "+00:00"))
+                    else:
+                        posted_dt = datetime.now(timezone.utc)
+                    expires_at = posted_dt + timedelta(days=14)
+                except (ValueError, TypeError):
+                    posted_dt = datetime.now(timezone.utc)
+                    expires_at = posted_dt + timedelta(days=14)
+                    posted_date = posted_dt.strftime("%Y-%m-%d")
+
+                job_doc = {
+                    "title": _sanitize_field(title),
+                    "company": _sanitize_field(company) if company else None,
+                    "required_skills": [_sanitize_field(s, 100) for s in extracted.get("required_skills", [])],
+                    "preferred_skills": [_sanitize_field(s, 100) for s in extracted.get("preferred_skills", [])],
+                    "location": _sanitize_field(extracted.get("location", "")),
+                    "seniority": extracted.get("seniority", "mid"),
+                    "salary_range": extracted.get("salary_range"),
+                    "work_mode": extracted.get("work_mode", "onsite"),
+                    "posted_date": posted_date,
+                    "source": raw_job.get("source", "unknown"),
+                    "source_url": raw_job.get("source_url", ""),
+                    "raw_text": clean_text[:10000],
+                    "extracted_at": now_iso,
+                    "expires_at": expires_at,
+                }
+
+                try:
+                    await fs.db.collection("jobs").document(job_id).set(job_doc)
+                    jobs_new += 1
+                except Exception as e:
+                    logger.error("job_store_error", job_id=job_id, error=str(e))
 
     # Cleanup expired jobs
     expired_count = await fs.cleanup_expired_jobs()

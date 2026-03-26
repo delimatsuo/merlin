@@ -22,7 +22,7 @@ from app.prompts.enrichment import ENRICHMENT_PROMPT
 from app.prompts.recommendations import get_recommendations_prompt
 from app.prompts.linkedin_structure import LINKEDIN_STRUCTURING_PROMPT
 from app.prompts.linkedin_analysis import get_linkedin_analysis_prompt
-from app.prompts.job_extraction import JOB_EXTRACTION_PROMPT
+from app.prompts.job_extraction import JOB_EXTRACTION_PROMPT, JOB_BATCH_EXTRACTION_PROMPT
 
 logger = structlog.get_logger()
 
@@ -847,6 +847,58 @@ async def extract_job_data(raw_text: str) -> dict:
         "work_mode": "onsite",
         "posted_date": None,
     }
+
+
+_EMPTY_JOB = {
+    "title": "", "company": None, "required_skills": [], "preferred_skills": [],
+    "location": "", "seniority": "mid", "salary_range": None, "work_mode": "onsite",
+    "posted_date": None,
+}
+
+
+async def extract_job_data_batch(raw_texts: list[str]) -> list[dict]:
+    """Extract structured fields from multiple jobs in a single Flash-Lite call.
+
+    Sends up to 10 jobs per call. Returns list of dicts in same order as input.
+    ~10x faster than calling extract_job_data() individually.
+    """
+    if not raw_texts:
+        return []
+
+    # Build combined input with separator
+    combined = "\n---JOB---\n".join(text[:2000] for text in raw_texts)
+
+    content = await _call_flash_lite(
+        system=JOB_BATCH_EXTRACTION_PROMPT,
+        user_content=combined,
+        task="job_extraction_batch",
+    )
+
+    result = _parse_json_response(content)
+    if result and isinstance(result, list):
+        extracted = []
+        for item in result:
+            if isinstance(item, dict):
+                extracted.append({
+                    "title": item.get("title", ""),
+                    "company": item.get("company"),
+                    "required_skills": item.get("required_skills", [])[:10],
+                    "preferred_skills": item.get("preferred_skills", [])[:5],
+                    "location": item.get("location", ""),
+                    "seniority": item.get("seniority", "mid"),
+                    "salary_range": item.get("salary_range"),
+                    "work_mode": item.get("work_mode", "onsite"),
+                    "posted_date": item.get("posted_date"),
+                })
+            else:
+                extracted.append(dict(_EMPTY_JOB))
+        # Pad if fewer results than inputs
+        while len(extracted) < len(raw_texts):
+            extracted.append(dict(_EMPTY_JOB))
+        return extracted
+
+    logger.warning("batch_extraction_parse_fallback", count=len(raw_texts), content=content[:200])
+    return [dict(_EMPTY_JOB) for _ in raw_texts]
 
 
 # ---------------------------------------------------------------------------
