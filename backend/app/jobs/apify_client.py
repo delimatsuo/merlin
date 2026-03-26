@@ -68,7 +68,7 @@ async def scrape_gupy(search_terms: list[str], locations: list[str] | None = Non
                 ACTORS["gupy"],
                 run_input={
                     "searchQuery": term,
-                    "maxItems": 10,  # 10 per term × 102 terms = ~1000 max
+                    "maxItems": 30,  # 30 per term for better coverage
                 },
             )
             for item in items:
