@@ -369,7 +369,7 @@ async def run_matching_pipeline() -> dict:
 
     await _save_checkpoint(fs, today, {
         "status": "running",
-        "started_at": checkpoint.get("started_at") or datetime.now(_BRT).isoformat(),
+        "started_at": (checkpoint.get("started_at") if checkpoint else None) or datetime.now(_BRT).isoformat(),
         "users_total": total_users_processed + len(users),
     })
 
