@@ -53,7 +53,16 @@ async def _run_actor(
 
         items = response.json()
         if not isinstance(items, list):
-            logger.warning("apify_unexpected_response", actor=actor_id, type=type(items).__name__)
+            # Check for error messages
+            if isinstance(items, dict) and "error" in items:
+                logger.error(
+                    "apify_api_error",
+                    actor=actor_id,
+                    error_type=items["error"].get("type", ""),
+                    message=items["error"].get("message", ""),
+                )
+            else:
+                logger.warning("apify_unexpected_response", actor=actor_id, type=type(items).__name__)
             return []
 
         return items
