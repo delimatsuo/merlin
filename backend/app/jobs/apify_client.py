@@ -108,7 +108,7 @@ async def scrape_gupy(search_terms: list[str], locations: list[str] | None = Non
 async def scrape_linkedin(search_terms: list[str], locations: list[str] | None = None) -> list[dict]:
     """Scrape job listings from LinkedIn Jobs (Brazil)."""
     results = []
-    for term in search_terms[:10]:
+    for term in search_terms:
         try:
             items = await _run_actor(
                 ACTORS["linkedin"],
@@ -139,7 +139,7 @@ async def scrape_linkedin(search_terms: list[str], locations: list[str] | None =
 async def scrape_vagas(search_terms: list[str], locations: list[str] | None = None) -> list[dict]:
     """Scrape job listings from Vagas.com.br."""
     results = []
-    for term in search_terms[:10]:
+    for term in search_terms:
         try:
             items = await _run_actor(
                 ACTORS["vagas"],
