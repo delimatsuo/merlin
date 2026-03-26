@@ -421,32 +421,45 @@ async def match_user_jobs(
             raw_results=len(raw_jobs),
         )
 
+        # Apply deterministic title/synonym filter first (most selective)
+        title_filtered = filter_by_preferences(raw_jobs, preferences)
+        logger.info(
+            "match_title_filter",
+            uid_hash=uid[:8],
+            before=len(raw_jobs),
+            after=len(title_filtered),
+        )
+
         # Apply level compatibility filter
-        level_filtered = [
-            job for job in raw_jobs
+        relevant_jobs = [
+            job for job in title_filtered
             if _is_level_compatible(set(job.get("categories", [])), level_tags)
         ]
         logger.info(
             "match_level_filter",
             uid_hash=uid[:8],
-            before=len(raw_jobs),
-            after=len(level_filtered),
+            before=len(title_filtered),
+            after=len(relevant_jobs),
+            level_tags=list(level_tags),
         )
 
-        # Apply deterministic title/synonym filter
-        relevant_jobs = filter_by_preferences(level_filtered, preferences)
-        logger.info(
-            "match_title_filter",
-            uid_hash=uid[:8],
-            before=len(level_filtered),
-            after=len(relevant_jobs),
-        )
+        # Fallback: if level filter is too strict (< 3 results), include
+        # all title-matched jobs regardless of level. Better to show a
+        # "Supervisor de RH" than nothing when searching for "Diretor de RH".
+        if len(relevant_jobs) < 3 and len(title_filtered) > len(relevant_jobs):
+            relevant_jobs = title_filtered
+            logger.info(
+                "match_level_fallback",
+                uid_hash=uid[:8],
+                reason="too_few_strict_matches",
+                expanded_to=len(relevant_jobs),
+            )
     else:
         # Batch pipeline: filter from pre-loaded job list
         pref_locations = [_normalize(loc) for loc in preferences.get("locations", [])]
         pref_work_modes_set = set(pref_work_modes)
 
-        relevant_jobs = []
+        pre_filtered = []
         for job in all_jobs:
             job_categories = set(job.get("categories", []))
             if user_tags and job_categories:
@@ -454,10 +467,6 @@ async def match_user_jobs(
                     continue
             elif user_tags and not job_categories:
                 continue  # Skip untagged jobs in batch mode
-
-            # Level compatibility filter (also for batch)
-            if not _is_level_compatible(job_categories, level_tags):
-                continue
 
             if pref_work_modes_set:
                 job_work_mode = job.get("work_mode", "onsite")
@@ -471,10 +480,20 @@ async def match_user_jobs(
                     if not any(loc in job_location or job_location in loc for loc in pref_locations):
                         continue
 
-            relevant_jobs.append(job)
+            pre_filtered.append(job)
 
-        # Apply deterministic title filter for batch too
-        relevant_jobs = filter_by_preferences(relevant_jobs, preferences)
+        # Apply deterministic title filter
+        title_filtered = filter_by_preferences(pre_filtered, preferences)
+
+        # Apply level filter
+        relevant_jobs = [
+            j for j in title_filtered
+            if _is_level_compatible(set(j.get("categories", [])), level_tags)
+        ]
+
+        # Fallback: if too few results with level filter, use all title matches
+        if len(relevant_jobs) < 3 and len(title_filtered) > len(relevant_jobs):
+            relevant_jobs = title_filtered
 
         logger.info(
             "match_tag_filter",
@@ -507,10 +526,6 @@ async def match_user_jobs(
 
     # Include all matched results, skip exceptions and None
     matches = [r for r in results if r is not None and not isinstance(r, Exception)]
-
-    # Apply min_score threshold
-    min_score = preferences.get("min_score", 50)
-    matches = [m for m in matches if m["ats_score"] >= min_score]
 
     # Sort by ATS score descending
     matches.sort(key=lambda x: x["ats_score"], reverse=True)
