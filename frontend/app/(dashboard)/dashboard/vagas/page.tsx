@@ -155,6 +155,14 @@ function VagasContent() {
         </Button>
       </div>
 
+      {/* Early application tip */}
+      <div className="rounded-xl bg-foreground/[0.03] border border-foreground/[0.06] px-4 py-3">
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          <span className="font-semibold text-foreground">{t("vagas.tipTitle")}</span>{" "}
+          {t("vagas.tipBody")}
+        </p>
+      </div>
+
       {/* Time range selector */}
       <div className="flex items-center justify-center gap-1.5">
         {TIME_RANGES.map((range) => (
