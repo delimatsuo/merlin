@@ -69,31 +69,39 @@ async def _run_actor(
 
 
 async def scrape_gupy(search_terms: list[str], locations: list[str] | None = None) -> list[dict]:
-    """Scrape job listings from Gupy."""
-    results = []
-    for term in search_terms[:102]:  # All categories daily
-        try:
-            items = await _run_actor(
-                ACTORS["gupy"],
-                run_input={
-                    "searchQuery": term,
-                    "maxItems": 30,  # 30 per term for better coverage
-                },
-            )
-            for item in items:
-                results.append({
-                    "source": "gupy",
-                    "source_id": item.get("id") or item.get("jobId", ""),
-                    "raw_text": item.get("description", "") or item.get("jobDescription", ""),
-                    "source_url": item.get("url") or item.get("jobUrl", ""),
-                    "title_hint": item.get("title") or item.get("jobTitle", ""),
-                    "company_hint": item.get("company") or item.get("companyName", ""),
-                    "posted_date_hint": item.get("publishedDate") or item.get("createdAt"),
-                })
-        except Exception as e:
-            logger.error("gupy_scrape_error", term=term, error=str(e))
+    """Scrape job listings from Gupy.
 
-    logger.info("gupy_scrape_complete", terms=len(search_terms), results=len(results))
+    Runs the actor ONCE with a broad search to minimize cost.
+    One run = $0.25 start + $0.0025/job. Much cheaper than per-term runs.
+    """
+    results = []
+
+    # Run once with broad search (newest jobs across all categories)
+    # This is 10-50x cheaper than running per search term
+    try:
+        items = await _run_actor(
+            ACTORS["gupy"],
+            run_input={
+                "searchQuery": "",  # Empty = all jobs
+                "maxResults": 3000,  # Get a broad sample
+                "sortBy": "newest",
+            },
+            timeout=600,  # Allow 10 minutes for large scrape
+        )
+        for item in items:
+            results.append({
+                "source": "gupy",
+                "source_id": item.get("id") or item.get("jobId", ""),
+                "raw_text": item.get("description", "") or item.get("jobDescription", ""),
+                "source_url": item.get("url") or item.get("jobUrl", ""),
+                "title_hint": item.get("title") or item.get("jobTitle", ""),
+                "company_hint": item.get("company") or item.get("companyName", ""),
+                "posted_date_hint": item.get("publishedDate") or item.get("createdAt"),
+            })
+        logger.info("gupy_scrape_complete", results=len(results))
+    except Exception as e:
+        logger.error("gupy_scrape_error", error=str(e))
+
     return results
 
 
