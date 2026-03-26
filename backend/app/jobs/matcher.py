@@ -313,9 +313,7 @@ async def match_user_jobs(
         if user_tags and job_categories:
             if not (user_tags & job_categories):
                 continue
-        elif user_tags and not job_categories:
-            # Job has no categories (old data) — skip
-            continue
+        # Jobs without categories (old data) pass through — don't exclude them
 
         # Work mode filter
         if pref_work_modes:
