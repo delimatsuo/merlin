@@ -246,9 +246,12 @@ async def match_user_jobs(
             )
         )
 
-    relevance_results = await asyncio.gather(*relevance_tasks)
-    for job, is_relevant in zip(filtered[:len(relevance_results)], relevance_results):
-        if is_relevant:
+    relevance_results = await asyncio.gather(*relevance_tasks, return_exceptions=True)
+    for job, result in zip(filtered[:len(relevance_results)], relevance_results):
+        if isinstance(result, Exception):
+            # AI call failed — include the job as relevant (fail-open)
+            relevant_jobs.append(job)
+        elif result:
             relevant_jobs.append(job)
 
     logger.info(
@@ -274,10 +277,10 @@ async def match_user_jobs(
         ai_call_counter["count"] += 1
         tasks.append(_match_single_job(job, candidate_skills, candidate_experience))
 
-    results = await asyncio.gather(*tasks)
+    results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    # Include all matched results (no min_score filter — user decides what to apply to)
-    matches = [r for r in results if r is not None]
+    # Include all matched results, skip exceptions and None
+    matches = [r for r in results if r is not None and not isinstance(r, Exception)]
 
     # Sort by ATS score descending
     matches.sort(key=lambda x: x["ats_score"], reverse=True)
