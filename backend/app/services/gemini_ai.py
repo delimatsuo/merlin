@@ -889,6 +889,7 @@ async def extract_job_data_batch(raw_texts: list[str]) -> list[dict]:
                     "salary_range": item.get("salary_range"),
                     "work_mode": item.get("work_mode", "onsite"),
                     "posted_date": item.get("posted_date"),
+                    "categories": item.get("categories", [])[:3],
                 })
             else:
                 extracted.append(dict(_EMPTY_JOB))

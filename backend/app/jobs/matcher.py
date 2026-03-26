@@ -10,8 +10,91 @@ import structlog
 
 from app.config import get_settings
 from app.services.firestore import FirestoreService
-from app.services.gemini_ai import semantic_skill_match, check_job_relevance
+from app.services.gemini_ai import semantic_skill_match
 from app.services.email import send_job_digest
+
+
+# ---------------------------------------------------------------------------
+# Title → Category tag mapping (zero AI cost)
+# ---------------------------------------------------------------------------
+
+# Maps common search terms to category tags assigned during extraction.
+# User types "Diretor de RH" → maps to tags ["hr", "director"]
+# Firestore query: categories array-contains any of those tags → instant match
+
+_TITLE_TO_TAGS: dict[str, list[str]] = {
+    # Tech
+    "software": ["tech"], "developer": ["tech"], "desenvolvedor": ["tech"],
+    "engenheiro de software": ["tech"], "engineer": ["tech"],
+    "frontend": ["tech"], "backend": ["tech"], "full stack": ["tech"],
+    "fullstack": ["tech"], "devops": ["tech"], "sre": ["tech"],
+    "data engineer": ["tech"], "data scientist": ["tech"],
+    "programador": ["tech"], "arquiteto de software": ["tech"],
+    "tech lead": ["tech", "lead"], "mobile": ["tech"],
+    "python": ["tech"], "java": ["tech"], "react": ["tech"],
+    "node": ["tech"], "cloud": ["tech"], "ios": ["tech"], "android": ["tech"],
+    # HR
+    "rh": ["hr"], "recursos humanos": ["hr"], "human resources": ["hr"],
+    "hr": ["hr"], "people": ["hr"], "recrutador": ["hr"],
+    "talent": ["hr"], "departamento pessoal": ["hr"],
+    "business partner": ["hr"],
+    # Finance
+    "financeiro": ["finance"], "finance": ["finance"], "contabil": ["finance"],
+    "contador": ["finance"], "controller": ["finance"], "fiscal": ["finance"],
+    "tesoureiro": ["finance"], "fp&a": ["finance"], "custos": ["finance"],
+    # Marketing
+    "marketing": ["marketing"], "social media": ["marketing"],
+    "comunicacao": ["marketing"], "copywriter": ["marketing"],
+    "conteudo": ["marketing"], "brand": ["marketing"], "growth": ["marketing"],
+    # Sales
+    "vendas": ["sales"], "comercial": ["sales"], "sales": ["sales"],
+    "sdr": ["sales"], "bdr": ["sales"], "account": ["sales"],
+    # Product
+    "product manager": ["tech", "manager"], "product owner": ["tech"],
+    "pm": ["tech"], "produto": ["tech"],
+    # Design
+    "designer": ["design"], "ux": ["design"], "ui": ["design"],
+    # Operations
+    "operacoes": ["operations"], "operations": ["operations"],
+    "processos": ["operations"],
+    # Admin
+    "administrativo": ["admin"], "secretaria": ["admin"],
+    "recepcao": ["admin"], "escritorio": ["admin"],
+    # Legal
+    "juridico": ["legal"], "advogado": ["legal"], "compliance": ["legal"],
+    # Engineering
+    "engenheiro civil": ["engineering"], "engenheiro mecanico": ["engineering"],
+    "engenheiro eletrico": ["engineering"], "engenheiro producao": ["engineering"],
+    # Supply chain
+    "logistica": ["supply_chain"], "compras": ["supply_chain"],
+    "supply chain": ["supply_chain"],
+    # Healthcare
+    "enfermeiro": ["healthcare"], "farmaceutico": ["healthcare"],
+    "nutricionista": ["healthcare"],
+    # Entry level
+    "estagiario": ["intern"], "jovem aprendiz": ["intern"],
+    "trainee": ["entry"], "aprendiz": ["intern"],
+    # Level keywords
+    "junior": ["entry"], "pleno": ["mid"], "senior": ["senior"],
+    "gerente": ["manager"], "coordenador": ["manager"],
+    "diretor": ["director"], "head": ["director"],
+    "supervisor": ["manager"], "lider": ["lead"],
+    "vp": ["executive"], "vice presidente": ["executive"],
+    "c-level": ["executive"], "cto": ["executive", "tech"],
+    "cfo": ["executive", "finance"], "coo": ["executive", "operations"],
+}
+
+
+def _titles_to_tags(desired_titles: list[str]) -> set[str]:
+    """Convert user's desired titles to category tags. Zero AI cost."""
+    tags = set()
+    for title in desired_titles:
+        normalized = _normalize(title)
+        # Check each keyword mapping
+        for keyword, keyword_tags in _TITLE_TO_TAGS.items():
+            if keyword in normalized:
+                tags.update(keyword_tags)
+    return tags
 
 logger = structlog.get_logger()
 
@@ -217,15 +300,23 @@ async def match_user_jobs(
 
     desired_titles = preferences.get("desired_titles", [])
 
-    # Phase A: Light pre-filter (location + work mode only, NO title filter)
-    # Title matching is too rigid with substring/synonym approach.
-    # Let AI handle title relevance — it understands that
-    # "Diretor de RH" = "Head of People" = "VP Gente e Gestão"
+    # Phase A: Tag-based filter (ZERO AI calls, instant)
+    # User titles → category tags → match against job categories
+    user_tags = _titles_to_tags(desired_titles)
     pref_locations = [_normalize(loc) for loc in preferences.get("locations", [])]
     pref_work_modes = set(preferences.get("work_mode", []))
 
-    filtered = []
+    relevant_jobs = []
     for job in all_jobs:
+        # Tag filter — job must share at least one category tag with user
+        job_categories = set(job.get("categories", []))
+        if user_tags and job_categories:
+            if not (user_tags & job_categories):
+                continue
+        elif user_tags and not job_categories:
+            # Job has no categories (old data) — skip
+            continue
+
         # Work mode filter
         if pref_work_modes:
             job_work_mode = job.get("work_mode", "onsite")
@@ -233,7 +324,7 @@ async def match_user_jobs(
             if job_work_mode not in pref_work_modes and not (has_remote_location and job_work_mode == "remote"):
                 continue
 
-        # Location filter (skip jobs with known non-matching location)
+        # Location filter
         if pref_locations:
             job_location = _normalize(job.get("location", ""))
             job_work_mode = job.get("work_mode", "onsite")
@@ -242,42 +333,13 @@ async def match_user_jobs(
                 if not location_match:
                     continue
 
-        filtered.append(job)
-
-    # Cap to keep AI costs reasonable
-    filtered = filtered[:500]
-
-    if not filtered:
-        return []
-
-    # Phase B: AI relevance filter — the ONLY title matching step
-    # Understands role semantics, seniority, and cross-language equivalents
-    relevant_jobs = []
-    relevance_tasks = []
-    for job in filtered:
-        if ai_call_counter["count"] >= settings.job_match_max_ai_calls:
-            break
-        ai_call_counter["count"] += 1
-        relevance_tasks.append(
-            check_job_relevance(
-                desired_titles=desired_titles,
-                job_title=job.get("title", ""),
-                job_seniority=job.get("seniority", ""),
-            )
-        )
-
-    relevance_results = await asyncio.gather(*relevance_tasks, return_exceptions=True)
-    for job, result in zip(filtered[:len(relevance_results)], relevance_results):
-        if isinstance(result, Exception):
-            # AI call failed — include the job as relevant (fail-open)
-            relevant_jobs.append(job)
-        elif result:
-            relevant_jobs.append(job)
+        relevant_jobs.append(job)
 
     logger.info(
-        "match_relevance_filter",
+        "match_tag_filter",
         uid_hash=uid[:8],
-        input=len(filtered),
+        user_tags=list(user_tags),
+        total_jobs=len(all_jobs),
         relevant=len(relevant_jobs),
     )
 

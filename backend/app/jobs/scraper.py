@@ -247,6 +247,7 @@ async def run_scraping_pipeline() -> dict:
                     "salary_range": extracted.get("salary_range"),
                     "work_mode": extracted.get("work_mode", "onsite"),
                     "posted_date": posted_date,
+                    "categories": extracted.get("categories", []),
                     "source": raw_job.get("source", "unknown"),
                     "source_url": raw_job.get("source_url", ""),
                     "raw_text": clean_text[:10000],

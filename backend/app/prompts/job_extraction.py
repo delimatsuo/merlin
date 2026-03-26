@@ -44,9 +44,15 @@ This is a fast extraction task — extract only the requested fields, do not ana
   "seniority": "junior | mid | senior | lead",
   "salary_range": "salary range if mentioned, else null",
   "work_mode": "remote | hybrid | onsite",
-  "posted_date": "ISO date if detectable, else null"
+  "posted_date": "ISO date if detectable, else null",
+  "categories": ["1-3 tags from the allowed list below"]
 }
 </schema_per_job>
+
+<allowed_categories>
+FUNCTION: tech, hr, finance, marketing, sales, operations, legal, engineering, healthcare, supply_chain, admin, customer_service, education, design
+LEVEL: intern, entry, mid, senior, lead, manager, director, executive
+</allowed_categories>
 
 <constraints>
 - Return a JSON ARRAY of objects, one per job, in the same order as input
@@ -54,5 +60,6 @@ This is a fast extraction task — extract only the requested fields, do not ana
 - Keep skill names in original language
 - Seniority: júnior/trainee → junior, pleno → mid, sênior → senior, gerente/coordenador/head → lead
 - Work mode: remoto → remote, híbrido → hybrid, presencial → onsite. Default onsite.
+- Categories: pick 1 FUNCTION tag + 1 LEVEL tag. Add a 3rd only if clearly applicable.
 - Return valid JSON only — no markdown, no explanation
 </constraints>"""
