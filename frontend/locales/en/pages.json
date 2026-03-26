@@ -201,6 +201,10 @@
   "interview.errorNoQuestions": "Upload your resume first to generate the questions.",
 
   "application.title": "Application",
+  "application.jobDesc": "Job",
+  "application.resume": "Resume",
+  "application.jobDescTitle": "Job Description",
+  "application.noJobDesc": "Job description not available.",
   "application.downloadComplete": "Download complete",
   "application.errorDownload": "Error downloading the document.",
   "application.newVersionGenerated": "New version generated",

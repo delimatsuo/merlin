@@ -201,6 +201,10 @@
   "interview.errorNoQuestions": "Envie seu currículo primeiro para gerar as perguntas.",
 
   "application.title": "Candidatura",
+  "application.jobDesc": "Vaga",
+  "application.resume": "Currículo",
+  "application.jobDescTitle": "Descrição da Vaga",
+  "application.noJobDesc": "Descrição da vaga não disponível.",
   "application.downloadComplete": "Download concluído",
   "application.errorDownload": "Erro ao baixar o documento.",
   "application.newVersionGenerated": "Nova versão gerada",

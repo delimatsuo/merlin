@@ -236,7 +236,7 @@ export default function DashboardPage() {
             >
               <div className="flex items-center gap-4">
                 <Link
-                  href={`/dashboard/application?id=${app.id}`}
+                  href={`/dashboard/application?id=${app.id}&view=jd`}
                   className="flex items-center gap-4 flex-1 min-w-0"
                 >
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-secondary">
