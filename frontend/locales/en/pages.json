@@ -71,7 +71,7 @@
   "dashboard.step2Desc": "Chat with AI to enrich your profile",
   "dashboard.greeting": "Hi, {{firstName}}.",
   "dashboard.yourApplications": "Your jobs",
-  "dashboard.newJob": "+ New Job",
+  "dashboard.newJob": "New Job",
   "dashboard.noApplications": "No jobs yet",
   "dashboard.noApplicationsDesc": "Paste a job description to generate your tailored resume!",
   "dashboard.version": "version",

@@ -71,7 +71,7 @@
   "dashboard.step2Desc": "Converse com a IA para enriquecer seu perfil",
   "dashboard.greeting": "Olá, {{firstName}}.",
   "dashboard.yourApplications": "Suas vagas",
-  "dashboard.newJob": "+ Nova Vaga",
+  "dashboard.newJob": "Nova Vaga",
   "dashboard.noApplications": "Nenhuma vaga ainda",
   "dashboard.noApplicationsDesc": "Cole uma descrição de vaga para gerar seu currículo personalizado!",
   "dashboard.version": "versão",
