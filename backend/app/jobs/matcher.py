@@ -284,10 +284,14 @@ async def match_user_jobs(
     uid: str,
     knowledge: dict,
     preferences: dict,
-    all_jobs: list[dict],
     ai_call_counter: dict,
+    all_jobs: list[dict] | None = None,
 ) -> list[dict]:
-    """Match jobs for a single user. Returns sorted list of matched jobs."""
+    """Match jobs for a single user. Returns sorted list of matched jobs.
+
+    If all_jobs is provided (batch pipeline), filters from that list.
+    If all_jobs is None (on-demand), queries Firestore directly by tags.
+    """
     settings = get_settings()
 
     # Extract candidate data from knowledge file
@@ -299,52 +303,62 @@ async def match_user_jobs(
         return []
 
     desired_titles = preferences.get("desired_titles", [])
-
-    # Phase A: Tag-based filter (ZERO AI calls, instant)
-    # User titles → category tags → match against job categories
     user_tags = _titles_to_tags(desired_titles)
-    pref_locations = [_normalize(loc) for loc in preferences.get("locations", [])]
-    pref_work_modes = set(preferences.get("work_mode", []))
+    pref_work_modes = list(preferences.get("work_mode", []))
 
-    relevant_jobs = []
-    for job in all_jobs:
-        # Tag filter — job must share at least one category tag with user
-        job_categories = set(job.get("categories", []))
-        if user_tags and job_categories:
-            if not (user_tags & job_categories):
-                continue
-        # Jobs without categories (old data) pass through — don't exclude them
+    if all_jobs is None:
+        # On-demand: query Firestore directly (fast, indexed)
+        fs = FirestoreService()
+        relevant_jobs = await fs.query_jobs_by_tags(
+            tags=list(user_tags),
+            work_modes=pref_work_modes if pref_work_modes else None,
+            limit=settings.max_jobs_per_digest,
+        )
+        logger.info(
+            "match_query_firestore",
+            uid_hash=uid[:8],
+            user_tags=list(user_tags),
+            results=len(relevant_jobs),
+        )
+    else:
+        # Batch pipeline: filter from pre-loaded job list
+        pref_locations = [_normalize(loc) for loc in preferences.get("locations", [])]
+        pref_work_modes_set = set(pref_work_modes)
 
-        # Work mode filter
-        if pref_work_modes:
-            job_work_mode = job.get("work_mode", "onsite")
-            has_remote_location = any("remoto" in loc for loc in pref_locations)
-            if job_work_mode not in pref_work_modes and not (has_remote_location and job_work_mode == "remote"):
-                continue
+        relevant_jobs = []
+        for job in all_jobs:
+            job_categories = set(job.get("categories", []))
+            if user_tags and job_categories:
+                if not (user_tags & job_categories):
+                    continue
+            elif user_tags and not job_categories:
+                continue  # Skip untagged jobs in batch mode
 
-        # Location filter
-        if pref_locations:
-            job_location = _normalize(job.get("location", ""))
-            job_work_mode = job.get("work_mode", "onsite")
-            if job_location and job_work_mode != "remote":
-                location_match = any(loc in job_location or job_location in loc for loc in pref_locations)
-                if not location_match:
+            if pref_work_modes_set:
+                job_work_mode = job.get("work_mode", "onsite")
+                has_remote = any("remoto" in loc for loc in pref_locations)
+                if job_work_mode not in pref_work_modes_set and not (has_remote and job_work_mode == "remote"):
                     continue
 
-        relevant_jobs.append(job)
+            if pref_locations:
+                job_location = _normalize(job.get("location", ""))
+                if job_location and job.get("work_mode") != "remote":
+                    if not any(loc in job_location or job_location in loc for loc in pref_locations):
+                        continue
 
-    logger.info(
-        "match_tag_filter",
-        uid_hash=uid[:8],
-        user_tags=list(user_tags),
-        total_jobs=len(all_jobs),
-        relevant=len(relevant_jobs),
-    )
+            relevant_jobs.append(job)
+
+        logger.info(
+            "match_tag_filter",
+            uid_hash=uid[:8],
+            user_tags=list(user_tags),
+            total_jobs=len(all_jobs),
+            relevant=len(relevant_jobs),
+        )
 
     if not relevant_jobs:
         return []
 
-    # Cap per-user for skill matching
     relevant_jobs = relevant_jobs[:settings.max_jobs_per_digest]
 
     # Phase B: AI skill match (with circuit breaker check)

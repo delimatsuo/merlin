@@ -1272,6 +1272,40 @@ class FirestoreService:
             results.append(data)
         return results
 
+    async def query_jobs_by_tags(
+        self,
+        tags: list[str],
+        work_modes: list[str] | None = None,
+        limit: int = 100,
+    ) -> list[dict]:
+        """Query jobs by category tags using Firestore native filtering.
+
+        Uses array_contains_any for efficient tag matching.
+        Work mode filter applied in-memory (can't combine with array query).
+        """
+        if not tags:
+            return []
+
+        # Firestore array_contains_any supports up to 30 values
+        query = (
+            self.db.collection("jobs")
+            .where(filter=FieldFilter("categories", "array_contains_any", tags[:30]))
+            .limit(limit)
+        )
+
+        results = []
+        async for doc in query.stream():
+            data = doc.to_dict()
+            data["id"] = doc.id
+
+            # Work mode filter in-memory
+            if work_modes:
+                if data.get("work_mode", "onsite") not in work_modes:
+                    continue
+
+            results.append(data)
+        return results
+
     async def get_all_users_with_preferences(self) -> list[dict]:
         """Get all users who have job preferences set, with their knowledge files."""
         results = []

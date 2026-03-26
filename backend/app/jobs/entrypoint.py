@@ -77,4 +77,13 @@ async def main():
 
 if __name__ == "__main__":
     _setup()
-    asyncio.run(main())
+    if "--backfill" in sys.argv:
+        async def run_backfill():
+            logger = structlog.get_logger()
+            logger.info("backfill_start")
+            from app.jobs.backfill_tags import backfill_job_tags
+            stats = await backfill_job_tags()
+            logger.info("backfill_done", **stats)
+        asyncio.run(run_backfill())
+    else:
+        asyncio.run(main())

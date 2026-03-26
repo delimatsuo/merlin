@@ -92,17 +92,15 @@ async def get_feed(
         matches_generated = today_result.get("generated_at", "") if today_result else ""
 
         if not today_result or (prefs_updated and prefs_updated > matches_generated):
-            # Re-match this user against existing job pool
+            # Re-match via Firestore tag query (no all_jobs needed)
             logger.info("feed_on_demand_rematch", uid=user.uid)
             knowledge = await fs.get_candidate_knowledge(user.uid)
-            all_jobs = await fs.get_active_jobs(limit=500)
-            if knowledge and all_jobs:
+            if knowledge:
                 ai_counter = {"count": 0}
                 fresh_matches = await match_user_jobs(
                     uid=user.uid,
                     knowledge=knowledge,
                     preferences=prefs,
-                    all_jobs=all_jobs,
                     ai_call_counter=ai_counter,
                 )
                 await fs.save_matched_jobs(user.uid, today, fresh_matches, len(fresh_matches))
