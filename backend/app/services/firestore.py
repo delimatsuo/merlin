@@ -1242,18 +1242,33 @@ class FirestoreService:
         return None
 
     async def get_active_jobs(self, limit: int = 500) -> list[dict]:
-        """Get all active (non-expired) jobs, newest first."""
+        """Get all jobs, filtering expired ones in-memory.
+
+        We don't filter by expires_at in the query because older jobs
+        may have string-typed expires_at (pre-fix) that Firestore can't
+        compare against datetime. Filtering in-memory is safe for pools
+        up to a few thousand jobs.
+        """
         now = datetime.now(timezone.utc)
-        query = (
-            self.db.collection("jobs")
-            .where(filter=FieldFilter("expires_at", ">", now))
-            .order_by("expires_at")
-            .limit(limit)
-        )
+        query = self.db.collection("jobs").limit(limit)
         results = []
         async for doc in query.stream():
             data = doc.to_dict()
             data["id"] = doc.id
+
+            # Filter expired jobs in-memory (handles both string and datetime expires_at)
+            expires = data.get("expires_at")
+            if expires:
+                try:
+                    if isinstance(expires, str):
+                        expires_dt = datetime.fromisoformat(expires.replace("Z", "+00:00"))
+                    else:
+                        expires_dt = expires if expires.tzinfo else expires.replace(tzinfo=timezone.utc)
+                    if expires_dt < now:
+                        continue
+                except (ValueError, TypeError, AttributeError):
+                    pass  # Keep jobs with unparseable expires_at
+
             results.append(data)
         return results
 
