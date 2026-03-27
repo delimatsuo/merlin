@@ -36,6 +36,8 @@ export function DashboardNav() {
   const navItems = [
     { href: "/dashboard/vagas", label: t("nav.search"), icon: Search },
     { href: "/dashboard", label: t("nav.jobs"), icon: Briefcase },
+    { href: "/dashboard/profile", label: t("nav.profile"), icon: UserIcon },
+    { href: "/dashboard/linkedin", label: "LinkedIn", icon: Linkedin },
   ];
   const { user } = useAuthStore();
   const { isAdmin, setIsAdmin } = useAdminStore();
@@ -82,8 +84,8 @@ export function DashboardNav() {
               {navItems.map((item) => {
                 const isActive =
                   item.href === "/dashboard"
-                    ? pathname === "/dashboard" || pathname?.startsWith("/dashboard/application")
-                    : pathname === item.href;
+                    ? pathname === "/dashboard" || pathname?.startsWith("/dashboard/application") || pathname?.startsWith("/dashboard/job")
+                    : pathname === item.href || pathname?.startsWith(item.href + "/");
                 return (
                   <Link
                     key={item.href}
@@ -136,20 +138,6 @@ export function DashboardNav() {
                 <DropdownMenuItem className="rounded-lg text-xs py-2.5 px-3 font-medium cursor-default">
                   <User className="mr-2.5 h-3.5 w-3.5 text-muted-foreground" />
                   {user?.displayName || user?.email}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => router.push("/dashboard/profile")}
-                  className="rounded-lg text-xs py-2.5 px-3 cursor-pointer"
-                >
-                  <UserIcon className="mr-2.5 h-3.5 w-3.5 text-muted-foreground" />
-                  {t("nav.profile")}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => router.push("/dashboard/linkedin")}
-                  className="rounded-lg text-xs py-2.5 px-3 cursor-pointer"
-                >
-                  <Linkedin className="mr-2.5 h-3.5 w-3.5 text-muted-foreground" />
-                  {t("nav.linkedin")}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => router.push("/dashboard/settings")}

@@ -215,6 +215,12 @@ function VagaPageContent() {
         <p className="text-base text-muted-foreground mt-2">
           {t("job.subtitle")}
         </p>
+        <div className="mt-4 rounded-xl bg-foreground/[0.03] border border-foreground/[0.06] px-4 py-3">
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            <span className="font-semibold text-foreground">{t("job.howTitle")}</span>{" "}
+            {t("job.howBody")}
+          </p>
+        </div>
       </div>
 
       {error && (

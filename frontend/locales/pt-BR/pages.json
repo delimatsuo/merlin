@@ -128,6 +128,8 @@
 
   "job.title": "Nova Vaga",
   "job.subtitle": "Cole a descrição da vaga para análise e geração do currículo.",
+  "job.howTitle": "Como funciona:",
+  "job.howBody": "Cole a descrição completa da vaga abaixo. O Merlin vai analisar os requisitos, comparar com seu perfil e gerar automaticamente um currículo personalizado para essa posição, destacando suas competências mais relevantes.",
   "job.descriptionTitle": "Descrição da Vaga",
   "job.descriptionSubtitle": "Copie e cole a descrição completa.",
   "job.placeholder": "Cole aqui a descrição da vaga...",
