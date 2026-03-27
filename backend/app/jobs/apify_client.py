@@ -150,14 +150,3 @@ async def scrape_brazil_jobs(search_terms: list[str], locations: list[str] | Non
 
     logger.info("brazil_scrape_complete", terms=len(search_terms), results=len(results))
     return results
-
-
-# Backward-compatible aliases
-async def scrape_linkedin(search_terms: list[str], locations: list[str] | None = None) -> list[dict]:
-    """Deprecated — now handled by scrape_brazil_jobs."""
-    return await scrape_brazil_jobs(search_terms, locations)
-
-
-async def scrape_vagas(search_terms: list[str], locations: list[str] | None = None) -> list[dict]:
-    """Deprecated — now handled by scrape_brazil_jobs."""
-    return []  # Avoid double-scraping since scrape_brazil_jobs covers all sources
