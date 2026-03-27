@@ -54,66 +54,34 @@ def _make_job_id(source: str, source_id: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Top 100 Brazilian job categories — rotated in 3-day batches
+# Broad search terms — each term covers an entire department/area.
+# The Brazil Jobs actor returns ~100 results per call across multiple
+# job boards (LinkedIn, InfoJobs, Vagas, Indeed). Broad terms maximize
+# coverage while minimizing the number of paid API calls.
+# 15 terms × $0.20/call = $3.00/day.
 # ---------------------------------------------------------------------------
 
 BRAZILIAN_JOB_CATEGORIES = [
-    # Tech - General (1-15)
-    "desenvolvedor", "engenheiro de software", "analista de sistemas",
-    "devops", "data engineer", "cientista de dados", "analista de dados",
-    "product manager", "ux designer", "qa", "frontend", "backend",
-    "full stack", "tech lead", "scrum master",
-    # Tech - Specific (16-30)
-    "desenvolvedor python", "desenvolvedor java", "desenvolvedor react",
-    "desenvolvedor node", "desenvolvedor mobile", "desenvolvedor senior",
-    "engenheiro de dados", "arquiteto de software", "analista de ti",
-    "desenvolvedor .net", "desenvolvedor angular", "desenvolvedor ios",
-    "desenvolvedor android", "cloud engineer", "sre",
-    # Admin/Operations (16-25)
-    "assistente administrativo", "auxiliar administrativo", "recepcionista",
-    "analista administrativo", "coordenador administrativo",
-    "gerente administrativo", "secretária", "auxiliar de escritório",
-    "analista de processos", "gerente de operações",
-    # HR/People (26-35)
-    "analista de rh", "gerente de rh", "recrutador", "business partner",
-    "diretor de rh", "coordenador de rh", "analista de departamento pessoal",
-    "gerente de people", "talent acquisition", "treinamento e desenvolvimento",
-    # Finance/Accounting (36-47)
-    "analista financeiro", "controller", "analista contábil", "tesoureiro",
-    "gerente financeiro", "auditor", "analista fiscal", "contador",
-    "coordenador financeiro", "diretor financeiro", "fp&a", "analista de custos",
-    # Marketing/Communications (48-57)
-    "analista de marketing", "gerente de marketing", "social media",
-    "analista de comunicação", "designer gráfico", "copywriter",
-    "marketing digital", "growth", "brand manager", "analista de conteúdo",
-    # Sales/Commercial (58-67)
-    "executivo de vendas", "sdr", "analista comercial", "gerente comercial",
-    "representante comercial", "key account", "inside sales",
-    "diretor comercial", "coordenador de vendas", "bdr",
-    # Engineering (68-77)
-    "engenheiro civil", "engenheiro mecânico", "engenheiro elétrico",
-    "engenheiro de produção", "engenheiro químico", "engenheiro ambiental",
-    "técnico de segurança", "técnico de manutenção", "projetista",
-    "coordenador de obras",
-    # Legal (78-82)
-    "advogado", "analista jurídico", "paralegal", "compliance",
-    "gerente jurídico",
-    # Supply Chain/Logistics (83-88)
-    "analista de logística", "coordenador de supply chain",
-    "gerente de logística", "comprador", "analista de compras",
-    "planejamento de demanda",
-    # Healthcare (89-93)
-    "enfermeiro", "farmacêutico", "nutricionista", "fisioterapeuta",
-    "médico do trabalho",
-    # Entry Level (94-97)
-    "estagiário", "jovem aprendiz", "trainee", "aprendiz",
-    # Management/Executive (98-102)
-    "coordenador", "gerente", "diretor", "supervisor", "head",
+    "tecnologia",           # dev, devops, data, cloud, QA, etc.
+    "recursos humanos",     # RH, recrutador, business partner, DP
+    "financeiro",           # controller, fiscal, contábil, FP&A
+    "marketing",            # digital, social media, conteúdo, growth
+    "comercial",            # vendas, SDR, key account, inside sales
+    "engenharia",           # civil, mecânico, elétrico, produção
+    "administrativo",       # assistente, auxiliar, recepção
+    "jurídico",             # advogado, compliance, paralegal
+    "logística",            # supply chain, compras, planejamento
+    "saúde",                # enfermeiro, farmacêutico, nutricionista
+    "design",               # UX, UI, product designer, gráfico
+    "dados",                # data engineer, cientista, analista de dados
+    "produto",              # product manager, product owner, agile
+    "estagiário",           # estágio, jovem aprendiz, trainee
+    "diretor",              # executive/C-level across all areas
 ]
 
 
 def _get_daily_search_terms() -> list[str]:
-    """Return all job categories. Scrape everything daily with lower per-term volume."""
+    """Return broad category terms for daily scraping."""
     logger.info("scrape_terms_selected", terms=len(BRAZILIAN_JOB_CATEGORIES))
     return list(BRAZILIAN_JOB_CATEGORIES)
 
