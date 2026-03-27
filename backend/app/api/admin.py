@@ -1,13 +1,16 @@
 """Admin dashboard endpoints."""
 
+import asyncio
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from datetime import datetime, timezone
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from app.auth import AuthenticatedUser, get_admin_user, get_current_user
 from app.services.admin_settings import AdminSettings, AdminSettingsService
 from app.services.audit import log_admin_action
+from app.services.email import send_feature_announcement
 from app.services.firestore import FirestoreService
 
 logger = structlog.get_logger()
@@ -300,4 +303,102 @@ async def get_jobs_stats(
         "usersWithPreferences": len(users_with_prefs),
         "matchesToday": total_matches_today,
         "batchStatus": batch_status,
+    }
+
+
+@router.post("/send-announcement")
+@limiter.limit("2/hour")
+async def send_announcement(
+    request: Request,
+    campaign_id: str = Query(..., description="Unique campaign ID for idempotency"),
+    execute: bool = Query(default=False, description="Set to true to actually send emails"),
+    admin: AuthenticatedUser = Depends(get_admin_user),
+):
+    """Send feature announcement to onboarded users without job preferences.
+
+    Dry-run by default (execute=false). Returns recipient list without sending.
+    Requires campaign_id for idempotency — same ID cannot be used twice.
+    """
+    fs = FirestoreService()
+
+    # Check campaign idempotency
+    existing = await fs.get_campaign(campaign_id)
+    if existing:
+        return {
+            "status": "already_exists",
+            "campaign_id": campaign_id,
+            "sent_count": existing.get("sent_count", 0),
+            "message": "Esta campanha já foi executada.",
+        }
+
+    # Get target users
+    targets = await fs.get_users_for_announcement()
+
+    if not execute:
+        # Dry-run: return target list without sending
+        return {
+            "status": "dry_run",
+            "campaign_id": campaign_id,
+            "target_count": len(targets),
+            "sample": [
+                {"email": t["email"][:5] + "***", "name": t["name"]}
+                for t in targets[:10]
+            ],
+            "message": f"Enviar para {len(targets)} usuários. Use execute=true para confirmar.",
+        }
+
+    # Create campaign record
+    await fs.create_campaign(campaign_id, {
+        "type": "feature_announcement",
+        "status": "sending",
+        "target_count": len(targets),
+        "sent_count": 0,
+        "failed_count": 0,
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "started_by": admin.uid,
+    })
+
+    await log_admin_action(admin.uid, "send_announcement", campaign_id=campaign_id, targets=len(targets))
+
+    # Send emails with rate limiting (200ms between sends)
+    sent = 0
+    failed = 0
+    for target in targets:
+        # Per-recipient idempotency
+        if await fs.was_email_sent(campaign_id, target["uid"]):
+            continue
+
+        try:
+            success = await send_feature_announcement(
+                email=target["email"],
+                name=target["name"],
+                uid=target["uid"],
+            )
+            if success:
+                await fs.mark_email_sent(campaign_id, target["uid"])
+                sent += 1
+            else:
+                failed += 1
+        except Exception as e:
+            logger.error("announcement_send_error", uid_hash=target["uid"][:8], error=str(e))
+            failed += 1
+
+        # Rate limit: 200ms between sends
+        await asyncio.sleep(0.2)
+
+    # Update campaign status
+    await fs.update_campaign(campaign_id, {
+        "status": "completed",
+        "sent_count": sent,
+        "failed_count": failed,
+        "completed_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+    logger.info("announcement_complete", campaign_id=campaign_id, sent=sent, failed=failed)
+
+    return {
+        "status": "completed",
+        "campaign_id": campaign_id,
+        "sent_count": sent,
+        "failed_count": failed,
     }

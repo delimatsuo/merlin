@@ -149,7 +149,8 @@ async def get_feed(
 
 
 @router.get("/unsubscribe")
-async def unsubscribe_digest(token: str):
+@limiter.limit("10/minute")
+async def unsubscribe_digest(request: Request, token: str):
     """Unsubscribe from email digest via signed HMAC token (no auth required)."""
     uid = verify_unsubscribe_token(token)
     if not uid:
@@ -164,7 +165,16 @@ async def unsubscribe_digest(token: str):
         prefs["email_digest"] = False
         prefs["email_frequency"] = "off"
         await fs.save_job_preferences(uid, prefs)
-        logger.info("email_digest_unsubscribed", uid_hash=uid[:8])
+    else:
+        # User has no preferences doc — create one to persist the opt-out
+        await fs.save_job_preferences(uid, {
+            "email_digest": False,
+            "email_frequency": "off",
+            "desired_titles": [],
+            "locations": [],
+            "work_mode": [],
+        })
+    logger.info("email_digest_unsubscribed", uid_hash=uid[:8])
 
     return {"message": "Você não receberá mais e-mails de vagas."}
 
