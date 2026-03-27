@@ -1,9 +1,12 @@
 """Apify API client for scraping Brazilian job boards."""
 
+import asyncio
 import structlog
 import httpx
 
 from app.config import get_settings
+
+_BRAZIL_SEMAPHORE = asyncio.Semaphore(5)  # Max 5 concurrent Apify calls
 
 logger = structlog.get_logger()
 
@@ -113,32 +116,37 @@ async def scrape_brazil_jobs(search_terms: list[str], locations: list[str] | Non
     Input field: `keyword` (not `searchQuery`).
     Output fields: id, title, company, description, url, datePosted, source, scrapedAt.
     """
-    results = []
-    for term in search_terms:
-        try:
-            items = await _run_actor(
-                ACTORS["brazil"],
-                run_input={
-                    "keyword": term,
-                    "country": "Brazil",
-                    "maxItems": 30,
-                },
-            )
-            for item in items:
-                # The actor returns source per item (e.g., "LinkedIn", "InfoJobs")
-                item_source = (item.get("source") or "unknown").lower().replace(" ", "")
-                source_id = item.get("id", "")
-                results.append({
-                    "source": item_source,
-                    "source_id": source_id,
-                    "raw_text": item.get("description", ""),
-                    "source_url": item.get("url", ""),
-                    "title_hint": item.get("title", ""),
-                    "company_hint": item.get("company", ""),
-                    "posted_date_hint": item.get("datePosted"),
-                })
-        except Exception as e:
-            logger.error("brazil_scrape_error", term=term, error=str(e))
+    async def _scrape_term(term: str) -> list[dict]:
+        async with _BRAZIL_SEMAPHORE:
+            try:
+                items = await _run_actor(
+                    ACTORS["brazil"],
+                    run_input={
+                        "keyword": term,
+                        "country": "Brazil",
+                        "maxItems": 30,
+                    },
+                )
+                term_results = []
+                for item in items:
+                    item_source = (item.get("source") or "unknown").lower().replace(" ", "")
+                    term_results.append({
+                        "source": item_source,
+                        "source_id": item.get("id", ""),
+                        "raw_text": item.get("description", ""),
+                        "source_url": item.get("url", ""),
+                        "title_hint": item.get("title", ""),
+                        "company_hint": item.get("company", ""),
+                        "posted_date_hint": item.get("datePosted"),
+                    })
+                return term_results
+            except Exception as e:
+                logger.error("brazil_scrape_error", term=term, error=str(e))
+                return []
+
+    # Run all terms in parallel (semaphore limits concurrency to 5)
+    all_results = await asyncio.gather(*[_scrape_term(t) for t in search_terms])
+    results = [item for batch in all_results for item in batch]
 
     logger.info("brazil_scrape_complete", terms=len(search_terms), results=len(results))
     return results
