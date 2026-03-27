@@ -10,8 +10,7 @@ logger = structlog.get_logger()
 # Apify actor IDs — pin versions for stability
 ACTORS = {
     "gupy": "zen-studio/gupy-jobs-scraper",
-    "linkedin": "viralanalyzer/brazil-jobs-scraper",
-    "vagas": "viralanalyzer/brazil-jobs-scraper",
+    "brazil": "viralanalyzer/brazil-jobs-scraper",
 }
 
 APIFY_BASE_URL = "https://api.apify.com/v2"
@@ -105,63 +104,52 @@ async def scrape_gupy(search_terms: list[str], locations: list[str] | None = Non
     return results
 
 
-async def scrape_linkedin(search_terms: list[str], locations: list[str] | None = None) -> list[dict]:
-    """Scrape job listings from LinkedIn Jobs (Brazil)."""
+async def scrape_brazil_jobs(search_terms: list[str], locations: list[str] | None = None) -> list[dict]:
+    """Scrape job listings from multiple Brazilian boards (LinkedIn, InfoJobs, Vagas, etc.).
+
+    Uses viralanalyzer/brazil-jobs-scraper which aggregates multiple sources.
+    The actor returns a `source` field per item (e.g., "LinkedIn", "InfoJobs").
+
+    Input field: `keyword` (not `searchQuery`).
+    Output fields: id, title, company, description, url, datePosted, source, scrapedAt.
+    """
     results = []
     for term in search_terms:
         try:
             items = await _run_actor(
-                ACTORS["linkedin"],
+                ACTORS["brazil"],
                 run_input={
-                    "searchQuery": term,
+                    "keyword": term,
                     "country": "Brazil",
-                    "source": "linkedin",
                     "maxItems": 30,
                 },
             )
             for item in items:
+                # The actor returns source per item (e.g., "LinkedIn", "InfoJobs")
+                item_source = (item.get("source") or "unknown").lower().replace(" ", "")
+                source_id = item.get("id", "")
                 results.append({
-                    "source": "linkedin",
-                    "source_id": item.get("id") or item.get("jobId", ""),
-                    "raw_text": item.get("description", "") or item.get("jobDescription", ""),
-                    "source_url": item.get("url") or item.get("jobUrl", ""),
-                    "title_hint": item.get("title") or item.get("jobTitle", ""),
-                    "company_hint": item.get("company") or item.get("companyName", ""),
-                    "posted_date_hint": item.get("publishedDate") or item.get("postedAt"),
+                    "source": item_source,
+                    "source_id": source_id,
+                    "raw_text": item.get("description", ""),
+                    "source_url": item.get("url", ""),
+                    "title_hint": item.get("title", ""),
+                    "company_hint": item.get("company", ""),
+                    "posted_date_hint": item.get("datePosted"),
                 })
         except Exception as e:
-            logger.error("linkedin_scrape_error", term=term, error=str(e))
+            logger.error("brazil_scrape_error", term=term, error=str(e))
 
-    logger.info("linkedin_scrape_complete", terms=len(search_terms), results=len(results))
+    logger.info("brazil_scrape_complete", terms=len(search_terms), results=len(results))
     return results
+
+
+# Backward-compatible aliases
+async def scrape_linkedin(search_terms: list[str], locations: list[str] | None = None) -> list[dict]:
+    """Deprecated — now handled by scrape_brazil_jobs."""
+    return await scrape_brazil_jobs(search_terms, locations)
 
 
 async def scrape_vagas(search_terms: list[str], locations: list[str] | None = None) -> list[dict]:
-    """Scrape job listings from Vagas.com.br."""
-    results = []
-    for term in search_terms:
-        try:
-            items = await _run_actor(
-                ACTORS["vagas"],
-                run_input={
-                    "searchQuery": term,
-                    "country": "Brazil",
-                    "source": "vagas",
-                    "maxItems": 30,
-                },
-            )
-            for item in items:
-                results.append({
-                    "source": "vagas",
-                    "source_id": item.get("id") or item.get("jobId", ""),
-                    "raw_text": item.get("description", "") or item.get("jobDescription", ""),
-                    "source_url": item.get("url") or item.get("jobUrl", ""),
-                    "title_hint": item.get("title") or item.get("jobTitle", ""),
-                    "company_hint": item.get("company") or item.get("companyName", ""),
-                    "posted_date_hint": item.get("publishedDate") or item.get("postedAt"),
-                })
-        except Exception as e:
-            logger.error("vagas_scrape_error", term=term, error=str(e))
-
-    logger.info("vagas_scrape_complete", terms=len(search_terms), results=len(results))
-    return results
+    """Deprecated — now handled by scrape_brazil_jobs."""
+    return []  # Avoid double-scraping since scrape_brazil_jobs covers all sources
