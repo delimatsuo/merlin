@@ -17,3 +17,4 @@ websockets==14.1
 slowapi==0.1.9
 google-genai==1.14.0
 sentry-sdk[fastapi]==2.22.0
+sendgrid==6.11.0

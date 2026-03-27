@@ -282,6 +282,7 @@ export interface AdminSettingsData {
   tts_enabled: boolean;
   interview_enabled: boolean;
   cover_letter_enabled: boolean;
+  job_matching_enabled: boolean;
 }
 
 interface AdminState {
@@ -473,4 +474,57 @@ export const useVersionStore = create<VersionState>((set) => ({
       };
     }),
   setLoading: (loading) => set({ loading }),
+}));
+
+// --- Job Feed Store ---
+
+export interface MatchedJobItem {
+  job_id: string;
+  title: string;
+  company: string;
+  ats_score: number;
+  matched_skills: string[];
+  missing_skills: string[];
+  source: string;
+  source_url: string;
+  posted_date: string | null;
+  work_mode: string;
+  location: string;
+}
+
+export interface JobPreferences {
+  desired_titles: string[];
+  locations: string[];
+  work_mode: string[];
+  seniority: string[];
+  min_score: number;
+  email_digest: boolean;
+  email_frequency: "daily" | "weekly" | "off";
+  consent_granted_at: string | null;
+}
+
+interface JobFeedState {
+  preferences: JobPreferences | null;
+  matches: MatchedJobItem[];
+  days: number;
+  loading: boolean;
+  prefsLoading: boolean;
+  setPreferences: (prefs: JobPreferences | null) => void;
+  setMatches: (matches: MatchedJobItem[]) => void;
+  setDays: (days: number) => void;
+  setLoading: (loading: boolean) => void;
+  setPrefsLoading: (loading: boolean) => void;
+}
+
+export const useJobFeedStore = create<JobFeedState>((set) => ({
+  preferences: null,
+  matches: [],
+  days: 1,
+  loading: false,
+  prefsLoading: true,
+  setPreferences: (preferences) => set({ preferences }),
+  setMatches: (matches) => set({ matches }),
+  setDays: (days) => set({ days }),
+  setLoading: (loading) => set({ loading }),
+  setPrefsLoading: (prefsLoading) => set({ prefsLoading }),
 }));

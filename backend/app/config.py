@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     brave_search_api_key: str = ""
     gemini_api_key: str = ""
+    sendgrid_api_key: str = ""
+    apify_api_key: str = ""
 
     # Sentry
     sentry_dsn: str = ""
@@ -48,6 +50,12 @@ class Settings(BaseSettings):
     # Fallback model — used when Claude Sonnet is unavailable
     model_fallback: str = "gemini-2.5-pro-preview-05-06"
 
+    # Job matching
+    sendgrid_from_email: str = "vagas@merlincv.com"
+    job_match_max_ai_calls: int = 10000
+    job_match_min_score: int = 50
+    max_jobs_per_digest: int = 50
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 
@@ -59,7 +67,7 @@ def get_settings() -> Settings:
 
 def load_secrets_from_gcp() -> None:
     """Load secrets from GCP Secret Manager (production only)."""
-    if os.getenv("K_SERVICE"):  # Running on Cloud Run
+    if os.getenv("K_SERVICE") or os.getenv("CLOUD_RUN_JOB"):  # Cloud Run Service or Job
         try:
             from google.cloud import secretmanager
 
@@ -71,6 +79,8 @@ def load_secrets_from_gcp() -> None:
                 "BRAVE_SEARCH_API_KEY": "brave_search_api_key",
                 "GEMINI_API_KEY": "gemini_api_key",
                 "SENTRY_DSN": "sentry_dsn",
+                "SENDGRID_API_KEY": "sendgrid_api_key",
+                "APIFY_API_KEY": "apify_api_key",
             }
 
             for secret_name, env_name in secrets.items():

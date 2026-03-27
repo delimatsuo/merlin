@@ -95,6 +95,11 @@ export default function AdminConfiguracoes() {
             checked={form.cover_letter_enabled}
             onChange={(v) => setForm({ ...form, cover_letter_enabled: v })}
           />
+          <Toggle
+            label="Job matching (busca diária de vagas)"
+            checked={form.job_matching_enabled ?? false}
+            onChange={(v) => setForm({ ...form, job_matching_enabled: v })}
+          />
         </div>
 
         {/* Save */}

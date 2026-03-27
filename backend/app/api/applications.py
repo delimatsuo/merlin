@@ -54,6 +54,36 @@ async def list_applications(
     }
 
 
+@router.get("/{application_id}")
+async def get_application(
+    application_id: str,
+    user: AuthenticatedUser = Depends(get_current_user),
+):
+    """Get a single application with job description and analysis."""
+    fs = FirestoreService()
+    application = await fs.get_application(user.uid, application_id)
+    if not application:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Candidatura não encontrada.",
+        )
+
+    analysis = application.get("jobAnalysis", {})
+    return {
+        "id": application.get("id", application_id),
+        "title": analysis.get("title", ""),
+        "company": analysis.get("company", ""),
+        "jobDescription": application.get("jobDescriptionText", ""),
+        "jobAnalysis": analysis,
+        "atsScore": application.get("atsScore"),
+        "atsKeywords": application.get("atsKeywords", []),
+        "skillsMatrix": application.get("skillsMatrix", []),
+        "status": application.get("status", "analyzed"),
+        "versionCount": application.get("versionCount", 0),
+        "createdAt": application.get("createdAt", ""),
+    }
+
+
 @router.delete("/{application_id}")
 async def delete_application(
     application_id: str,

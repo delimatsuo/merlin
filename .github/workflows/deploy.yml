@@ -13,6 +13,7 @@ env:
   CLOUD_RUN_SERVICE: merlin-backend
   CLOUD_RUN_REGION: southamerica-east1
   CLOUD_RUN_SA: merlin-api-sa@merlin-489714.iam.gserviceaccount.com
+  CLOUD_RUN_JOB: merlin-jobs
 
 jobs:
   # ──────────────────────────────────────────
@@ -173,4 +174,66 @@ jobs:
           echo "Health check: HTTP $STATUS"
           if [[ "$STATUS" != "200" ]]; then
             echo "::warning::Health check returned $STATUS"
+          fi
+
+  # ──────────────────────────────────────────
+  # Jobs: Build Docker → Deploy Cloud Run Job
+  # ──────────────────────────────────────────
+  deploy-jobs:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    environment: ${{ needs.changes.outputs.environment }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@ba79af03959ebeac9769e648f473a284504d9193 # v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@77e7a554d41e2ee56fc945c52dfd3f33d12def9a # v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.CLOUD_RUN_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push Jobs image
+        working-directory: backend
+        run: |
+          IMAGE="${{ env.CLOUD_RUN_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/merlin/${{ env.CLOUD_RUN_JOB }}:${{ github.sha }}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Deploy Cloud Run Job
+        run: |
+          # Create or update the job
+          if gcloud run jobs describe ${{ env.CLOUD_RUN_JOB }} \
+            --project ${{ env.GCP_PROJECT_ID }} \
+            --region ${{ env.CLOUD_RUN_REGION }} 2>/dev/null; then
+            gcloud run jobs update ${{ env.CLOUD_RUN_JOB }} \
+              --image "${{ env.IMAGE }}" \
+              --project ${{ env.GCP_PROJECT_ID }} \
+              --region ${{ env.CLOUD_RUN_REGION }} \
+              --service-account ${{ env.CLOUD_RUN_SA }} \
+              --memory 2Gi \
+              --cpu 1 \
+              --task-timeout 1800 \
+              --max-retries 1 \
+              --command "python,-m,app.jobs.entrypoint" \
+              --quiet
+          else
+            gcloud run jobs create ${{ env.CLOUD_RUN_JOB }} \
+              --image "${{ env.IMAGE }}" \
+              --project ${{ env.GCP_PROJECT_ID }} \
+              --region ${{ env.CLOUD_RUN_REGION }} \
+              --service-account ${{ env.CLOUD_RUN_SA }} \
+              --memory 2Gi \
+              --cpu 1 \
+              --task-timeout 1800 \
+              --max-retries 1 \
+              --command "python,-m,app.jobs.entrypoint" \
+              --quiet
           fi

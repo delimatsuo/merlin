@@ -16,11 +16,11 @@ import {
 import {
   Briefcase,
   User as UserIcon,
-  Plus,
   LogOut,
   User,
   Settings,
   Linkedin,
+  Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
@@ -34,10 +34,10 @@ export function DashboardNav() {
   const { t } = useTranslation();
 
   const navItems = [
-    { href: "/dashboard", label: t("nav.applications"), icon: Briefcase },
+    { href: "/dashboard/vagas", label: t("nav.search"), icon: Search },
+    { href: "/dashboard", label: t("nav.jobs"), icon: Briefcase },
     { href: "/dashboard/profile", label: t("nav.profile"), icon: UserIcon },
-    { href: "/dashboard/job", label: t("nav.newJob"), icon: Plus },
-    { href: "/dashboard/linkedin", label: t("nav.linkedin"), icon: Linkedin },
+    { href: "/dashboard/linkedin", label: "LinkedIn", icon: Linkedin },
   ];
   const { user } = useAuthStore();
   const { isAdmin, setIsAdmin } = useAdminStore();
@@ -84,8 +84,8 @@ export function DashboardNav() {
               {navItems.map((item) => {
                 const isActive =
                   item.href === "/dashboard"
-                    ? pathname === "/dashboard" || pathname?.startsWith("/dashboard/application")
-                    : pathname === item.href;
+                    ? pathname === "/dashboard" || pathname?.startsWith("/dashboard/application") || pathname?.startsWith("/dashboard/job")
+                    : pathname === item.href || pathname?.startsWith(item.href + "/");
                 return (
                   <Link
                     key={item.href}

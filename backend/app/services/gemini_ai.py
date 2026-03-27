@@ -22,6 +22,7 @@ from app.prompts.enrichment import ENRICHMENT_PROMPT
 from app.prompts.recommendations import get_recommendations_prompt
 from app.prompts.linkedin_structure import LINKEDIN_STRUCTURING_PROMPT
 from app.prompts.linkedin_analysis import get_linkedin_analysis_prompt
+from app.prompts.job_extraction import JOB_EXTRACTION_PROMPT, JOB_BATCH_EXTRACTION_PROMPT
 
 logger = structlog.get_logger()
 
@@ -440,9 +441,13 @@ async def semantic_skill_match(
     candidate_skills: list[str],
     required_skills: list[str],
     candidate_experience: list[dict] | None = None,
+    desired_titles: list[str] | None = None,
+    job_title: str = "",
 ) -> dict:
-    """Semantic skill matching."""
+    """Semantic skill matching with seniority awareness."""
     context = json.dumps({
+        "candidate_desired_titles": desired_titles or [],
+        "job_title": job_title,
         "candidate_skills": candidate_skills,
         "required_skills": required_skills,
         "candidate_experience": candidate_experience or [],
@@ -450,7 +455,7 @@ async def semantic_skill_match(
 
     content = await _call_flash_lite(
         system="""<task>
-Semantically match candidate skills against job requirements. The input contains candidate_skills, required_skills, and candidate_experience.
+Semantically match candidate skills against job requirements. The input contains the candidate's desired titles, the job title, candidate_skills, required_skills, and candidate_experience.
 </task>
 
 <matching_rules>
@@ -458,6 +463,16 @@ Semantically match candidate skills against job requirements. The input contains
 - Consider skills implied by work experience
 - Consider related skills (e.g., React implies JavaScript)
 </matching_rules>
+
+<seniority_rules>
+- If candidate_desired_titles is empty, skip seniority evaluation entirely
+- Otherwise, compare the candidate's desired titles against the job title for seniority fit
+- Level ordering (lowest to highest): intern < entry/junior < mid/pleno < senior < lead < manager/coordinator < director/head < executive/VP/C-level
+- If the candidate wants director/head roles, an intern/junior/analyst job is a severe mismatch — cap score at 20
+- If the candidate wants senior roles, an intern/entry job is a severe mismatch — cap score at 30
+- If the candidate wants entry/junior roles, a director/VP job is also a mismatch — cap score at 30
+- Only penalize when there is a clear level gap (2+ levels apart)
+</seniority_rules>
 
 <schema>
 {
@@ -801,3 +816,142 @@ async def analyze_linkedin_profile(
     except json.JSONDecodeError:
         logger.error("linkedin_analysis_parse_error", content=content[:500])
         return [], []
+
+
+# ---------------------------------------------------------------------------
+# Job Extraction (for scraping pipeline — cheap Flash-Lite)
+# ---------------------------------------------------------------------------
+
+async def extract_job_data(raw_text: str) -> dict:
+    """Extract structured job fields from raw scraped text.
+
+    Uses Flash-Lite (~$0.0001/call) for bulk processing.
+    Returns dict with: title, company, required_skills, preferred_skills,
+    location, seniority, salary_range, work_mode, posted_date.
+    """
+    content = await _call_flash_lite(
+        system=JOB_EXTRACTION_PROMPT,
+        user_content=raw_text[:5000],  # Cap input to avoid excessive tokens
+        task="job_extraction",
+    )
+
+    result = _parse_json_response(content)
+    if result and isinstance(result, dict):
+        return {
+            "title": result.get("title", ""),
+            "company": result.get("company"),
+            "required_skills": result.get("required_skills", [])[:15],
+            "preferred_skills": result.get("preferred_skills", [])[:10],
+            "location": result.get("location", ""),
+            "seniority": result.get("seniority", "mid"),
+            "salary_range": result.get("salary_range"),
+            "work_mode": result.get("work_mode", "onsite"),
+            "posted_date": result.get("posted_date"),
+        }
+
+    logger.warning("job_extraction_parse_fallback", content=content[:200])
+    return {
+        "title": "",
+        "company": None,
+        "required_skills": [],
+        "preferred_skills": [],
+        "location": "",
+        "seniority": "mid",
+        "salary_range": None,
+        "work_mode": "onsite",
+        "posted_date": None,
+    }
+
+
+_EMPTY_JOB = {
+    "title": "", "company": None, "required_skills": [], "preferred_skills": [],
+    "location": "", "seniority": "mid", "salary_range": None, "work_mode": "onsite",
+    "posted_date": None,
+}
+
+
+async def extract_job_data_batch(raw_texts: list[str]) -> list[dict]:
+    """Extract structured fields from multiple jobs in a single Flash-Lite call.
+
+    Sends up to 10 jobs per call. Returns list of dicts in same order as input.
+    ~10x faster than calling extract_job_data() individually.
+    """
+    if not raw_texts:
+        return []
+
+    # Build combined input with separator
+    combined = "\n---JOB---\n".join(text[:2000] for text in raw_texts)
+
+    content = await _call_flash_lite(
+        system=JOB_BATCH_EXTRACTION_PROMPT,
+        user_content=combined,
+        task="job_extraction_batch",
+    )
+
+    result = _parse_json_response(content)
+    if result and isinstance(result, list):
+        extracted = []
+        for item in result:
+            if isinstance(item, dict):
+                extracted.append({
+                    "title": item.get("title", ""),
+                    "company": item.get("company"),
+                    "required_skills": item.get("required_skills", [])[:10],
+                    "preferred_skills": item.get("preferred_skills", [])[:5],
+                    "location": item.get("location", ""),
+                    "seniority": item.get("seniority", "mid"),
+                    "salary_range": item.get("salary_range"),
+                    "work_mode": item.get("work_mode", "onsite"),
+                    "posted_date": item.get("posted_date"),
+                    "categories": item.get("categories", [])[:3],
+                })
+            else:
+                extracted.append(dict(_EMPTY_JOB))
+        # Pad if fewer results than inputs
+        while len(extracted) < len(raw_texts):
+            extracted.append(dict(_EMPTY_JOB))
+        return extracted
+
+    logger.warning("batch_extraction_parse_fallback", count=len(raw_texts), content=content[:200])
+    return [dict(_EMPTY_JOB) for _ in raw_texts]
+
+
+# ---------------------------------------------------------------------------
+# Job Relevance Filter (for matching pipeline — cheap Flash-Lite)
+# ---------------------------------------------------------------------------
+
+async def check_job_relevance(
+    desired_titles: list[str],
+    job_title: str,
+    job_seniority: str = "",
+) -> bool:
+    """Check if a job is relevant to the user's desired roles.
+
+    Uses Flash-Lite to understand role-level fit, not just keyword matching.
+    Returns True if the job is relevant, False otherwise.
+    """
+    titles_str = ", ".join(desired_titles[:5])
+
+    content = await _call_flash_lite(
+        system="""<task>
+Determine if a job posting is relevant for a candidate based on their desired roles.
+Consider seniority level, role scope, and career trajectory — NOT just keyword overlap.
+
+Rules:
+- A director/gerente should NOT see intern/estagiário/auxiliar/assistente positions
+- A senior professional should NOT see junior/trainee positions
+- Related roles at the SAME level are relevant (e.g., "Gerente de RH" → "Gerente de People" = yes)
+- Completely different functions are NOT relevant (e.g., "Gerente de RH" → "Analista Financeiro" = no)
+
+Return ONLY a JSON object: {"relevant": true} or {"relevant": false}
+</task>""",
+        user_content=f"Candidate wants: {titles_str}\nJob posting: {job_title} (seniority: {job_seniority})",
+        task="job_relevance",
+    )
+
+    result = _parse_json_response(content)
+    if result and isinstance(result, dict):
+        return result.get("relevant", False)
+
+    # Fallback: check if any keyword appears
+    return False

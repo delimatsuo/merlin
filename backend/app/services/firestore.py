@@ -1162,3 +1162,194 @@ class FirestoreService:
         }, merge=True)
 
         return count
+
+    # --- Job Preferences & Matching ---
+
+    async def get_job_preferences(self, uid: str) -> dict | None:
+        """Get user's job matching preferences."""
+        doc_ref = (
+            self.db.collection("users").document(uid)
+            .collection("jobPreferences").document("current")
+        )
+        doc = await doc_ref.get()
+        if doc.exists:
+            return doc.to_dict()
+        return None
+
+    async def save_job_preferences(self, uid: str, prefs: dict) -> None:
+        """Save or update user's job matching preferences."""
+        doc_ref = (
+            self.db.collection("users").document(uid)
+            .collection("jobPreferences").document("current")
+        )
+        prefs["last_updated"] = datetime.now(timezone.utc).isoformat()
+        await doc_ref.set(prefs, merge=True)
+        logger.info("job_preferences_saved", uid=uid)
+
+    async def delete_job_preferences(self, uid: str) -> None:
+        """Delete user's job preferences and all matched jobs (LGPD withdrawal)."""
+        # Delete preferences
+        pref_ref = (
+            self.db.collection("users").document(uid)
+            .collection("jobPreferences").document("current")
+        )
+        await pref_ref.delete()
+
+        # Delete all matched jobs
+        matched_col = (
+            self.db.collection("users").document(uid)
+            .collection("matchedJobs")
+        )
+        async for doc in matched_col.stream():
+            await doc.reference.delete()
+
+        logger.info("job_preferences_deleted", uid=uid)
+
+    async def get_matched_jobs(self, uid: str, date: str) -> dict | None:
+        """Get matched jobs for a specific date."""
+        doc_ref = (
+            self.db.collection("users").document(uid)
+            .collection("matchedJobs").document(date)
+        )
+        doc = await doc_ref.get()
+        if doc.exists:
+            return doc.to_dict()
+        return None
+
+    async def save_matched_jobs(
+        self, uid: str, date: str, matches: list, total: int
+    ) -> None:
+        """Save matched jobs for a specific date."""
+        doc_ref = (
+            self.db.collection("users").document(uid)
+            .collection("matchedJobs").document(date)
+        )
+        await doc_ref.set({
+            "matches": matches,
+            "total_matches": total,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        logger.info("matched_jobs_saved", uid=uid, date=date, total=total)
+
+    async def get_job(self, job_id: str) -> dict | None:
+        """Get a single job from the global jobs collection."""
+        doc_ref = self.db.collection("jobs").document(job_id)
+        doc = await doc_ref.get()
+        if doc.exists:
+            data = doc.to_dict()
+            data["id"] = doc.id
+            return data
+        return None
+
+    async def get_active_jobs(self, limit: int = 500) -> list[dict]:
+        """Get all jobs, filtering expired ones in-memory.
+
+        We don't filter by expires_at in the query because older jobs
+        may have string-typed expires_at (pre-fix) that Firestore can't
+        compare against datetime. Filtering in-memory is safe for pools
+        up to a few thousand jobs.
+        """
+        now = datetime.now(timezone.utc)
+        query = self.db.collection("jobs").limit(limit)
+        results = []
+        async for doc in query.stream():
+            data = doc.to_dict()
+            data["id"] = doc.id
+
+            # Filter expired jobs in-memory (handles both string and datetime expires_at)
+            expires = data.get("expires_at")
+            if expires:
+                try:
+                    if isinstance(expires, str):
+                        expires_dt = datetime.fromisoformat(expires.replace("Z", "+00:00"))
+                    else:
+                        expires_dt = expires if expires.tzinfo else expires.replace(tzinfo=timezone.utc)
+                    if expires_dt < now:
+                        continue
+                except (ValueError, TypeError, AttributeError):
+                    pass  # Keep jobs with unparseable expires_at
+
+            results.append(data)
+        return results
+
+    async def query_jobs_by_tags(
+        self,
+        tags: list[str],
+        work_modes: list[str] | None = None,
+        limit: int = 100,
+    ) -> list[dict]:
+        """Query jobs by category tags using Firestore native filtering.
+
+        Uses array_contains_any for efficient tag matching.
+        Work mode filter applied in-memory (can't combine with array query).
+        """
+        if not tags:
+            return []
+
+        # Firestore array_contains_any supports up to 30 values
+        query = (
+            self.db.collection("jobs")
+            .where(filter=FieldFilter("categories", "array_contains_any", tags[:30]))
+            .limit(limit)
+        )
+
+        results = []
+        async for doc in query.stream():
+            data = doc.to_dict()
+            data["id"] = doc.id
+
+            # Work mode filter in-memory
+            if work_modes:
+                if data.get("work_mode", "onsite") not in work_modes:
+                    continue
+
+            results.append(data)
+        return results
+
+    async def get_all_users_with_preferences(self) -> list[dict]:
+        """Get all users who have job preferences set, with their knowledge files."""
+        results = []
+        async for user_doc in self.db.collection("users").order_by("__name__").stream():
+            uid = user_doc.id
+            user_data = user_doc.to_dict() or {}
+
+            # Check if jobPreferences/current exists
+            pref_ref = (
+                self.db.collection("users").document(uid)
+                .collection("jobPreferences").document("current")
+            )
+            pref_doc = await pref_ref.get()
+            if not pref_doc.exists:
+                continue
+
+            # Fetch knowledge file
+            knowledge_ref = (
+                self.db.collection("users").document(uid)
+                .collection("knowledge").document("current")
+            )
+            knowledge_doc = await knowledge_ref.get()
+            knowledge = knowledge_doc.to_dict() if knowledge_doc.exists else None
+
+            results.append({
+                "uid": uid,
+                "email": user_data.get("email", ""),
+                "name": user_data.get("name", ""),
+                "preferences": pref_doc.to_dict(),
+                "knowledge": knowledge,
+            })
+
+        logger.info("users_with_preferences_fetched", count=len(results))
+        return results
+
+    async def cleanup_expired_jobs(self) -> int:
+        """Delete all expired jobs. Returns count deleted."""
+        now = datetime.now(timezone.utc)
+        query = self.db.collection("jobs").where(
+            filter=FieldFilter("expires_at", "<", now)
+        )
+        count = 0
+        async for doc in query.stream():
+            await doc.reference.delete()
+            count += 1
+        logger.info("expired_jobs_cleaned", count=count)
+        return count

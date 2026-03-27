@@ -258,3 +258,46 @@ async def backfill_stats(
     count = await fs.backfill_user_stats()
     await log_admin_action(admin.uid, "backfill_stats", details=f"Backfilled {count} users")
     return {"status": "done", "usersProcessed": count}
+
+
+@router.get("/jobs/stats")
+@limiter.limit("20/minute")
+async def get_jobs_stats(
+    request: Request,
+    admin: AuthenticatedUser = Depends(get_admin_user),
+):
+    """Job matching pipeline stats for admin dashboard."""
+    from app.services.firestore import _brazil_today
+
+    fs = FirestoreService()
+    today = _brazil_today()
+
+    # Count active jobs by source
+    active_jobs = await fs.get_active_jobs(limit=2000)
+    by_source: dict[str, int] = {}
+    for job in active_jobs:
+        source = job.get("source", "unknown")
+        by_source[source] = by_source.get(source, 0) + 1
+
+    # Today's batch run status
+    batch_doc = await fs.db.collection("batchRuns").document(today).get()
+    batch_status = batch_doc.to_dict() if batch_doc.exists else None
+
+    # Count users with preferences
+    users_with_prefs = await fs.get_all_users_with_preferences()
+
+    # Today's matches count
+    total_matches_today = 0
+    for user_data in users_with_prefs:
+        uid = user_data["uid"]
+        match_doc = await fs.get_matched_jobs(uid, today)
+        if match_doc:
+            total_matches_today += match_doc.get("total_matches", 0)
+
+    return {
+        "activeJobs": len(active_jobs),
+        "jobsBySource": by_source,
+        "usersWithPreferences": len(users_with_prefs),
+        "matchesToday": total_matches_today,
+        "batchStatus": batch_status,
+    }

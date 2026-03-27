@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Briefcase, User, Plus, Linkedin } from "lucide-react";
+import { Briefcase, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/hooks/useTranslation";
 
@@ -11,15 +11,13 @@ export function MobileNav() {
   const { t } = useTranslation();
 
   const navItems = [
-    { href: "/dashboard", label: t("mobileNav.applications"), icon: Briefcase },
-    { href: "/dashboard/profile", label: t("mobileNav.profile"), icon: User },
-    { href: "/dashboard/job", label: t("mobileNav.newJob"), icon: Plus },
-    { href: "/dashboard/linkedin", label: t("mobileNav.linkedin"), icon: Linkedin },
+    { href: "/dashboard/vagas", label: t("mobileNav.search"), icon: Search },
+    { href: "/dashboard", label: t("mobileNav.jobs"), icon: Briefcase },
   ];
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 glass border-t border-border/50 md:hidden safe-area-bottom">
-      <div className="grid grid-cols-4">
+      <div className="grid grid-cols-2">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive =
