@@ -13,7 +13,7 @@ logger = structlog.get_logger()
 # Apify actor IDs — pin versions for stability
 ACTORS = {
     "gupy": "zen-studio/gupy-jobs-scraper",
-    "brazil": "viralanalyzer/brazil-jobs-scraper",
+    "linkedin": "valig/linkedin-jobs-scraper",
 }
 
 APIFY_BASE_URL = "https://api.apify.com/v2"
@@ -107,50 +107,44 @@ async def scrape_gupy(search_terms: list[str], locations: list[str] | None = Non
     return results
 
 
-async def scrape_brazil_jobs(search_terms: list[str], locations: list[str] | None = None) -> list[dict]:
-    """Scrape job listings from multiple Brazilian boards (LinkedIn, InfoJobs, Vagas, etc.).
+async def scrape_linkedin(search_terms: list[str], locations: list[str] | None = None) -> list[dict]:
+    """Scrape LinkedIn job listings using valig/linkedin-jobs-scraper.
 
-    Uses viralanalyzer/brazil-jobs-scraper which aggregates multiple sources.
-    The actor returns a `source` field per item (e.g., "LinkedIn", "InfoJobs").
-
-    Input field: `keyword` (not `searchQuery`).
-    Output fields: id, title, company, description, url, datePosted, source, scrapedAt.
+    Pay-per-compute actor. One call per search term, ~100 results each.
+    Output fields: id, title, companyName, description, location, postedDate, applyUrl.
     """
     async def _scrape_term(term: str) -> list[dict]:
         async with _BRAZIL_SEMAPHORE:
             try:
                 items = await _run_actor(
-                    ACTORS["brazil"],
+                    ACTORS["linkedin"],
                     run_input={
-                        "keyword": term,
-                        "country": "Brazil",
-                        "maxItems": 100,
+                        "searchKeyword": term,
+                        "locationSearch": "Brazil",
+                        "numberOfListings": 100,
                     },
+                    timeout=120,
                 )
                 term_results = []
                 for item in items:
-                    item_source = (item.get("source") or "unknown").lower().replace(" ", "")
-                    # Only keep LinkedIn results
-                    if "linkedin" not in item_source:
-                        continue
-                    raw_text = item.get("description") or item.get("descriptionSnippet") or ""
+                    raw_text = item.get("description") or ""
                     term_results.append({
                         "source": "linkedin",
                         "source_id": item.get("id", ""),
                         "raw_text": raw_text,
-                        "source_url": item.get("url", ""),
+                        "source_url": item.get("url") or item.get("applyUrl", ""),
                         "title_hint": item.get("title", ""),
-                        "company_hint": item.get("company", ""),
-                        "posted_date_hint": item.get("datePosted"),
+                        "company_hint": item.get("companyName", ""),
+                        "posted_date_hint": item.get("postedDate"),
                     })
                 return term_results
             except Exception as e:
-                logger.error("brazil_scrape_error", term=term, error=str(e))
+                logger.error("linkedin_scrape_error", term=term, error=str(e))
                 return []
 
     # Run all terms in parallel (semaphore limits concurrency to 5)
     all_results = await asyncio.gather(*[_scrape_term(t) for t in search_terms])
     results = [item for batch in all_results for item in batch]
 
-    logger.info("brazil_scrape_complete", terms=len(search_terms), results=len(results))
+    logger.info("linkedin_scrape_complete", terms=len(search_terms), results=len(results))
     return results
