@@ -139,11 +139,11 @@ Para cancelar: {unsubscribe_url}
             score_color = "#16a34a" if score >= 80 else "#ca8a04" if score >= 60 else "#dc2626"
             score_bg = "#f0fdf4" if score >= 80 else "#fefce8" if score >= 60 else "#fef2f2"
 
-            meta_parts = [p for p in [company, location] if p]
-            if work_mode == "remote":
-                meta_parts.append("Remoto")
-            elif work_mode == "hybrid":
-                meta_parts.append("Híbrido")
+            work_mode_label = "Remoto" if work_mode == "remote" else "Híbrido" if work_mode == "hybrid" else ""
+            # Avoid "Remoto · Remoto" when location already says it
+            if work_mode_label and work_mode_label.lower() in location.lower():
+                work_mode_label = ""
+            meta_parts = [p for p in [company, location, work_mode_label] if p]
             meta_str = " · ".join(meta_parts)
 
             job_cards += f"""
