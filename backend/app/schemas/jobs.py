@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 # --- Job Preferences ---
 
 WorkMode = Literal["remote", "hybrid", "onsite"]
-Seniority = Literal["junior", "mid", "senior", "lead"]
+Seniority = Literal["intern", "entry", "mid", "senior", "lead", "manager", "director", "executive"]
 EmailFrequency = Literal["daily", "weekly", "off"]
 
 
