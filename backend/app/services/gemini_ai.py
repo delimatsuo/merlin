@@ -799,7 +799,7 @@ async def analyze_linkedin_profile(
         system=get_linkedin_analysis_prompt(locale),
         user_content=context,
         task="linkedin_analysis",
-        max_tokens=6144,
+        max_tokens=4096,
     )
 
     result = _parse_json_response(content)

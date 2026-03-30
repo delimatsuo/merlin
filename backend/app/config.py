@@ -34,9 +34,9 @@ class Settings(BaseSettings):
     max_daily_tailor_count: int = int(os.environ.get("TAILOR_DAILY_LIMIT", "5"))
 
     # Timeouts (seconds)
-    default_timeout: int = 30
-    opus_timeout: int = 60
-    generation_timeout: int = 60
+    default_timeout: int = 45
+    opus_timeout: int = 90
+    generation_timeout: int = 90
 
     # Admin
     admin_emails: str = os.environ.get("ADMIN_EMAILS", "deli@ellaexecutivesearch.com")
