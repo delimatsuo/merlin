@@ -268,8 +268,15 @@ async def analyze_linkedin(
             knowledge=knowledge,
             locale=body.locale,
         )
+    except TimeoutError:
+        logger.warning("linkedin_analyze_timeout", uid=user.uid)
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="A análise demorou mais que o esperado. Tente novamente.",
+        )
     except Exception as e:
-        logger.error("linkedin_analyze_error", uid=user.uid, error=str(e))
+        error_type = type(e).__name__
+        logger.error("linkedin_analyze_error", uid=user.uid, error_type=error_type, error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Erro ao analisar o perfil LinkedIn. Tente novamente em alguns minutos.",

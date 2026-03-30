@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     sendgrid_api_key: str = ""
     apify_api_key: str = ""
+    email_hmac_key: str = ""  # Dedicated HMAC key for unsubscribe tokens
 
     # Sentry
     sentry_dsn: str = ""
@@ -33,9 +34,9 @@ class Settings(BaseSettings):
     max_daily_tailor_count: int = int(os.environ.get("TAILOR_DAILY_LIMIT", "5"))
 
     # Timeouts (seconds)
-    default_timeout: int = 30
-    opus_timeout: int = 60
-    generation_timeout: int = 60
+    default_timeout: int = 45
+    opus_timeout: int = 90
+    generation_timeout: int = 90
 
     # Admin
     admin_emails: str = os.environ.get("ADMIN_EMAILS", "deli@ellaexecutivesearch.com")
@@ -81,6 +82,7 @@ def load_secrets_from_gcp() -> None:
                 "SENTRY_DSN": "sentry_dsn",
                 "SENDGRID_API_KEY": "sendgrid_api_key",
                 "APIFY_API_KEY": "apify_api_key",
+                "EMAIL_HMAC_KEY": "email_hmac_key",
             }
 
             for secret_name, env_name in secrets.items():

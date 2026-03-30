@@ -30,6 +30,10 @@ export function initSentry() {
       "AbortError",
       "Failed to execute 'insertBefore' on 'Node'",
       "Failed to execute 'removeChild' on 'Node'",
+      "QuotaExceededError",
+      "Encountered full disk",
+      "IndexedDB",
+      "indexedDB",
     ],
 
     beforeSend(event) {

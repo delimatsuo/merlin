@@ -673,6 +673,7 @@ async def run_matching_pipeline() -> dict:
                                 sent = await send_job_digest(
                                     email=email, name=name, uid=uid,
                                     matches=matches, date=today,
+                                    frequency=freq,
                                 )
                                 if sent:
                                     # Mark as sent (idempotency gate)

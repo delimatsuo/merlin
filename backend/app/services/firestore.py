@@ -217,11 +217,11 @@ class FirestoreService:
     ) -> None:
         """Store recommendations as a field on the profile doc."""
         doc_ref = self.db.collection("users").document(uid).collection("profiles").document(profile_id)
-        await doc_ref.update({
+        await doc_ref.set({
             "recommendations": recommendations,
             "recommendationsLocale": locale,
             "recommendationsGeneratedAt": datetime.now(timezone.utc).isoformat(),
-        })
+        }, merge=True)
 
     async def get_recommendations(self, uid: str, profile_id: str) -> Optional[dict]:
         """Read recommendations from the profile doc. Returns dict with recommendations, locale, and timestamp."""
@@ -1340,6 +1340,78 @@ class FirestoreService:
 
         logger.info("users_with_preferences_fetched", count=len(results))
         return results
+
+    async def get_users_for_announcement(self) -> list[dict]:
+        """Get onboarded users who haven't set up job preferences.
+
+        Targets users with a knowledge file (completed onboarding) but
+        no jobPreferences document. Excludes users who opted out.
+        """
+        results = []
+        async for user_doc in self.db.collection("users").order_by("__name__").stream():
+            uid = user_doc.id
+            user_data = user_doc.to_dict() or {}
+
+            # Check if jobPreferences/current exists — skip if they already have prefs
+            pref_ref = (
+                self.db.collection("users").document(uid)
+                .collection("jobPreferences").document("current")
+            )
+            pref_doc = await pref_ref.get()
+            if pref_doc.exists:
+                # User has preferences — check if they opted out
+                prefs = pref_doc.to_dict() or {}
+                if prefs.get("email_frequency") == "off":
+                    continue  # Opted out, skip
+                continue  # Has preferences, not a target
+
+            # Check if knowledge file exists — must have completed onboarding
+            knowledge_ref = (
+                self.db.collection("users").document(uid)
+                .collection("knowledge").document("current")
+            )
+            knowledge_doc = await knowledge_ref.get()
+            if not knowledge_doc.exists:
+                continue  # Not onboarded, skip
+
+            results.append({
+                "uid": uid,
+                "email": user_data.get("email", ""),
+                "name": user_data.get("name", ""),
+            })
+
+        logger.info("announcement_targets_fetched", count=len(results))
+        return results
+
+    async def get_campaign(self, campaign_id: str) -> dict | None:
+        """Get a campaign tracking document."""
+        doc = await self.db.collection("campaigns").document(campaign_id).get()
+        return doc.to_dict() if doc.exists else None
+
+    async def create_campaign(self, campaign_id: str, data: dict) -> None:
+        """Create a campaign tracking document."""
+        await self.db.collection("campaigns").document(campaign_id).set(data)
+
+    async def update_campaign(self, campaign_id: str, data: dict) -> None:
+        """Update a campaign tracking document."""
+        await self.db.collection("campaigns").document(campaign_id).update(data)
+
+    async def mark_email_sent(self, campaign_id: str, uid: str) -> None:
+        """Mark that an email was sent to a user for a campaign."""
+        ref = (
+            self.db.collection("campaigns").document(campaign_id)
+            .collection("sent").document(uid)
+        )
+        await ref.set({"sent_at": datetime.now(timezone.utc).isoformat()})
+
+    async def was_email_sent(self, campaign_id: str, uid: str) -> bool:
+        """Check if an email was already sent to a user for a campaign."""
+        ref = (
+            self.db.collection("campaigns").document(campaign_id)
+            .collection("sent").document(uid)
+        )
+        doc = await ref.get()
+        return doc.exists
 
     async def cleanup_expired_jobs(self) -> int:
         """Delete all expired jobs. Returns count deleted."""

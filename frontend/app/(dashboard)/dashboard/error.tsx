@@ -15,7 +15,11 @@ export default function DashboardError({
 }) {
   useEffect(() => {
     console.error("[Merlin] Dashboard error:", error.message, error.digest);
-    captureError(error, { digest: error.digest, boundary: "dashboard" });
+    // Don't report expected errors (admin access denied, rate limits)
+    const msg = error.message?.toLowerCase() || "";
+    if (!msg.includes("administrador") && !msg.includes("429") && !msg.includes("403")) {
+      captureError(error, { digest: error.digest, boundary: "dashboard" });
+    }
   }, [error]);
 
   return (

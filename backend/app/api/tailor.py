@@ -225,8 +225,20 @@ async def regenerate_resume(
             knowledge=knowledge,
             enrichment=enrichment,
         )
+    except TimeoutError:
+        logger.warning("regenerate_timeout", uid=user.uid)
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="A geração demorou mais que o esperado. Tente novamente.",
+        )
     except Exception as e:
-        logger.error("regenerate_error", uid=user.uid, error=str(e))
+        error_type = type(e).__name__
+        logger.error("regenerate_error", uid=user.uid, error_type=error_type, error=str(e)[:200])
+        if "overload" in str(e).lower() or "529" in str(e):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="O serviço de IA está temporariamente sobrecarregado. Tente novamente em alguns minutos.",
+            )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Erro ao regenerar. Tente novamente.",

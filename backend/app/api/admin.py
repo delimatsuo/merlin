@@ -1,13 +1,16 @@
 """Admin dashboard endpoints."""
 
+import asyncio
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from datetime import datetime, timezone
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from app.auth import AuthenticatedUser, get_admin_user, get_current_user
 from app.services.admin_settings import AdminSettings, AdminSettingsService
 from app.services.audit import log_admin_action
+from app.services.email import send_feature_announcement
 from app.services.firestore import FirestoreService
 
 logger = structlog.get_logger()
@@ -300,4 +303,213 @@ async def get_jobs_stats(
         "usersWithPreferences": len(users_with_prefs),
         "matchesToday": total_matches_today,
         "batchStatus": batch_status,
+    }
+
+
+@router.get("/preview-email")
+async def preview_email(
+    request: Request,
+    template: str = Query(default="announcement", description="announcement or digest"),
+    admin: AuthenticatedUser = Depends(get_admin_user),
+):
+    """Preview email HTML template. Admin-only."""
+    from fastapi.responses import HTMLResponse
+    from app.services.email import _generate_unsubscribe_token, _esc
+
+    dashboard_url = "https://merlincv.com/dashboard/vagas"
+    unsubscribe_url = f"https://merlincv.com/api/jobs/unsubscribe?token=PREVIEW_TOKEN"
+    greeting = _esc(admin.email.split("@")[0])
+
+    if template == "digest":
+        # Sample job data for preview
+        sample_matches = [
+            {"title": "Diretor de Recursos Humanos", "company": "Empresa ABC", "location": "São Paulo, SP", "work_mode": "hybrid", "ats_score": 92},
+            {"title": "VP of People Operations", "company": "TechCorp Brasil", "location": "Remoto", "work_mode": "remote", "ats_score": 85},
+            {"title": "Gerente de RH", "company": "Grupo XYZ", "location": "Rio de Janeiro, RJ", "work_mode": "onsite", "ats_score": 78},
+            {"title": "Head de People & Culture", "company": "StartupCo", "location": "São Paulo, SP", "work_mode": "hybrid", "ats_score": 65},
+            {"title": "Coordenador de RH", "company": "Indústria Nacional", "location": "Campinas, SP", "work_mode": "onsite", "ats_score": 45},
+        ]
+
+        count = len(sample_matches)
+        freq_text = "diariamente"
+        job_cards = ""
+        for m in sample_matches:
+            title = _esc(m["title"])
+            company = _esc(m["company"])
+            location = _esc(m["location"])
+            work_mode = m["work_mode"]
+            score = m["ats_score"]
+            score_color = "#16a34a" if score >= 80 else "#ca8a04" if score >= 60 else "#dc2626"
+            score_bg = "#f0fdf4" if score >= 80 else "#fefce8" if score >= 60 else "#fef2f2"
+            meta_parts = [p for p in [company, location] if p]
+            if work_mode == "remote": meta_parts.append("Remoto")
+            elif work_mode == "hybrid": meta_parts.append("Híbrido")
+            meta_str = " · ".join(meta_parts)
+            job_cards += f"""
+            <tr><td style="padding:0 0 8px 0">
+                <a href="{dashboard_url}" style="display:block;text-decoration:none;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;padding:16px 20px">
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+                        <td style="vertical-align:top">
+                            <span style="font-size:15px;font-weight:600;color:#111827;line-height:1.4">{title}</span>
+                            <br><span style="font-size:13px;color:#6b7280;line-height:1.6">{meta_str}</span>
+                        </td>
+                        <td width="52" style="vertical-align:top;text-align:right;padding-left:12px">
+                            <span style="display:inline-block;background:{score_bg};color:{score_color};padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700">{score}%</span>
+                        </td>
+                    </tr></table>
+                </a>
+            </td></tr>"""
+
+        html = f"""<!DOCTYPE html><html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background-color:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif">
+<div style="max-width:600px;margin:0 auto;padding:24px 16px">
+    <div style="text-align:center;padding:16px 0 24px"><span style="font-size:22px;font-weight:700;color:#111827;letter-spacing:-0.5px">Merlin</span></div>
+    <div style="background:#111827;border-radius:16px;padding:32px 24px;text-align:center;margin-bottom:20px">
+        <h1 style="margin:0;font-size:24px;font-weight:700;color:#ffffff;line-height:1.3">{count} vagas encontradas</h1>
+        <p style="margin:8px 0 0;font-size:14px;color:#9ca3af">Olá {greeting}, encontramos vagas que combinam com seu perfil</p>
+    </div>
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:8px">{job_cards}</table>
+    <div style="text-align:center;padding:16px 0 24px">
+        <a href="{dashboard_url}" style="display:inline-block;background:#111827;color:#ffffff;padding:14px 36px;border-radius:28px;text-decoration:none;font-weight:600;font-size:14px">Ver todas as vagas</a>
+    </div>
+    <div style="text-align:center;padding:20px 0;border-top:1px solid #e5e7eb">
+        <p style="margin:0 0 8px;font-size:12px;color:#9ca3af">Você recebe este email {freq_text} · <a href="{unsubscribe_url}" style="color:#9ca3af;text-decoration:underline">Cancelar inscrição</a></p>
+        <p style="margin:0;font-size:11px;color:#d1d5db">Ella Executive Search Ltda · merlincv.com</p>
+    </div>
+</div></body></html>"""
+        return HTMLResponse(content=html)
+
+    # Announcement template
+    html = f"""<!DOCTYPE html><html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background-color:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif">
+<div style="max-width:600px;margin:0 auto;padding:24px 16px">
+    <div style="text-align:center;padding:16px 0 24px"><span style="font-size:22px;font-weight:700;color:#111827;letter-spacing:-0.5px">Merlin</span></div>
+    <div style="background:#111827;border-radius:16px;padding:40px 32px;text-align:center;margin-bottom:24px">
+        <h1 style="margin:0;font-size:26px;font-weight:700;color:#ffffff;line-height:1.3">Merlin agora busca vagas para você</h1>
+        <p style="margin:12px 0 0;font-size:15px;color:#9ca3af;line-height:1.5">Olá {greeting}, uma nova funcionalidade está disponível</p>
+    </div>
+    <div style="background:#ffffff;border-radius:16px;border:1px solid #e5e7eb;padding:28px 24px;margin-bottom:24px">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr><td style="padding:0 0 20px 0"><table cellpadding="0" cellspacing="0" border="0"><tr>
+                <td style="width:36px;vertical-align:top"><div style="width:28px;height:28px;background:#f0fdf4;border-radius:8px;text-align:center;line-height:28px;font-size:14px">&#128269;</div></td>
+                <td style="vertical-align:top"><strong style="font-size:14px;color:#111827">Busca diária automática</strong><br><span style="font-size:13px;color:#6b7280">Vagas de LinkedIn, Gupy e outras plataformas, todos os dias</span></td>
+            </tr></table></td></tr>
+            <tr><td style="padding:0 0 20px 0"><table cellpadding="0" cellspacing="0" border="0"><tr>
+                <td style="width:36px;vertical-align:top"><div style="width:28px;height:28px;background:#eff6ff;border-radius:8px;text-align:center;line-height:28px;font-size:14px">&#129504;</div></td>
+                <td style="vertical-align:top"><strong style="font-size:14px;color:#111827">Matching inteligente</strong><br><span style="font-size:13px;color:#6b7280">IA compara cada vaga com suas competências e experiência</span></td>
+            </tr></table></td></tr>
+            <tr><td style="padding:0"><table cellpadding="0" cellspacing="0" border="0"><tr>
+                <td style="width:36px;vertical-align:top"><div style="width:28px;height:28px;background:#fef3c7;border-radius:8px;text-align:center;line-height:28px;font-size:14px">&#128232;</div></td>
+                <td style="vertical-align:top"><strong style="font-size:14px;color:#111827">Notificação por email</strong><br><span style="font-size:13px;color:#6b7280">Receba as melhores vagas diretamente no seu inbox</span></td>
+            </tr></table></td></tr>
+        </table>
+    </div>
+    <div style="text-align:center;padding:8px 0 32px">
+        <a href="{dashboard_url}" style="display:inline-block;background:#111827;color:#ffffff;padding:16px 40px;border-radius:28px;text-decoration:none;font-weight:600;font-size:15px">Configurar minhas preferências</a>
+    </div>
+    <div style="text-align:center;padding:20px 0;border-top:1px solid #e5e7eb">
+        <p style="margin:0 0 8px;font-size:12px;color:#9ca3af"><a href="{unsubscribe_url}" style="color:#9ca3af;text-decoration:underline">Não desejo receber comunicações</a></p>
+        <p style="margin:0;font-size:11px;color:#d1d5db">Ella Executive Search Ltda · merlincv.com</p>
+    </div>
+</div></body></html>"""
+    return HTMLResponse(content=html)
+
+
+@router.post("/send-announcement")
+@limiter.limit("2/hour")
+async def send_announcement(
+    request: Request,
+    campaign_id: str = Query(..., description="Unique campaign ID for idempotency"),
+    execute: bool = Query(default=False, description="Set to true to actually send emails"),
+    admin: AuthenticatedUser = Depends(get_admin_user),
+):
+    """Send feature announcement to onboarded users without job preferences.
+
+    Dry-run by default (execute=false). Returns recipient list without sending.
+    Requires campaign_id for idempotency — same ID cannot be used twice.
+    """
+    fs = FirestoreService()
+
+    # Check campaign idempotency
+    existing = await fs.get_campaign(campaign_id)
+    if existing:
+        return {
+            "status": "already_exists",
+            "campaign_id": campaign_id,
+            "sent_count": existing.get("sent_count", 0),
+            "message": "Esta campanha já foi executada.",
+        }
+
+    # Get target users
+    targets = await fs.get_users_for_announcement()
+
+    if not execute:
+        # Dry-run: return target list without sending
+        return {
+            "status": "dry_run",
+            "campaign_id": campaign_id,
+            "target_count": len(targets),
+            "sample": [
+                {"email": t["email"][:5] + "***", "name": t["name"]}
+                for t in targets[:10]
+            ],
+            "message": f"Enviar para {len(targets)} usuários. Use execute=true para confirmar.",
+        }
+
+    # Create campaign record
+    await fs.create_campaign(campaign_id, {
+        "type": "feature_announcement",
+        "status": "sending",
+        "target_count": len(targets),
+        "sent_count": 0,
+        "failed_count": 0,
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "started_by": admin.uid,
+    })
+
+    await log_admin_action(admin.uid, "send_announcement", campaign_id=campaign_id, targets=len(targets))
+
+    # Send emails with rate limiting (200ms between sends)
+    sent = 0
+    failed = 0
+    for target in targets:
+        # Per-recipient idempotency
+        if await fs.was_email_sent(campaign_id, target["uid"]):
+            continue
+
+        try:
+            success = await send_feature_announcement(
+                email=target["email"],
+                name=target["name"],
+                uid=target["uid"],
+            )
+            if success:
+                await fs.mark_email_sent(campaign_id, target["uid"])
+                sent += 1
+            else:
+                failed += 1
+        except Exception as e:
+            logger.error("announcement_send_error", uid_hash=target["uid"][:8], error=str(e))
+            failed += 1
+
+        # Rate limit: 200ms between sends
+        await asyncio.sleep(0.2)
+
+    # Update campaign status
+    await fs.update_campaign(campaign_id, {
+        "status": "completed",
+        "sent_count": sent,
+        "failed_count": failed,
+        "completed_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+    logger.info("announcement_complete", campaign_id=campaign_id, sent=sent, failed=failed)
+
+    return {
+        "status": "completed",
+        "campaign_id": campaign_id,
+        "sent_count": sent,
+        "failed_count": failed,
     }
