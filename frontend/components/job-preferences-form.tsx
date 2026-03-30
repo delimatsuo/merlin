@@ -14,6 +14,15 @@ const WORK_MODES = [
   { value: "onsite", labelKey: "vagas.prefs.onsite" },
 ] as const;
 
+const SENIORITY_OPTIONS = [
+  { value: "intern", labelKey: "vagas.prefs.intern" },
+  { value: "entry", labelKey: "vagas.prefs.entry" },
+  { value: "mid", labelKey: "vagas.prefs.mid" },
+  { value: "senior", labelKey: "vagas.prefs.senior" },
+  { value: "manager", labelKey: "vagas.prefs.manager" },
+  { value: "director", labelKey: "vagas.prefs.director" },
+] as const;
+
 type EmailFrequency = "daily" | "weekly" | "off";
 
 const EMAIL_FREQ_OPTIONS: { value: EmailFrequency; labelKey: string }[] = [
@@ -36,6 +45,7 @@ export function JobPreferencesForm({ initial, onSaved }: Props) {
   const [locations, setLocations] = useState<string[]>(initial?.locations || []);
   const [locationInput, setLocationInput] = useState("");
   const [workMode, setWorkMode] = useState<string[]>(initial?.work_mode || []);
+  const [seniority, setSeniority] = useState<string[]>(initial?.seniority || []);
   const [emailFrequency, setEmailFrequency] = useState<EmailFrequency>(
     initial?.email_frequency ?? (initial?.email_digest === false ? "off" : "daily")
   );
@@ -92,7 +102,7 @@ export function JobPreferencesForm({ initial, onSaved }: Props) {
         desired_titles: titles,
         locations,
         work_mode: workMode,
-        seniority: [],
+        seniority,
         min_score: 50,
         email_digest: emailFrequency !== "off",
         email_frequency: emailFrequency,
@@ -223,6 +233,31 @@ export function JobPreferencesForm({ initial, onSaved }: Props) {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* Seniority (toggle pills — optional, empty = all levels) */}
+        <div>
+          <label className="text-xs font-medium text-foreground mb-2 block">
+            {t("vagas.prefs.seniorityLabel")}
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {SENIORITY_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => toggleOption(opt.value, seniority, setSeniority)}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
+                  seniority.includes(opt.value)
+                    ? "bg-foreground text-background"
+                    : "bg-secondary text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {t(opt.labelKey)}
+              </button>
+            ))}
+          </div>
+          <p className="text-[10px] text-muted-foreground/60 mt-1.5">
+            {t("vagas.prefs.seniorityHint")}
+          </p>
         </div>
 
         {/* Email frequency */}

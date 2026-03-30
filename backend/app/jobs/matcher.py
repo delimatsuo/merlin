@@ -401,9 +401,10 @@ async def match_user_jobs(
         return []
 
     desired_titles = preferences.get("desired_titles", [])
-    dept_tags, level_tags = _titles_to_dept_and_level(desired_titles)
     user_tags = _titles_to_tags(desired_titles)
     pref_work_modes = list(preferences.get("work_mode", []))
+    # Seniority filter: use user's explicit selection (empty = show all levels)
+    pref_seniority = set(preferences.get("seniority", []))
 
     if all_jobs is None:
         # On-demand: query Firestore with all tags (broad pool), filter post-query
@@ -411,13 +412,12 @@ async def match_user_jobs(
         raw_jobs = await fs.query_jobs_by_tags(
             tags=list(user_tags),
             work_modes=pref_work_modes if pref_work_modes else None,
-            limit=settings.max_jobs_per_digest * 3,  # Fetch more, filter down
+            limit=settings.max_jobs_per_digest * 3,
         )
         logger.info(
             "match_query_firestore",
             uid_hash=uid[:8],
-            dept_tags=list(dept_tags),
-            level_tags=list(level_tags),
+            user_tags=list(user_tags),
             raw_results=len(raw_jobs),
         )
 
@@ -430,30 +430,22 @@ async def match_user_jobs(
             after=len(title_filtered),
         )
 
-        # Apply level compatibility filter
-        relevant_jobs = [
-            job for job in title_filtered
-            if _is_level_compatible(set(job.get("categories", [])), level_tags)
-        ]
-        logger.info(
-            "match_level_filter",
-            uid_hash=uid[:8],
-            before=len(title_filtered),
-            after=len(relevant_jobs),
-            level_tags=list(level_tags),
-        )
-
-        # Fallback: if level filter is too strict (< 3 results), include
-        # all title-matched jobs regardless of level. Better to show a
-        # "Supervisor de RH" than nothing when searching for "Diretor de RH".
-        if len(relevant_jobs) < 3 and len(title_filtered) > len(relevant_jobs):
-            relevant_jobs = title_filtered
+        # Apply seniority filter (only if user explicitly selected levels)
+        if pref_seniority:
+            relevant_jobs = [
+                job for job in title_filtered
+                if _is_level_compatible(set(job.get("categories", [])), pref_seniority)
+            ]
             logger.info(
-                "match_level_fallback",
+                "match_level_filter",
                 uid_hash=uid[:8],
-                reason="too_few_strict_matches",
-                expanded_to=len(relevant_jobs),
+                before=len(title_filtered),
+                after=len(relevant_jobs),
+                seniority=list(pref_seniority),
             )
+        else:
+            # No seniority preference → show all levels
+            relevant_jobs = title_filtered
     else:
         # Batch pipeline: filter from pre-loaded job list
         pref_locations = [_normalize(loc) for loc in preferences.get("locations", [])]
@@ -485,14 +477,13 @@ async def match_user_jobs(
         # Apply deterministic title filter
         title_filtered = filter_by_preferences(pre_filtered, preferences)
 
-        # Apply level filter
-        relevant_jobs = [
-            j for j in title_filtered
-            if _is_level_compatible(set(j.get("categories", [])), level_tags)
-        ]
-
-        # Fallback: if too few results with level filter, use all title matches
-        if len(relevant_jobs) < 3 and len(title_filtered) > len(relevant_jobs):
+        # Apply seniority filter (only if user selected levels)
+        if pref_seniority:
+            relevant_jobs = [
+                j for j in title_filtered
+                if _is_level_compatible(set(j.get("categories", [])), pref_seniority)
+            ]
+        else:
             relevant_jobs = title_filtered
 
         logger.info(
