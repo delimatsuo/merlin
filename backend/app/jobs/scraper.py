@@ -54,18 +54,28 @@ def _make_job_id(source: str, source_id: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Broad search terms — each covers multiple departments/roles.
+# Broad search terms — each covers an entire department/area.
 # The Brazil Jobs actor returns ~100 results per call across
 # LinkedIn, InfoJobs, Vagas, Indeed. Each call costs $0.20.
-# Budget: 5 calls × $0.20 = $1.00/day + Gupy ~$2 = ~$3/day total.
+# 15 terms × $0.20 = $3.00/day + Gupy ~$2 = ~$5/day total.
 # ---------------------------------------------------------------------------
 
 BRAZILIAN_JOB_CATEGORIES = [
-    "tecnologia",           # dev, devops, data, cloud, QA, design, produto
-    "recursos humanos",     # RH, recrutador, DP, business partner
-    "financeiro",           # controller, fiscal, contábil, FP&A, comercial
+    "tecnologia",           # dev, devops, data, cloud, QA, etc.
+    "recursos humanos",     # RH, recrutador, business partner, DP
+    "financeiro",           # controller, fiscal, contábil, FP&A
     "marketing",            # digital, social media, conteúdo, growth
-    "engenharia",           # civil, mecânico, elétrico, produção, logística
+    "comercial",            # vendas, SDR, key account, inside sales
+    "engenharia",           # civil, mecânico, elétrico, produção
+    "administrativo",       # assistente, auxiliar, recepção
+    "jurídico",             # advogado, compliance, paralegal
+    "logística",            # supply chain, compras, planejamento
+    "saúde",                # enfermeiro, farmacêutico, nutricionista
+    "design",               # UX, UI, product designer, gráfico
+    "dados",                # data engineer, cientista, analista de dados
+    "produto",              # product manager, product owner, agile
+    "estagiário",           # estágio, jovem aprendiz, trainee
+    "diretor",              # executive/C-level across all areas
 ]
 
 
