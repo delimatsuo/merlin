@@ -124,16 +124,18 @@ async def scrape_brazil_jobs(search_terms: list[str], locations: list[str] | Non
                     run_input={
                         "keyword": term,
                         "country": "Brazil",
-                        "maxItems": 30,
+                        "maxItems": 100,
                     },
                 )
                 term_results = []
                 for item in items:
                     item_source = (item.get("source") or "unknown").lower().replace(" ", "")
+                    # Use full description, fall back to snippet if empty
+                    raw_text = item.get("description") or item.get("descriptionSnippet") or ""
                     term_results.append({
                         "source": item_source,
                         "source_id": item.get("id", ""),
-                        "raw_text": item.get("description", ""),
+                        "raw_text": raw_text,
                         "source_url": item.get("url", ""),
                         "title_hint": item.get("title", ""),
                         "company_hint": item.get("company", ""),
