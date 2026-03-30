@@ -1228,7 +1228,7 @@ class FirestoreService:
             "matches": matches,
             "total_matches": total,
             "generated_at": datetime.now(timezone.utc).isoformat(),
-        })
+        }, merge=True)
         logger.info("matched_jobs_saved", uid=uid, date=date, total=total)
 
     async def get_job(self, job_id: str) -> dict | None:
