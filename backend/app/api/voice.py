@@ -63,20 +63,27 @@ async def text_to_speech(
 
     client = _get_genai_client()
 
-    response = await client.aio.models.generate_content(
-        model="gemini-2.5-flash-preview-tts",
-        contents=text,
-        config=types.GenerateContentConfig(
-            response_modalities=["AUDIO"],
-            speech_config=types.SpeechConfig(
-                voice_config=types.VoiceConfig(
-                    prebuilt_voice_config=types.PrebuiltVoiceConfig(
-                        voice_name=voice_name,
+    try:
+        response = await client.aio.models.generate_content(
+            model="gemini-2.5-flash-preview-tts",
+            contents=text,
+            config=types.GenerateContentConfig(
+                response_modalities=["AUDIO"],
+                speech_config=types.SpeechConfig(
+                    voice_config=types.VoiceConfig(
+                        prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                            voice_name=voice_name,
+                        )
                     )
-                )
+                ),
             ),
-        ),
-    )
+        )
+    except Exception as e:
+        logger.warning("tts_ai_error", error_type=type(e).__name__, error=str(e)[:200])
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Serviço de áudio temporariamente indisponível. Tente novamente.",
+        )
 
     if not response.candidates or not response.candidates[0].content.parts:
         raise HTTPException(status_code=502, detail="Erro na geração de áudio.")
@@ -189,7 +196,14 @@ async def get_interview_questions(
     structured_data = profile.get("structuredData", {})
     enriched_data = profile.get("enrichedProfile", {})
 
-    questions = await generate_interview_questions(structured_data, enriched_data, locale=body.locale)
+    try:
+        questions = await generate_interview_questions(structured_data, enriched_data, locale=body.locale)
+    except Exception as e:
+        logger.warning("questions_ai_error", uid=user.uid, error_type=type(e).__name__, error=str(e)[:200])
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Serviço de IA temporariamente indisponível. Tente novamente.",
+        )
     await fs.increment_global_generation("interview_questions")
 
     # Create voice session

@@ -94,7 +94,7 @@ class ExtractedJob(BaseModel):
 class MatchedJob(BaseModel):
     job_id: str = ""
     title: str = ""
-    company: Optional[str] = ""
+    company: str = ""
     ats_score: float = 0
     matched_skills: list[str] = []
     missing_skills: list[str] = []
@@ -105,6 +105,11 @@ class MatchedJob(BaseModel):
     location: str = ""
 
     model_config = {"extra": "ignore"}
+
+    @field_validator("company", mode="before")
+    @classmethod
+    def coerce_company(cls, v: object) -> str:
+        return str(v) if v else ""
 
 
 class JobFeedResponse(BaseModel):

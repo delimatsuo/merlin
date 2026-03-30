@@ -217,11 +217,11 @@ class FirestoreService:
     ) -> None:
         """Store recommendations as a field on the profile doc."""
         doc_ref = self.db.collection("users").document(uid).collection("profiles").document(profile_id)
-        await doc_ref.update({
+        await doc_ref.set({
             "recommendations": recommendations,
             "recommendationsLocale": locale,
             "recommendationsGeneratedAt": datetime.now(timezone.utc).isoformat(),
-        })
+        }, merge=True)
 
     async def get_recommendations(self, uid: str, profile_id: str) -> Optional[dict]:
         """Read recommendations from the profile doc. Returns dict with recommendations, locale, and timestamp."""
