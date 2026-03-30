@@ -26,6 +26,42 @@ settings = get_settings()
 limiter = Limiter(key_func=get_remote_address)
 
 PDF_MAGIC = b"%PDF"
+
+
+def _sanitize_structured_data(data: dict) -> dict:
+    """Coerce LLM output to match LinkedInStructured schema before validation.
+
+    Handles common LLM mistakes: returning dicts/lists for string fields,
+    strings for list fields, etc.
+    """
+    # String fields that LLM might return as dict/list
+    for key in ("name", "headline", "location", "about"):
+        val = data.get(key)
+        if isinstance(val, dict):
+            # e.g. {"first": "John", "last": "Doe"} → "John Doe"
+            data[key] = " ".join(str(v) for v in val.values() if v)
+        elif isinstance(val, list):
+            data[key] = " ".join(str(v) for v in val if v)
+
+    # List-of-string fields
+    for key in ("skills", "honors", "recommendations"):
+        val = data.get(key)
+        if isinstance(val, str):
+            data[key] = [val]
+        elif not isinstance(val, list):
+            data[key] = []
+
+    # List-of-object fields — ensure it's a list
+    for key in ("experience", "education", "certifications", "courses",
+                "volunteerWork", "volunteer_work", "languages"):
+        val = data.get(key)
+        if isinstance(val, dict):
+            data[key] = [val]
+        elif not isinstance(val, list):
+            data[key] = []
+
+    return data
+
 MAX_FILE_SIZE = settings.max_file_size_mb * 1024 * 1024
 MAX_PDF_PAGES = 10
 
@@ -127,6 +163,7 @@ async def upload_linkedin_pdf(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Não conseguimos interpretar o perfil. Tente colar o texto manualmente.",
         )
+    structured_data = _sanitize_structured_data(structured_data)
     try:
         structured = LinkedInStructured(**structured_data)
     except ValidationError as e:
@@ -181,6 +218,7 @@ async def paste_linkedin_text(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Não conseguimos interpretar o perfil. Tente novamente com mais texto.",
         )
+    structured_data = _sanitize_structured_data(structured_data)
     try:
         structured = LinkedInStructured(**structured_data)
     except ValidationError as e:
