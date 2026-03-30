@@ -130,10 +130,12 @@ async def scrape_brazil_jobs(search_terms: list[str], locations: list[str] | Non
                 term_results = []
                 for item in items:
                     item_source = (item.get("source") or "unknown").lower().replace(" ", "")
-                    # Use full description, fall back to snippet if empty
+                    # Only keep LinkedIn results
+                    if "linkedin" not in item_source:
+                        continue
                     raw_text = item.get("description") or item.get("descriptionSnippet") or ""
                     term_results.append({
-                        "source": item_source,
+                        "source": "linkedin",
                         "source_id": item.get("id", ""),
                         "raw_text": raw_text,
                         "source_url": item.get("url", ""),
