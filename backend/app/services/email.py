@@ -98,7 +98,7 @@ async def send_job_digest(
         count = len(matches)
         vaga_word = "vaga" if count == 1 else "vagas"
         first_name = _esc(name.split()[0]) if name else ""
-        greeting = f"Olá {first_name}," if first_name else "Olá,"
+        greeting = f"Olá {first_name}," if first_name else "Olá Usuário,"
         dashboard_url = "https://merlincv.com/dashboard/vagas"
 
         unsubscribe_token = _generate_unsubscribe_token(uid)
@@ -114,7 +114,7 @@ async def send_job_digest(
             company_str = f" — {company}" if company else ""
             job_lines.append(f"{i}. {title}{company_str}")
 
-        text_body = f"""Olá {name.split()[0] if name else 'candidato'},
+        text_body = f"""Olá {name.split()[0] if name else 'Usuário'},
 
 Merlin encontrou {count} {vaga_word} que combinam com o seu perfil:
 
@@ -263,13 +263,13 @@ async def send_feature_announcement(
         sg = sendgrid.SendGridAPIClient(api_key=settings.sendgrid_api_key)
 
         first_name = _esc(name.split()[0]) if name else ""
-        greeting = f"Olá {first_name}," if first_name else "Olá,"
+        greeting = f"Olá {first_name}," if first_name else "Olá Usuário,"
         dashboard_url = "https://merlincv.com/dashboard/vagas"
 
         unsubscribe_token = _generate_unsubscribe_token(uid)
         unsubscribe_url = f"https://merlincv.com/api/jobs/unsubscribe?token={unsubscribe_token}"
 
-        text_body = f"""Olá {name.split()[0] if name else 'candidato'},
+        text_body = f"""Olá {name.split()[0] if name else 'Usuário'},
 
 Uma nova funcionalidade está disponível no Merlin: busca automática de vagas.
 

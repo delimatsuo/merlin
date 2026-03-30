@@ -527,6 +527,9 @@ async def match_user_jobs(
     # Include all matched results, skip exceptions and None
     matches = [r for r in results if r is not None and not isinstance(r, Exception)]
 
+    # Filter out low-quality matches (below 50%)
+    matches = [m for m in matches if m["ats_score"] >= 50]
+
     # Sort by ATS score descending
     matches.sort(key=lambda x: x["ats_score"], reverse=True)
 
