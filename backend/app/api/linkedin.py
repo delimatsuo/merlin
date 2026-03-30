@@ -61,6 +61,7 @@ def _sanitize_structured_data(data: dict) -> dict:
             data[key] = []
 
     return data
+
 MAX_FILE_SIZE = settings.max_file_size_mb * 1024 * 1024
 MAX_PDF_PAGES = 10
 
