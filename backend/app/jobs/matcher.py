@@ -98,11 +98,11 @@ _TITLE_TO_LEVEL: dict[str, str] = {
 _LEVEL_COMPAT: dict[str, set[str]] = {
     "intern":    {"intern"},
     "entry":     {"intern", "entry"},
-    "mid":       {"entry", "mid"},
-    "senior":    {"mid", "senior"},
+    "mid":       {"entry", "mid", "senior"},
+    "senior":    {"mid", "senior", "lead"},
     "lead":      {"senior", "lead", "manager"},
-    "manager":   {"lead", "manager", "senior"},
-    "director":  {"director", "executive", "manager"},
+    "manager":   {"mid", "senior", "lead", "manager"},
+    "director":  {"manager", "director", "executive"},
     "executive": {"director", "executive"},
 }
 
