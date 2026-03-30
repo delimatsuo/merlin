@@ -214,17 +214,14 @@ Para cancelar: {unsubscribe_url}
             from_email=settings.sendgrid_from_email,
             to_emails=email,
             subject=f"Merlin encontrou {count} {vaga_word} para você",
+            plain_text_content=text_body,
+            html_content=html_body,
         )
-        message.content = [
-            Content("text/plain", text_body),
-            Content("text/html", html_body),
-        ]
 
         # Add List-Unsubscribe header (LGPD / RFC 8058)
-        message.header = {
-            "List-Unsubscribe": f"<{unsubscribe_url}>",
-            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-        }
+        from sendgrid.helpers.mail import Header
+        message.add_header(Header("List-Unsubscribe", f"<{unsubscribe_url}>"))
+        message.add_header(Header("List-Unsubscribe-Post", "List-Unsubscribe=One-Click"))
 
         response = sg.send(message)
 
@@ -378,15 +375,12 @@ Para não receber comunicações do Merlin: {unsubscribe_url}
             from_email=settings.sendgrid_from_email,
             to_emails=email,
             subject="Merlin agora busca vagas para você automaticamente",
+            plain_text_content=text_body,
+            html_content=html_body,
         )
-        message.content = [
-            Content("text/plain", text_body),
-            Content("text/html", html_body),
-        ]
-        message.header = {
-            "List-Unsubscribe": f"<{unsubscribe_url}>",
-            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-        }
+        from sendgrid.helpers.mail import Header
+        message.add_header(Header("List-Unsubscribe", f"<{unsubscribe_url}>"))
+        message.add_header(Header("List-Unsubscribe-Post", "List-Unsubscribe=One-Click"))
 
         response = sg.send(message)
 
