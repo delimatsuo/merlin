@@ -185,9 +185,12 @@ async def run_scraping_pipeline() -> dict:
                 job_id = raw_job["_job_id"]
                 clean_text = raw_job["_clean_text"]
 
-                title = extracted.get("title") or _sanitize_field(raw_job.get("title_hint", ""))
-                company = extracted.get("company") or _sanitize_field(raw_job.get("company_hint", ""))
-                posted_date = extracted.get("posted_date") or raw_job.get("posted_date_hint")
+                # Always prefer scraper metadata (title, company, date) over AI extraction.
+                # AI batch extraction can return results in wrong order, causing
+                # title/URL mismatches. Scraper data is always correctly paired.
+                title = _sanitize_field(raw_job.get("title_hint", "")) or extracted.get("title", "")
+                company = _sanitize_field(raw_job.get("company_hint", "")) or extracted.get("company")
+                posted_date = raw_job.get("posted_date_hint") or extracted.get("posted_date")
 
                 if not title:
                     continue

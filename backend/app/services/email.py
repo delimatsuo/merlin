@@ -97,7 +97,8 @@ async def send_job_digest(
 
         count = len(matches)
         vaga_word = "vaga" if count == 1 else "vagas"
-        greeting = _esc(name.split()[0]) if name else "Olá"
+        first_name = _esc(name.split()[0]) if name else ""
+        greeting = f"Olá {first_name}," if first_name else "Olá,"
         dashboard_url = "https://merlincv.com/dashboard/vagas"
 
         unsubscribe_token = _generate_unsubscribe_token(uid)
@@ -180,7 +181,7 @@ Para cancelar: {unsubscribe_url}
             {count} {vaga_word} encontrada{"" if count == 1 else "s"}
         </h1>
         <p style="margin:8px 0 0;font-size:14px;color:#9ca3af">
-            Olá {greeting}, encontramos vagas que combinam com seu perfil
+            {greeting} encontramos vagas que combinam com seu perfil
         </p>
     </div>
 
@@ -261,7 +262,8 @@ async def send_feature_announcement(
 
         sg = sendgrid.SendGridAPIClient(api_key=settings.sendgrid_api_key)
 
-        greeting = _esc(name.split()[0]) if name else "Olá"
+        first_name = _esc(name.split()[0]) if name else ""
+        greeting = f"Olá {first_name}," if first_name else "Olá,"
         dashboard_url = "https://merlincv.com/dashboard/vagas"
 
         unsubscribe_token = _generate_unsubscribe_token(uid)
@@ -301,7 +303,7 @@ Para não receber comunicações do Merlin: {unsubscribe_url}
             Merlin agora busca vagas para você
         </h1>
         <p style="margin:12px 0 0;font-size:15px;color:#9ca3af;line-height:1.5">
-            Olá {greeting}, uma nova funcionalidade está disponível
+            {greeting} uma nova funcionalidade está disponível
         </p>
     </div>
 
