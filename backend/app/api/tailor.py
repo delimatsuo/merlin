@@ -122,9 +122,9 @@ async def generate_tailored_resume(
         changelog=changelog,
     )
 
-    # Increment daily usage + global counter + log generation for admin dashboard
+    # Increment counters (global + daily + per-user) + log generation for admin dashboard
     await fs.increment_daily_usage(user.uid)
-    await fs.increment_global_generation("resume_rewrite")
+    await fs.increment_global_generation("resume_rewrite", uid=user.uid)
     await fs.log_generation(user.uid, user.email or "", company)
 
     log_data_access(user.uid, "ai_generate_resume", "application", resource_id=body.application_id)
@@ -257,9 +257,9 @@ async def regenerate_resume(
         changelog=changelog,
     )
 
-    # Increment daily usage + global counter + log generation
+    # Increment counters (global + daily + per-user) + log generation
     await fs.increment_daily_usage(user.uid)
-    await fs.increment_global_generation("resume_rewrite")
+    await fs.increment_global_generation("resume_rewrite", uid=user.uid)
     company = application.get("jobAnalysis", {}).get("company", "")
     await fs.log_generation(user.uid, user.email or "", company)
 
