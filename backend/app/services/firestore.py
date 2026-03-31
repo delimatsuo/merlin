@@ -657,12 +657,15 @@ class FirestoreService:
         doc_ref = self.db.collection("users").document(uid)
         doc = await doc_ref.get()
         is_new = not doc.exists
-        await doc_ref.set(
-            {"email": email, "name": name, "createdAt": datetime.now(timezone.utc).isoformat()},
-            merge=True,
-        )
+        data: dict = {"email": email, "name": name}
         if is_new:
-            await self.increment_platform_signup()
+            data["createdAt"] = datetime.now(timezone.utc).isoformat()
+        await doc_ref.set(data, merge=True)
+        if is_new:
+            try:
+                await self.increment_platform_signup()
+            except Exception as e:
+                logger.warning("signup_tracking_error", uid=uid, error=str(e))
 
     async def increment_daily_usage(self, uid: str) -> None:
         """Increment daily usage counter atomically using a transaction.
