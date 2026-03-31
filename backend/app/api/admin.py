@@ -174,25 +174,27 @@ async def get_costs(
     stats = await fs.get_platform_stats()
     daily = await fs.get_daily_generation_stats(30)
 
-    # Unit costs per call (USD) — grouped by model tier
-    # Sonnet (writing/reasoning): ~$3/M input, $15/M output
-    # Flash-Lite (extraction): ~$0.075/M input, $0.30/M output
+    # Unit costs per call (USD) — based on actual token usage from production logs
+    # Claude Sonnet 4.6: $3/M input, $15/M output
+    # Gemini 3 Flash Preview: $0.50/M input, $3.00/M output
+    # Gemini 3.1 Flash-Lite Preview: $0.25/M input, $1.50/M output
     unit_costs = {
         # --- Sonnet tier (writing/reasoning) ---
-        "resume_rewrite": 0.020,
-        "cover_letter": 0.012,
-        "job_analysis": 0.006,
-        "interview_questions": 0.004,
-        "voice_processing": 0.006,
-        "followup_questions": 0.004,
-        "cv_recommendations": 0.012,
-        "linkedin_analysis": 0.015,
-        # --- Flash-Lite tier (extraction) ---
-        "resume_structuring": 0.001,
-        "ats_keywords": 0.001,
-        "skill_matching": 0.001,
-        "company_enrichment": 0.001,
-        "linkedin_structuring": 0.001,
+        "resume_rewrite": 0.064,
+        "cover_letter": 0.021,
+        "job_analysis": 0.011,
+        "interview_questions": 0.012,
+        "voice_processing": 0.007,
+        "followup_questions": 0.013,
+        "cv_recommendations": 0.045,
+        "linkedin_analysis": 0.071,
+        # --- Gemini 3 Flash tier (structuring) ---
+        "resume_structuring": 0.005,
+        "linkedin_structuring": 0.007,
+        # --- Gemini 3.1 Flash-Lite tier (extraction) ---
+        "ats_keywords": 0.0004,
+        "skill_matching": 0.0006,
+        "company_enrichment": 0.002,
         # --- Other AI services ---
         "tts": 0.005,
         "transcription": 0.002,
