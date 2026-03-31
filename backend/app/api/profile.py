@@ -276,7 +276,7 @@ async def get_profile_recommendations(
         )
 
     # Track successful LLM call
-    await fs.increment_global_generation("cv_recommendations")
+    await fs.increment_global_generation("cv_recommendations", uid=user.uid)
 
     # Save to profile doc cache
     await fs.save_recommendations(user.uid, profile_id, recommendations, body.locale)

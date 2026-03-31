@@ -175,7 +175,7 @@ async def upload_linkedin_pdf(
 
     # Track successful LLM call
     fs = FirestoreService()
-    await fs.increment_global_generation("linkedin_structuring")
+    await fs.increment_global_generation("linkedin_structuring", uid=user.uid)
 
     # Save to Firestore
     await fs.save_linkedin_profile(
@@ -230,7 +230,7 @@ async def paste_linkedin_text(
 
     # Track successful LLM call
     fs = FirestoreService()
-    await fs.increment_global_generation("linkedin_structuring")
+    await fs.increment_global_generation("linkedin_structuring", uid=user.uid)
 
     # Save to Firestore
     await fs.save_linkedin_profile(
@@ -322,7 +322,7 @@ async def analyze_linkedin(
 
     # Save suggestions + increment global counter
     await fs.save_linkedin_suggestions(user.uid, suggestions, cross_ref, body.locale)
-    await fs.increment_global_generation("linkedin_analysis")
+    await fs.increment_global_generation("linkedin_analysis", uid=user.uid)
 
     logger.info("linkedin_analyze_complete", uid=user.uid, suggestion_count=len(suggestions))
 

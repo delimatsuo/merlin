@@ -41,7 +41,7 @@ async def analyze_job(
 
     # Track successful LLM call
     fs = FirestoreService()
-    await fs.increment_global_generation("job_analysis")
+    await fs.increment_global_generation("job_analysis", uid=user.uid)
 
     # Extract ATS keywords
     try:
@@ -134,7 +134,7 @@ async def analyze_job(
             questions = await generate_followup_questions(
                 knowledge or {}, analysis, gap_skills
             )
-            await fs.increment_global_generation("followup_questions")
+            await fs.increment_global_generation("followup_questions", uid=user.uid)
             follow_up = FollowUpDecision(decision="text", questions=questions[:max_questions])
         except Exception as e:
             logger.warning("followup_generation_error", error=str(e))

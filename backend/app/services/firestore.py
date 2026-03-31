@@ -650,12 +650,19 @@ class FirestoreService:
         return 0
 
     async def ensure_user_doc(self, uid: str, email: str = "", name: str = "") -> None:
-        """Ensure user doc exists with email/name for admin queries."""
+        """Ensure user doc exists with email/name for admin queries.
+
+        Also tracks new signups for the admin dashboard.
+        """
         doc_ref = self.db.collection("users").document(uid)
+        doc = await doc_ref.get()
+        is_new = not doc.exists
         await doc_ref.set(
             {"email": email, "name": name, "createdAt": datetime.now(timezone.utc).isoformat()},
             merge=True,
         )
+        if is_new:
+            await self.increment_platform_signup()
 
     async def increment_daily_usage(self, uid: str) -> None:
         """Increment daily usage counter atomically using a transaction.
@@ -686,12 +693,8 @@ class FirestoreService:
                 })
 
         await update_in_transaction(transaction, doc_ref)
-
-        # Increment denormalized generation counter on user
-        await self._increment_user_stat(uid, "generationCount", 1)
-
-        # Increment platform-wide daily stats
-        await self._increment_platform_stat(today, "generationCount")
+        # Note: generationCount (user + platform) is now handled by
+        # increment_global_generation() to avoid double-counting.
 
     # --- File Operations ---
 
@@ -829,8 +832,9 @@ class FirestoreService:
             return doc.to_dict().get("totalGenerations", 0)
         return 0
 
-    async def increment_global_generation(self, feature: str = "unknown") -> int:
-        """Atomically increment the global generation counter + per-feature counter."""
+    async def increment_global_generation(self, feature: str = "unknown", uid: str = "") -> int:
+        """Atomically increment global, daily, and per-user generation counters."""
+        # Global + per-feature
         doc_ref = self.db.collection("platformStats").document("global")
         await doc_ref.set(
             {
@@ -839,6 +843,12 @@ class FirestoreService:
             },
             merge=True,
         )
+        # Daily platform stat
+        today = _brazil_today()
+        await self._increment_platform_stat(today, "generationCount")
+        # Per-user stat
+        if uid:
+            await self._increment_user_stat(uid, "generationCount", 1)
         # Read back the new count
         doc = await doc_ref.get()
         return doc.to_dict().get("totalGenerations", 0)
