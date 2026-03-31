@@ -96,7 +96,7 @@ async def upload_resume(
 
     # Track successful LLM call
     fs = FirestoreService()
-    await fs.increment_global_generation("resume_structuring")
+    await fs.increment_global_generation("resume_structuring", uid=user.uid)
 
     # Upload original file to Cloud Storage
     file_url = await fs.upload_resume_file(user.uid, file.filename or "resume", content)
