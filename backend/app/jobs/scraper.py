@@ -60,6 +60,51 @@ def _make_job_id(source: str, source_id: str) -> str:
 # 15 terms × $0.20 = $3.00/day + Gupy ~$2 = ~$5/day total.
 # ---------------------------------------------------------------------------
 
+# Non-Brazilian location patterns — filter these out after scraping
+_NON_BRAZIL_PATTERNS = {
+    # US states/cities
+    "ny", "nyc", "new york", "brooklyn", "manhattan", "midtown",
+    "ca", "california", "san francisco", "los angeles", "silicon valley",
+    "tx", "texas", "austin", "houston", "dallas",
+    "il", "chicago", "wa", "seattle", "ma", "boston",
+    "fl", "miami", "ga", "atlanta", "pa", "philadelphia",
+    "co", "denver", "nc", "charlotte", "az", "phoenix",
+    "united states", "usa", "u.s.",
+    # Other countries
+    "united kingdom", "uk", "london", "england",
+    "canada", "toronto", "vancouver",
+    "germany", "berlin", "munich",
+    "france", "paris",
+    "india", "bangalore", "mumbai",
+    "australia", "sydney", "melbourne",
+    "singapore", "japan", "tokyo",
+}
+
+
+def _is_brazilian_job(location: str) -> bool:
+    """Check if a job location is likely in Brazil."""
+    if not location:
+        return True  # No location info → keep (defensive)
+    loc = location.lower().strip()
+    # Check for explicit Brazil signals (use word boundary for short terms)
+    _brazil_signals = (
+        "brasil", "brazil", "são paulo", "sao paulo", "rio de janeiro",
+        "belo horizonte", "curitiba", "porto alegre", "brasilia", "brasília",
+        "recife", "salvador", "fortaleza", "campinas", "remoto", "goiânia",
+        "goiania", "florianópolis", "florianopolis", "manaus", "belém", "belem",
+    )
+    if any(br in loc for br in _brazil_signals):
+        return True
+    # Check for ", br" or "- br" suffix (country code)
+    if loc.endswith(", br") or loc.endswith("- br") or loc.endswith(" br"):
+        return True
+    # Check for non-Brazil patterns
+    if any(pattern in loc for pattern in _NON_BRAZIL_PATTERNS):
+        return False
+    # Unknown location → keep (could be a smaller Brazilian city)
+    return True
+
+
 BRAZILIAN_JOB_CATEGORIES = [
     "tecnologia",           # dev, devops, data, cloud, QA, etc.
     "recursos humanos",     # RH, recrutador, business partner, DP
@@ -206,12 +251,17 @@ async def run_scraping_pipeline() -> dict:
                     expires_at = posted_dt + timedelta(days=14)
                     posted_date = posted_dt.strftime("%Y-%m-%d")
 
+                # Filter out non-Brazilian jobs (LinkedIn returns US results)
+                job_location = _sanitize_field(extracted.get("location", ""))
+                if not _is_brazilian_job(job_location):
+                    continue
+
                 job_doc = {
                     "title": _sanitize_field(title),
                     "company": _sanitize_field(company) if company else None,
                     "required_skills": [_sanitize_field(s, 100) for s in extracted.get("required_skills", [])],
                     "preferred_skills": [_sanitize_field(s, 100) for s in extracted.get("preferred_skills", [])],
-                    "location": _sanitize_field(extracted.get("location", "")),
+                    "location": job_location,
                     "seniority": extracted.get("seniority", "mid"),
                     "salary_range": extracted.get("salary_range"),
                     "work_mode": extracted.get("work_mode", "onsite"),

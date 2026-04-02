@@ -421,8 +421,12 @@ async def match_user_jobs_fast(
     )
 
     # Build match results without AI scoring (score=0, no skill breakdown)
+    # Filter out non-Brazilian jobs (LinkedIn can return US results)
+    from app.jobs.scraper import _is_brazilian_job
     matches = []
     for job in relevant_jobs[:settings.max_jobs_per_digest]:
+        if not _is_brazilian_job(job.get("location", "")):
+            continue
         matches.append({
             "job_id": job.get("id", ""),
             "title": job.get("title", ""),
