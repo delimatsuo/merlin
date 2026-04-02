@@ -489,8 +489,8 @@ async def match_user_jobs(
         logger.info(
             "match_tag_filter",
             uid_hash=uid[:8],
-            dept_tags=list(dept_tags),
-            level_tags=list(level_tags),
+            user_tags=list(user_tags),
+            pref_seniority=list(pref_seniority),
             total_jobs=len(all_jobs),
             relevant=len(relevant_jobs),
         )
