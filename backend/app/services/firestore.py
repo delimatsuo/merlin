@@ -672,8 +672,10 @@ class FirestoreService:
 
         Resets the counter when the date changes. The transaction prevents
         race conditions where two concurrent requests both read the same count.
+        Also tracks activeDays (distinct active days) and lastActivityAt for retention.
         """
         today = _brazil_today()
+        now_iso = _brazil_now().isoformat()
         doc_ref = self.db.collection("users").document(uid)
 
         transaction = self.db.transaction()
@@ -686,13 +688,24 @@ class FirestoreService:
                 usage = data.get("dailyUsage", {})
                 if usage.get("date") == today:
                     count = usage.get("tailorCount", 0) + 1
+                    txn.update(ref, {
+                        "dailyUsage": {"tailorCount": count, "date": today},
+                        "lastActivityAt": now_iso,
+                    })
                 else:
-                    count = 1
-                txn.update(ref, {"dailyUsage": {"tailorCount": count, "date": today}})
+                    # New day — increment activeDays
+                    active_days = data.get("activeDays", 0) + 1
+                    txn.update(ref, {
+                        "dailyUsage": {"tailorCount": 1, "date": today},
+                        "lastActivityAt": now_iso,
+                        "activeDays": active_days,
+                    })
             else:
                 txn.set(ref, {
                     "dailyUsage": {"tailorCount": 1, "date": today},
                     "createdAt": datetime.now(timezone.utc).isoformat(),
+                    "lastActivityAt": now_iso,
+                    "activeDays": 1,
                 })
 
         await update_in_transaction(transaction, doc_ref)
@@ -864,6 +877,57 @@ class FirestoreService:
             return {}
         data = doc.to_dict()
         return {k.replace("feature_", ""): v for k, v in data.items() if k.startswith("feature_")}
+
+    async def get_retention_stats(self) -> dict:
+        """Compute retention metrics from user docs."""
+        total = 0
+        activated = 0
+        found_value = 0
+        active_this_week = 0
+        thresholds = [1, 2, 3, 5, 10, 15, 20]
+        threshold_counts = {t: 0 for t in thresholds}
+
+        now = _brazil_now()
+        week_ago = (now - timedelta(days=7)).isoformat()
+
+        async for doc in self.db.collection("users").stream():
+            total += 1
+            data = doc.to_dict()
+            active_days = data.get("activeDays", 0)
+            last_activity = data.get("lastActivityAt", "")
+
+            # Check if activated (has knowledge file)
+            knowledge_ref = self.db.collection("users").document(doc.id).collection("knowledge").document("current")
+            knowledge_doc = await knowledge_ref.get()
+            if knowledge_doc.exists:
+                activated += 1
+
+            if active_days >= 3:
+                found_value += 1
+
+            if last_activity and last_activity >= week_ago:
+                active_this_week += 1
+
+            for t in thresholds:
+                if active_days >= t:
+                    threshold_counts[t] += 1
+
+        retention_curve = [
+            {
+                "days": t,
+                "users": threshold_counts[t],
+                "pct": round(threshold_counts[t] / total * 100, 1) if total > 0 else 0,
+            }
+            for t in thresholds
+        ]
+
+        return {
+            "total_users": total,
+            "activated": activated,
+            "found_value": found_value,
+            "active_this_week": active_this_week,
+            "retention_curve": retention_curve,
+        }
 
     # --- AI Quality Tracking ---
 
