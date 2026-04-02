@@ -228,7 +228,7 @@ _SYNONYM_GROUPS: list[set[str]] = [
     {"marketing", "analista de marketing", "marketing analyst", "growth", "marketing digital"},
     {"hr", "rh", "recursos humanos", "human resources", "people", "analista de rh", "gerente de rh", "diretor de rh"},
     {"sales", "vendas", "executivo de vendas", "account executive", "sdr", "bdr"},
-    {"finance", "financeiro", "analista financeiro", "gerente financeiro", "controller", "fp&a"},
+    {"finance", "financeiro", "analista financeiro", "analista contabil", "analista fiscal", "gerente financeiro", "controller", "fp&a", "contador", "contabilidade"},
     {"operations", "operacoes", "analista de operacoes", "gerente de operacoes"},
     {"cto", "vp engineering", "vp de engenharia", "diretor de tecnologia"},
     {"cfo", "diretor financeiro", "vp finance"},
@@ -517,9 +517,6 @@ async def match_user_jobs(
 
     # Include all matched results, skip exceptions and None
     matches = [r for r in results if r is not None and not isinstance(r, Exception)]
-
-    # Filter out low-quality matches (below 50%)
-    matches = [m for m in matches if m["ats_score"] >= 50]
 
     # Sort by ATS score descending
     matches.sort(key=lambda x: x["ats_score"], reverse=True)

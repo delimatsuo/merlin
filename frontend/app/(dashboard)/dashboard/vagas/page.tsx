@@ -17,12 +17,7 @@ interface FeedResponse {
   generated_at: string | null;
 }
 
-const TIME_RANGES = [
-  { value: 1, label: "24h" },
-  { value: 3, label: "3 dias" },
-  { value: 7, label: "7 dias" },
-  { value: 14, label: "14 dias" },
-] as const;
+const TIME_RANGE_VALUES = [1, 3, 7, 14] as const;
 
 function VagasContent() {
   const { t } = useTranslation();
@@ -165,18 +160,18 @@ function VagasContent() {
 
       {/* Time range selector */}
       <div className="flex items-center justify-center gap-1.5">
-        {TIME_RANGES.map((range) => (
+        {TIME_RANGE_VALUES.map((value) => (
           <button
-            key={range.value}
-            onClick={() => handleDaysChange(range.value)}
+            key={value}
+            onClick={() => handleDaysChange(value)}
             className={cn(
               "px-3.5 py-1.5 rounded-full text-xs font-medium transition-all duration-200",
-              days === range.value
+              days === value
                 ? "bg-foreground text-background"
                 : "text-muted-foreground hover:text-foreground"
             )}
           >
-            {range.label}
+            {value === 1 ? "24h" : t("vagas.timeRangeDays", { days: String(value) })}
           </button>
         ))}
       </div>
@@ -184,6 +179,9 @@ function VagasContent() {
       {/* Loading */}
       {loading && (
         <div className="space-y-3">
+          <p className="text-sm text-muted-foreground text-center animate-pulse">
+            {t("vagas.searching")}
+          </p>
           {[1, 2, 3].map((i) => (
             <div key={i} className="rounded-2xl bg-card h-24 animate-pulse apple-shadow-sm" />
           ))}
