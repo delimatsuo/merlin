@@ -85,5 +85,13 @@ if __name__ == "__main__":
             stats = await backfill_job_tags()
             logger.info("backfill_done", **stats)
         asyncio.run(run_backfill())
+    elif "--backfill-active-days" in sys.argv:
+        async def run_backfill_active_days():
+            logger = structlog.get_logger()
+            logger.info("backfill_active_days_start")
+            from app.jobs.backfill_active_days import backfill_active_days
+            stats = await backfill_active_days()
+            logger.info("backfill_active_days_done", **stats)
+        asyncio.run(run_backfill_active_days())
     else:
         asyncio.run(main())
