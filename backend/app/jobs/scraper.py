@@ -10,7 +10,7 @@ import structlog
 from firebase_admin import firestore as fb_firestore
 
 from app.config import get_settings
-from app.jobs.apify_client import scrape_gupy, scrape_linkedin
+from app.jobs.apify_client import scrape_gupy, scrape_brazil_jobs
 from app.services.gemini_ai import extract_job_data_batch
 
 logger = structlog.get_logger()
@@ -149,7 +149,7 @@ async def run_scraping_pipeline() -> dict:
 
     for scraper_fn, source_name in [
         (scrape_gupy, "gupy"),
-        (scrape_linkedin, "linkedin"),
+        (scrape_brazil_jobs, "brazil_jobs"),
     ]:
         try:
             jobs = await scraper_fn(search_terms)
@@ -251,8 +251,21 @@ async def run_scraping_pipeline() -> dict:
                     expires_at = posted_dt + timedelta(days=14)
                     posted_date = posted_dt.strftime("%Y-%m-%d")
 
-                # Filter out non-Brazilian jobs (LinkedIn returns US results)
-                job_location = _sanitize_field(extracted.get("location", ""))
+                # Prefer scraper hints for location/work_mode (more reliable than AI)
+                job_location = (
+                    _sanitize_field(raw_job.get("location_hint", ""))
+                    or _sanitize_field(extracted.get("location", ""))
+                )
+                job_work_mode = (
+                    raw_job.get("work_mode_hint", "")
+                    or extracted.get("work_mode", "onsite")
+                )
+                job_salary = (
+                    raw_job.get("salary_hint", "")
+                    or extracted.get("salary_range")
+                )
+
+                # Filter out non-Brazilian jobs
                 if not _is_brazilian_job(job_location):
                     continue
 
@@ -263,8 +276,8 @@ async def run_scraping_pipeline() -> dict:
                     "preferred_skills": [_sanitize_field(s, 100) for s in extracted.get("preferred_skills", [])],
                     "location": job_location,
                     "seniority": extracted.get("seniority", "mid"),
-                    "salary_range": extracted.get("salary_range"),
-                    "work_mode": extracted.get("work_mode", "onsite"),
+                    "salary_range": job_salary,
+                    "work_mode": job_work_mode,
                     "posted_date": posted_date,
                     "categories": extracted.get("categories", []),
                     "source": raw_job.get("source", "unknown"),

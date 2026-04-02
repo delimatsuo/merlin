@@ -13,7 +13,7 @@ logger = structlog.get_logger()
 # Apify actor IDs — pin versions for stability
 ACTORS = {
     "gupy": "zen-studio/gupy-jobs-scraper",
-    "linkedin": "valig/linkedin-jobs-scraper",
+    "brazil_jobs": "viralanalyzer/brazil-jobs-scraper",
 }
 
 APIFY_BASE_URL = "https://api.apify.com/v2"
@@ -107,44 +107,84 @@ async def scrape_gupy(search_terms: list[str], locations: list[str] | None = Non
     return results
 
 
-async def scrape_linkedin(search_terms: list[str], locations: list[str] | None = None) -> list[dict]:
-    """Scrape LinkedIn job listings using valig/linkedin-jobs-scraper.
+async def scrape_brazil_jobs(search_terms: list[str], locations: list[str] | None = None) -> list[dict]:
+    """Scrape Brazilian job boards via viralanalyzer/brazil-jobs-scraper.
 
-    Pay-per-compute actor. One call per search term, ~100 results each.
-    Output fields: id, title, companyName, description, location, postedDate, applyUrl.
+    Covers InfoJobs, Vagas.com, APInfo, and LinkedIn — all 100% Brazilian.
+    Gupy excluded (we have a dedicated Gupy scraper).
+    $0.002/job. One call per search term, ~100 results each.
     """
     async def _scrape_term(term: str) -> list[dict]:
         async with _BRAZIL_SEMAPHORE:
             try:
                 items = await _run_actor(
-                    ACTORS["linkedin"],
+                    ACTORS["brazil_jobs"],
                     run_input={
-                        "searchKeyword": term,
-                        "locationSearch": "Brazil",
-                        "numberOfListings": 100,
+                        "keyword": term,
+                        "sources": "infojobs,vagascom,apinfo,linkedin",
+                        "includeDescription": True,
+                        "maxListings": 100,
+                        "maxPages": 5,
                     },
-                    timeout=120,
+                    timeout=300,
                 )
                 term_results = []
                 for item in items:
-                    raw_text = item.get("description") or ""
+                    source = (item.get("source") or "brazil_jobs").lower()
+                    # Normalize source names
+                    if "infojobs" in source:
+                        source = "infojobs"
+                    elif "vagas" in source:
+                        source = "vagascom"
+                    elif "linkedin" in source:
+                        source = "linkedin"
+                    elif "apinfo" in source:
+                        source = "apinfo"
+                    else:
+                        source = "brazil_jobs"
+
+                    raw_text = item.get("description") or item.get("descriptionSnippet") or ""
+                    location = item.get("location") or ""
+                    if not location:
+                        city = item.get("city") or ""
+                        state = item.get("state") or ""
+                        location = f"{city}, {state}".strip(", ") if city or state else ""
+
                     term_results.append({
-                        "source": "linkedin",
-                        "source_id": item.get("id", ""),
+                        "source": source,
+                        "source_id": item.get("id") or item.get("url", ""),
                         "raw_text": raw_text,
-                        "source_url": item.get("url") or item.get("applyUrl", ""),
+                        "source_url": item.get("url", ""),
                         "title_hint": item.get("title", ""),
-                        "company_hint": item.get("companyName", ""),
-                        "posted_date_hint": item.get("postedDate"),
+                        "company_hint": item.get("company", ""),
+                        "posted_date_hint": item.get("datePosted"),
+                        # Extra structured fields from this actor
+                        "location_hint": location,
+                        "work_mode_hint": _normalize_work_mode(item.get("workModality")),
+                        "salary_hint": item.get("salaryFormatted"),
                     })
                 return term_results
             except Exception as e:
-                logger.error("linkedin_scrape_error", term=term, error=str(e))
+                logger.error("brazil_jobs_scrape_error", term=term, error=str(e))
                 return []
 
     # Run all terms in parallel (semaphore limits concurrency to 5)
     all_results = await asyncio.gather(*[_scrape_term(t) for t in search_terms])
     results = [item for batch in all_results for item in batch]
 
-    logger.info("linkedin_scrape_complete", terms=len(search_terms), results=len(results))
+    logger.info("brazil_jobs_scrape_complete", terms=len(search_terms), results=len(results))
     return results
+
+
+def _normalize_work_mode(mode: str | None) -> str:
+    """Normalize work modality from actor output to our schema."""
+    if not mode:
+        return ""
+    mode = mode.lower().strip()
+    if "remot" in mode or "home" in mode:
+        return "remote"
+    if "híbrid" in mode or "hybrid" in mode:
+        return "hybrid"
+    if "presenc" in mode or "onsite" in mode or "in-person" in mode:
+        return "onsite"
+    return ""
