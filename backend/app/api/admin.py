@@ -83,6 +83,17 @@ async def get_stats(
     }
 
 
+@router.get("/retention")
+@limiter.limit("20/minute")
+async def get_retention(
+    request: Request,
+    admin: AuthenticatedUser = Depends(get_admin_user),
+):
+    """Retention metrics: headline numbers + retention curve."""
+    fs = FirestoreService()
+    return await fs.get_retention_stats()
+
+
 @router.get("/users")
 @limiter.limit("20/minute")
 async def list_users(
