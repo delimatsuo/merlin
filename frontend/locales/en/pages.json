@@ -337,6 +337,8 @@
   "vagas.hoursAgo": "{{hours}}h ago",
   "vagas.daysAgo": "{{days}}d ago",
   "vagas.today": "today",
+  "vagas.timeRangeDays": "{{days}} days",
+  "vagas.searching": "Searching for jobs...",
 
   "vagas.prefs.title": "Set your preferences",
   "vagas.prefs.subtitle": "Tell Merlin what kind of job you're looking for. We'll find the best opportunities for you every day.",

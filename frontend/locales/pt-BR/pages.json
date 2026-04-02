@@ -337,6 +337,8 @@
   "vagas.hoursAgo": "há {{hours}}h",
   "vagas.daysAgo": "há {{days}}d",
   "vagas.today": "hoje",
+  "vagas.timeRangeDays": "{{days}} dias",
+  "vagas.searching": "Buscando vagas...",
 
   "vagas.prefs.title": "Configure suas preferências",
   "vagas.prefs.subtitle": "Diga ao Merlin que tipo de vaga você procura. Encontraremos as melhores oportunidades para você todos os dias.",
