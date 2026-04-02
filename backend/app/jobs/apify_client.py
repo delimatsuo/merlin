@@ -121,7 +121,7 @@ async def scrape_brazil_jobs(search_terms: list[str], locations: list[str] | Non
                     ACTORS["brazil_jobs"],
                     run_input={
                         "keyword": term,
-                        "sources": "infojobs,vagascom,apinfo,linkedin",
+                        "sources": "all",
                         "includeDescription": True,
                         "maxListings": 100,
                         "maxPages": 5,
