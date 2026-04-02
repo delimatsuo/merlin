@@ -87,22 +87,29 @@ export default function AdminRetencao() {
         <p className="text-xs text-muted-foreground mb-6">
           % de usuários que atingiram N dias ativos
         </p>
-        <div className="flex items-end gap-3 h-48">
-          {data.retention_curve.map((point) => (
-            <div key={point.days} className="flex-1 flex flex-col items-center gap-1">
-              <span className="text-[10px] font-medium text-muted-foreground tabular-nums">
-                {point.users}
-              </span>
-              <div
-                className="w-full rounded-t-lg bg-foreground/80 transition-all duration-500"
-                style={{ height: `${(point.pct / maxPct) * 100}%`, minHeight: point.pct > 0 ? "4px" : "0" }}
-              />
-              <span className="text-[10px] text-muted-foreground tabular-nums">{point.pct}%</span>
-              <span className="text-[10px] font-medium text-foreground">
-                {point.days}d
-              </span>
-            </div>
-          ))}
+        <div className="flex gap-3">
+          {data.retention_curve.map((point) => {
+            const barHeight = maxPct > 0 ? (point.pct / maxPct) * 160 : 0;
+            return (
+              <div key={point.days} className="flex-1 flex flex-col items-center">
+                <span className="text-[10px] font-medium text-muted-foreground tabular-nums mb-1">
+                  {point.users}
+                </span>
+                <div className="w-full flex flex-col justify-end" style={{ height: 160 }}>
+                  {barHeight > 0 && (
+                    <div
+                      className="w-full rounded-t-lg bg-foreground/80"
+                      style={{ height: Math.max(barHeight, 4) }}
+                    />
+                  )}
+                </div>
+                <span className="text-[10px] text-muted-foreground tabular-nums mt-1">{point.pct}%</span>
+                <span className="text-[10px] font-medium text-foreground">
+                  {point.days}d
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
