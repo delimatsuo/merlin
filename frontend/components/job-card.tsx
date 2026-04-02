@@ -11,6 +11,10 @@ const SOURCE_LABELS: Record<string, string> = {
   gupy: "Gupy",
   linkedin: "LinkedIn",
   vagas: "Vagas",
+  vagascom: "Vagas.com",
+  infojobs: "InfoJobs",
+  apinfo: "APInfo",
+  brazil_jobs: "Brasil",
 };
 
 function getScoreBadgeClass(score: number) {
@@ -92,14 +96,16 @@ export function JobCard({ job }: Props) {
 
           {/* Meta row: ATS score, location, work mode, source, time */}
           <div className="flex flex-wrap items-center gap-1.5 mt-2">
-            <span
-              className={cn(
-                "shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold tabular-nums",
-                getScoreBadgeClass(job.ats_score),
-              )}
-            >
-              {job.ats_score.toFixed(0)}%
-            </span>
+            {job.ats_score > 0 && (
+              <span
+                className={cn(
+                  "shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold tabular-nums",
+                  getScoreBadgeClass(job.ats_score),
+                )}
+              >
+                {job.ats_score.toFixed(0)}%
+              </span>
+            )}
 
             {job.location && (
               <span className="text-[10px] text-muted-foreground/70">
@@ -129,20 +135,22 @@ export function JobCard({ job }: Props) {
         </div>
 
         {/* Right: ATS score large (mobile-hidden, desktop visible) */}
-        <div className="hidden sm:flex items-center">
-          <span
-            className={cn(
-              "text-lg font-bold tabular-nums",
-              job.ats_score >= 80
-                ? "text-green-600"
-                : job.ats_score >= 60
-                  ? "text-yellow-600"
-                  : "text-red-500",
-            )}
-          >
-            {job.ats_score.toFixed(0)}%
-          </span>
-        </div>
+        {job.ats_score > 0 && (
+          <div className="hidden sm:flex items-center">
+            <span
+              className={cn(
+                "text-lg font-bold tabular-nums",
+                job.ats_score >= 80
+                  ? "text-green-600"
+                  : job.ats_score >= 60
+                    ? "text-yellow-600"
+                    : "text-red-500",
+              )}
+            >
+              {job.ats_score.toFixed(0)}%
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Actions */}
