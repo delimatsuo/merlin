@@ -133,6 +133,8 @@
   "job.descriptionTitle": "Job Description",
   "job.descriptionSubtitle": "Copy and paste the full description.",
   "job.placeholder": "Paste the job description here...",
+  "job.shortDescription": "This description may be incomplete. For best results, paste the full description from the original listing.",
+  "job.openOriginal": "Open original listing",
   "job.analyze": "Analyze Job",
   "job.analyzing": "Analyzing...",
   "job.newAnalysis": "New analysis",
