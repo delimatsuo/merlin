@@ -9,7 +9,6 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from app.auth import AuthenticatedUser, get_current_user
-from app.jobs.matcher import match_user_jobs
 from app.schemas.jobs import (
     JobFeedResponse,
     JobPreferencesRequest,
@@ -76,13 +75,19 @@ async def get_feed(
 ):
     """Return matched jobs for the last N days (default 1). Deduplicates across days.
 
-    If preferences were updated after the last match, re-matches inline.
+    If preferences were updated after the last match, re-matches inline
+    using deterministic matching only (no AI calls) for fast response.
+    The nightly batch pipeline adds AI skill scores.
+
+    The `days` param filters by job posted_date, not by batch run date.
     """
     if days not in (1, 3, 7, 14):
         days = 1
 
     fs = FirestoreService()
     today = _brazil_today()
+    now = _brazil_now()
+    cutoff = (now - timedelta(days=days)).strftime("%Y-%m-%d")
 
     # Check if we need on-demand re-matching (preferences changed after last match)
     prefs = await fs.get_job_preferences(user.uid)
@@ -92,39 +97,33 @@ async def get_feed(
         matches_generated = today_result.get("generated_at", "") if today_result else ""
 
         if not today_result or (prefs_updated and prefs_updated > matches_generated):
-            # Re-match via Firestore tag query (no all_jobs needed)
+            # Fast on-demand re-match: deterministic only (no AI calls)
             logger.info("feed_on_demand_rematch", uid=user.uid)
-            knowledge = await fs.get_candidate_knowledge(user.uid)
-            if knowledge:
-                ai_counter = {"count": 0}
-                fresh_matches = await match_user_jobs(
-                    uid=user.uid,
-                    knowledge=knowledge,
-                    preferences=prefs,
-                    ai_call_counter=ai_counter,
-                )
-                await fs.save_matched_jobs(user.uid, today, fresh_matches, len(fresh_matches))
+            from app.jobs.matcher import match_user_jobs_fast
+            fresh_matches = await match_user_jobs_fast(
+                uid=user.uid,
+                preferences=prefs,
+            )
+            await fs.save_matched_jobs(user.uid, today, fresh_matches, len(fresh_matches))
 
-                # Clear stale cached results from previous days so only
-                # fresh matches (from updated algorithm/preferences) show
-                now = _brazil_now()
-                for i in range(1, 15):  # Clear up to 14 days back
-                    old_date = (now - timedelta(days=i)).strftime("%Y-%m-%d")
-                    old_result = await fs.get_matched_jobs(user.uid, old_date)
-                    if old_result:
-                        doc_ref = (
-                            fs.db.collection("users").document(user.uid)
-                            .collection("matchedJobs").document(old_date)
-                        )
-                        await doc_ref.delete()
-                        logger.info("feed_cleared_stale", uid=user.uid, date=old_date)
+            # Clear stale cached results from previous days so only
+            # fresh matches (from updated algorithm/preferences) show
+            for i in range(1, 15):  # Clear up to 14 days back
+                old_date = (now - timedelta(days=i)).strftime("%Y-%m-%d")
+                old_result = await fs.get_matched_jobs(user.uid, old_date)
+                if old_result:
+                    doc_ref = (
+                        fs.db.collection("users").document(user.uid)
+                        .collection("matchedJobs").document(old_date)
+                    )
+                    await doc_ref.delete()
+                    logger.info("feed_cleared_stale", uid=user.uid, date=old_date)
 
-    # Read matched jobs for the last N days, deduplicated
-    now = _brazil_now()
+    # Read matched jobs for the last 14 days (max window), deduplicated
     all_matches = []
     seen_job_ids: set[str] = set()
 
-    for i in range(days):
+    for i in range(14):
         date = (now - timedelta(days=i)).strftime("%Y-%m-%d")
         result = await fs.get_matched_jobs(user.uid, date)
         if not result:
@@ -133,6 +132,10 @@ async def get_feed(
             job_id = m.get("job_id", "")
             if job_id and job_id not in seen_job_ids:
                 seen_job_ids.add(job_id)
+                # Filter by job posted_date (not batch run date)
+                posted = m.get("posted_date") or ""
+                if posted and posted < cutoff:
+                    continue
                 try:
                     all_matches.append(MatchedJob(**m))
                 except (ValueError, TypeError, KeyError):

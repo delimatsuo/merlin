@@ -375,7 +375,73 @@ async def _match_single_job(
 
 
 # ---------------------------------------------------------------------------
-# Per-user matching
+# Fast deterministic matching (on-demand, no AI calls)
+# ---------------------------------------------------------------------------
+
+async def match_user_jobs_fast(
+    uid: str,
+    preferences: dict,
+) -> list[dict]:
+    """Fast on-demand matching using deterministic filters only (no AI).
+
+    Used by the /feed endpoint for instant results when preferences change
+    or no batch results exist yet. The nightly batch adds AI skill scores.
+    """
+    settings = get_settings()
+    desired_titles = preferences.get("desired_titles", [])
+    user_tags = _titles_to_tags(desired_titles)
+    pref_work_modes = list(preferences.get("work_mode", []))
+    pref_seniority = set(preferences.get("seniority", []))
+
+    if not user_tags and not desired_titles:
+        return []
+
+    fs = FirestoreService()
+    raw_jobs = await fs.query_jobs_by_tags(
+        tags=list(user_tags),
+        work_modes=pref_work_modes if pref_work_modes else None,
+        limit=settings.max_jobs_per_digest * 3,
+    )
+
+    title_filtered = filter_by_preferences(raw_jobs, preferences)
+
+    if pref_seniority:
+        relevant_jobs = [
+            job for job in title_filtered
+            if _is_level_compatible(set(job.get("categories", [])), pref_seniority)
+        ]
+    else:
+        relevant_jobs = title_filtered
+
+    logger.info(
+        "match_fast",
+        uid_hash=uid[:8],
+        raw=len(raw_jobs),
+        filtered=len(relevant_jobs),
+    )
+
+    # Build match results without AI scoring (score=0, no skill breakdown)
+    matches = []
+    for job in relevant_jobs[:settings.max_jobs_per_digest]:
+        matches.append({
+            "job_id": job.get("id", ""),
+            "title": job.get("title", ""),
+            "company": job.get("company", ""),
+            "ats_score": 0,
+            "matched_skills": [],
+            "missing_skills": [],
+            "source": job.get("source", ""),
+            "source_url": job.get("source_url", ""),
+            "posted_date": job.get("posted_date"),
+            "work_mode": job.get("work_mode", "onsite"),
+            "location": job.get("location", ""),
+        })
+
+    return matches
+
+
+# ---------------------------------------------------------------------------
+# Per-user matching (full AI scoring — used by batch pipeline)
 # ---------------------------------------------------------------------------
 
 async def match_user_jobs(
