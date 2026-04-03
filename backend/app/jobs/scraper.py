@@ -144,7 +144,7 @@ async def run_scraping_pipeline() -> dict:
     for scraper_fn, source_name in [
         (scrape_adzuna, "adzuna"),
         (scrape_gupy, "gupy"),
-        (scrape_brazil_jobs, "brazil_jobs"),
+        # (scrape_brazil_jobs, "brazil_jobs"),  # Suspended — $0.005/job too expensive
     ]:
         try:
             jobs = await scraper_fn(search_terms)
