@@ -61,7 +61,12 @@ async def main():
         match_stats = await run_matching_pipeline()
         logger.info("job_pipeline_match_done", **match_stats)
 
-        # Phase 3: Cleanup expired jobs
+        # Phase 3: One-time digest for inferred-preference users
+        from app.jobs.one_time_digest import send_one_time_digests
+        one_time_stats = await send_one_time_digests()
+        logger.info("job_pipeline_one_time_done", **one_time_stats)
+
+        # Phase 4: Cleanup expired jobs
         from app.services.firestore import FirestoreService
         fs = FirestoreService()
         expired = await fs.cleanup_expired_jobs()

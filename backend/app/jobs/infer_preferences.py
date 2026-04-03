@@ -61,15 +61,16 @@ async def infer_and_create_preferences(dry_run: bool = True) -> dict:
         title_list = list(titles)[:5]  # Max 5 titles
 
         if not dry_run:
-            # Create preferences
+            # Create preferences with one_time frequency (not daily/weekly)
+            # The batch pipeline ignores one_time — a separate step handles it
             from datetime import datetime, timezone
             await prefs_ref.set({
                 "desired_titles": title_list,
                 "locations": [],
                 "work_mode": ["remote", "hybrid", "onsite"],
                 "seniority": [],
-                "email_frequency": "daily",
-                "email_digest": True,
+                "email_frequency": "one_time",
+                "email_digest": False,
                 "min_score": 0,
                 "last_updated": datetime.now(timezone.utc).isoformat(),
                 "_inferred": True,  # Flag so we know this was auto-created
