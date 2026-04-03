@@ -105,22 +105,15 @@ def _is_brazilian_job(location: str) -> bool:
     return True
 
 
+# Consolidated search terms — fewer calls = lower Apify cost.
+# Each call costs ~$0.48 regardless of result count, so we maximize
+# results per call with broad terms + higher maxListings.
 BRAZILIAN_JOB_CATEGORIES = [
-    "tecnologia",           # dev, devops, data, cloud, QA, etc.
-    "recursos humanos",     # RH, recrutador, business partner, DP
-    "financeiro",           # controller, fiscal, contábil, FP&A
-    "marketing",            # digital, social media, conteúdo, growth
-    "comercial",            # vendas, SDR, key account, inside sales
-    "engenharia",           # civil, mecânico, elétrico, produção
-    "administrativo",       # assistente, auxiliar, recepção
-    "jurídico",             # advogado, compliance, paralegal
-    "logística",            # supply chain, compras, planejamento
-    "saúde",                # enfermeiro, farmacêutico, nutricionista
-    "design",               # UX, UI, product designer, gráfico
-    "dados",                # data engineer, cientista, analista de dados
-    "produto",              # product manager, product owner, agile
-    "estagiário",           # estágio, jovem aprendiz, trainee
-    "diretor",              # executive/C-level across all areas
+    "analista",             # Broadest BR job title — covers finance, HR, marketing, data, QA, etc.
+    "engenheiro",           # Engineering + tech + software
+    "gerente",              # Management across all areas
+    "desenvolvedor",        # Software dev specifically
+    "assistente",           # Entry-level + admin + support roles
 ]
 
 
