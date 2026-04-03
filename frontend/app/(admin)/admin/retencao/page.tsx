@@ -14,6 +14,8 @@ interface RetentionData {
   activated: number;
   found_value: number;
   active_this_week: number;
+  total_generations: number;
+  avg_generations: number;
   retention_curve: RetentionCurvePoint[];
 }
 
@@ -74,11 +76,13 @@ export default function AdminRetencao() {
       </div>
 
       {/* Headline stat cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <StatCard label="Total de Usuários" value={data.total_users} subtitle="Cadastrados na plataforma" />
-        <StatCard label="Ativados" value={data.activated} subtitle="Completaram o onboarding" />
+        <StatCard label="Ativados" value={data.activated} subtitle="1+ dia ativo" />
         <StatCard label="Encontraram Valor" value={data.found_value} subtitle="3+ dias ativos" />
         <StatCard label="Ativos esta Semana" value={data.active_this_week} subtitle="Últimos 7 dias" />
+        <StatCard label="Gerações Totais" value={data.total_generations} subtitle="Uso de IA na plataforma" />
+        <StatCard label="Média por Usuário" value={data.avg_generations} subtitle="Gerações / usuário ativo" />
       </div>
 
       {/* Retention curve chart */}
