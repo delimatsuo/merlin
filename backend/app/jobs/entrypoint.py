@@ -93,5 +93,14 @@ if __name__ == "__main__":
             stats = await backfill_active_days()
             logger.info("backfill_active_days_done", **stats)
         asyncio.run(run_backfill_active_days())
+    elif "--infer-preferences" in sys.argv:
+        dry_run = "--apply" not in sys.argv
+        async def run_infer():
+            logger = structlog.get_logger()
+            logger.info("infer_preferences_start", dry_run=dry_run)
+            from app.jobs.infer_preferences import infer_and_create_preferences
+            stats = await infer_and_create_preferences(dry_run=dry_run)
+            logger.info("infer_preferences_done", **stats)
+        asyncio.run(run_infer())
     else:
         asyncio.run(main())
