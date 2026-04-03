@@ -87,6 +87,9 @@ async def get_feed(
     fs = FirestoreService()
     today = _brazil_today()
     now = _brazil_now()
+
+    # Track page visit as active day (browsing jobs = extracting value)
+    await fs.touch_user_activity(user.uid)
     cutoff = (now - timedelta(days=days)).strftime("%Y-%m-%d")
 
     # Check if we need on-demand re-matching (preferences changed after last match)

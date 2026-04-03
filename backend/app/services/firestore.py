@@ -712,6 +712,36 @@ class FirestoreService:
         # Note: generationCount (user + platform) is now handled by
         # increment_global_generation() to avoid double-counting.
 
+    async def touch_user_activity(self, uid: str) -> None:
+        """Update lastActivityAt and activeDays without touching usage counters.
+
+        Used for non-generation activity like browsing the job feed.
+        Lightweight: single read + conditional update (no transaction needed
+        since activeDays only increments on date change, not on count).
+        """
+        today = _brazil_today()
+        now_iso = _brazil_now().isoformat()
+        doc_ref = self.db.collection("users").document(uid)
+
+        doc = await doc_ref.get()
+        if not doc.exists:
+            return
+
+        data = doc.to_dict()
+        usage_date = data.get("dailyUsage", {}).get("date", "")
+
+        if usage_date == today:
+            # Same day — just update timestamp
+            await doc_ref.update({"lastActivityAt": now_iso})
+        else:
+            # New day — increment activeDays
+            active_days = data.get("activeDays", 0) + 1
+            await doc_ref.update({
+                "lastActivityAt": now_iso,
+                "activeDays": active_days,
+                "dailyUsage.date": today,
+            })
+
     # --- File Operations ---
 
     async def upload_resume_file(
@@ -884,6 +914,7 @@ class FirestoreService:
         activated = 0
         found_value = 0
         active_this_week = 0
+        total_generations = 0
         thresholds = [1, 2, 3, 5, 10, 15, 20]
         threshold_counts = {t: 0 for t in thresholds}
 
@@ -895,8 +926,9 @@ class FirestoreService:
             data = doc.to_dict()
             active_days = data.get("activeDays", 0)
             last_activity = data.get("lastActivityAt", "")
+            gen_count = data.get("stats", {}).get("generationCount", 0)
+            total_generations += gen_count
 
-            # Activated = has at least 1 active day (completed onboarding + used product)
             if active_days >= 1:
                 activated += 1
 
@@ -924,6 +956,8 @@ class FirestoreService:
             "activated": activated,
             "found_value": found_value,
             "active_this_week": active_this_week,
+            "total_generations": total_generations,
+            "avg_generations": round(total_generations / activated, 1) if activated > 0 else 0,
             "retention_curve": retention_curve,
         }
 

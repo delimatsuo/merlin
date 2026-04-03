@@ -1,6 +1,7 @@
 """Admin dashboard endpoints."""
 
 import asyncio
+import time
 import structlog
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -16,6 +17,22 @@ from app.services.firestore import FirestoreService
 logger = structlog.get_logger()
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
+
+# In-memory cache for expensive admin queries (5-min TTL)
+_cache: dict[str, tuple[float, dict]] = {}
+_CACHE_TTL = 300  # 5 minutes
+
+
+async def _cached(key: str, fn):
+    """Return cached result or compute and cache."""
+    now = time.monotonic()
+    if key in _cache:
+        ts, data = _cache[key]
+        if now - ts < _CACHE_TTL:
+            return data
+    result = await fn()
+    _cache[key] = (now, result)
+    return result
 
 
 @router.get("/service-status")
@@ -89,9 +106,11 @@ async def get_retention(
     request: Request,
     admin: AuthenticatedUser = Depends(get_admin_user),
 ):
-    """Retention metrics: headline numbers + retention curve."""
-    fs = FirestoreService()
-    return await fs.get_retention_stats()
+    """Retention metrics: headline numbers + retention curve. Cached 5 min."""
+    async def _compute():
+        fs = FirestoreService()
+        return await fs.get_retention_stats()
+    return await _cached("retention", _compute)
 
 
 @router.get("/users")
@@ -325,45 +344,46 @@ async def get_email_stats(
     request: Request,
     admin: AuthenticatedUser = Depends(get_admin_user),
 ):
-    """Email digest stats: subscribers, emails sent per day, unsubscribes."""
-    from app.services.firestore import _brazil_today, _brazil_now
-    from datetime import timedelta
+    """Email digest stats: subscribers, emails sent per day, unsubscribes. Cached 5 min."""
+    async def _compute():
+        from app.services.firestore import _brazil_today, _brazil_now
+        from datetime import timedelta
 
-    fs = FirestoreService()
-    now = _brazil_now()
-    today = _brazil_today()
+        fs = FirestoreService()
+        now = _brazil_now()
 
-    # Count subscribers from users who have preferences (reuse existing method)
-    users_with_prefs = await fs.get_all_users_with_preferences()
-    total_with_prefs = len(users_with_prefs)
-    subscribers = sum(
-        1 for u in users_with_prefs
-        if u.get("preferences", {}).get("email_frequency", "daily") != "off"
-    )
+        # Count subscribers from users who have preferences
+        users_with_prefs = await fs.get_all_users_with_preferences()
+        total_with_prefs = len(users_with_prefs)
+        subscribers = sum(
+            1 for u in users_with_prefs
+            if u.get("preferences", {}).get("email_frequency", "daily") != "off"
+        )
 
-    # Daily email stats for last 14 days (from batchRuns + platformStats)
-    daily_stats = []
-    for i in range(14):
-        date = (now - timedelta(days=i)).strftime("%Y-%m-%d")
-        batch_doc = await fs.db.collection("batchRuns").document(date).get()
-        stats_doc = await fs.db.collection("platformStats").document(date).get()
+        # Daily email stats for last 14 days (from batchRuns + platformStats)
+        daily_stats = []
+        for i in range(14):
+            date = (now - timedelta(days=i)).strftime("%Y-%m-%d")
+            batch_doc = await fs.db.collection("batchRuns").document(date).get()
+            stats_doc = await fs.db.collection("platformStats").document(date).get()
 
-        emails = 0
-        unsubs = 0
-        if batch_doc.exists:
-            emails = batch_doc.to_dict().get("emails_sent", 0)
-        if stats_doc.exists:
-            unsubs = stats_doc.to_dict().get("unsubscribeCount", 0)
+            emails = 0
+            unsubs = 0
+            if batch_doc.exists:
+                emails = batch_doc.to_dict().get("emails_sent", 0)
+            if stats_doc.exists:
+                unsubs = stats_doc.to_dict().get("unsubscribeCount", 0)
 
-        daily_stats.append({"date": date, "emails_sent": emails, "unsubscribes": unsubs})
+            daily_stats.append({"date": date, "emails_sent": emails, "unsubscribes": unsubs})
 
-    daily_stats.reverse()  # oldest first for chart
+        daily_stats.reverse()  # oldest first for chart
 
-    return {
-        "subscribers": subscribers,
-        "totalWithPrefs": total_with_prefs,
-        "dailyStats": daily_stats,
-    }
+        return {
+            "subscribers": subscribers,
+            "totalWithPrefs": total_with_prefs,
+            "dailyStats": daily_stats,
+        }
+    return await _cached("email_stats", _compute)
 
 
 @router.get("/preview-email")
