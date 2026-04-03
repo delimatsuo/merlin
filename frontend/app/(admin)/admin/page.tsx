@@ -15,6 +15,11 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(!storeStats);
   const [aiQuality, setAiQuality] = useState<Record<string, number | string>>({});
   const [featureCounts, setFeatureCounts] = useState<Record<string, number>>({});
+  const [emailStats, setEmailStats] = useState<{
+    subscribers: number;
+    totalWithPrefs: number;
+    dailyStats: { date: string; emails_sent: number; unsubscribes: number }[];
+  } | null>(null);
 
   // Always fetch fresh stats on mount
   useEffect(() => {
@@ -36,6 +41,11 @@ export default function AdminDashboard() {
         setGlobalLimit(data.globalLimit);
         if (data.aiQuality) setAiQuality(data.aiQuality);
         if (data.featureCounts) setFeatureCounts(data.featureCounts);
+        // Fetch email stats in parallel
+        try {
+          const es = await api.get<typeof emailStats>("/api/admin/email-stats");
+          setEmailStats(es);
+        } catch { /* non-critical */ }
       } catch {
         // Use cached data if fetch fails
       } finally {
@@ -238,6 +248,49 @@ export default function AdminDashboard() {
           </div>
         )}
       </div>
+      {/* Email Digest Stats */}
+      {emailStats && (
+        <div className="space-y-4">
+          <h2 className="text-sm font-semibold text-foreground">E-mail de Vagas</h2>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <StatCard label="Inscritos" value={emailStats.subscribers} />
+            <StatCard label="Com preferências" value={emailStats.totalWithPrefs} />
+            <StatCard
+              label="E-mails hoje"
+              value={emailStats.dailyStats[emailStats.dailyStats.length - 1]?.emails_sent ?? 0}
+            />
+          </div>
+          <div className="rounded-xl border border-border/50 p-4">
+            <p className="text-xs text-muted-foreground mb-3">E-mails enviados / Cancelamentos (14 dias)</p>
+            <div className="flex items-end gap-1.5 h-24">
+              {emailStats.dailyStats.map((d) => {
+                const maxE = Math.max(...emailStats.dailyStats.map((s) => s.emails_sent), 1);
+                return (
+                  <div key={d.date} className="flex-1 flex flex-col items-center gap-0.5">
+                    <div className="w-full flex flex-col justify-end" style={{ height: 64 }}>
+                      {d.emails_sent > 0 && (
+                        <div
+                          className="w-full rounded-t bg-foreground/70"
+                          style={{ height: Math.max((d.emails_sent / maxE) * 64, 2) }}
+                        />
+                      )}
+                    </div>
+                    <span className="text-[8px] text-muted-foreground tabular-nums">
+                      {d.emails_sent > 0 ? d.emails_sent : ""}
+                    </span>
+                    {d.unsubscribes > 0 && (
+                      <span className="text-[8px] text-red-500 tabular-nums">-{d.unsubscribes}</span>
+                    )}
+                    <span className="text-[7px] text-muted-foreground/50">
+                      {d.date.slice(5)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
