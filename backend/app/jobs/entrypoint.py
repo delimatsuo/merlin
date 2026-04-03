@@ -61,7 +61,12 @@ async def main():
         match_stats = await run_matching_pipeline()
         logger.info("job_pipeline_match_done", **match_stats)
 
-        # Phase 3: Cleanup expired jobs
+        # Phase 3: One-time digest for inferred-preference users
+        from app.jobs.one_time_digest import send_one_time_digests
+        one_time_stats = await send_one_time_digests()
+        logger.info("job_pipeline_one_time_done", **one_time_stats)
+
+        # Phase 4: Cleanup expired jobs
         from app.services.firestore import FirestoreService
         fs = FirestoreService()
         expired = await fs.cleanup_expired_jobs()
@@ -85,5 +90,22 @@ if __name__ == "__main__":
             stats = await backfill_job_tags()
             logger.info("backfill_done", **stats)
         asyncio.run(run_backfill())
+    elif "--backfill-active-days" in sys.argv:
+        async def run_backfill_active_days():
+            logger = structlog.get_logger()
+            logger.info("backfill_active_days_start")
+            from app.jobs.backfill_active_days import backfill_active_days
+            stats = await backfill_active_days()
+            logger.info("backfill_active_days_done", **stats)
+        asyncio.run(run_backfill_active_days())
+    elif "--infer-preferences" in sys.argv:
+        dry_run = "--apply" not in sys.argv
+        async def run_infer():
+            logger = structlog.get_logger()
+            logger.info("infer_preferences_start", dry_run=dry_run)
+            from app.jobs.infer_preferences import infer_and_create_preferences
+            stats = await infer_and_create_preferences(dry_run=dry_run)
+            logger.info("infer_preferences_done", **stats)
+        asyncio.run(run_infer())
     else:
         asyncio.run(main())

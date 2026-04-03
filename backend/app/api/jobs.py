@@ -181,6 +181,12 @@ async def unsubscribe_digest(request: Request, token: str):
         })
     logger.info("email_digest_unsubscribed", uid_hash=uid[:8])
 
+    # Track unsubscribe in daily platform stats
+    today = _brazil_today()
+    stats_ref = fs.db.collection("platformStats").document(today)
+    from google.cloud.firestore_v1 import transforms
+    await stats_ref.set({"unsubscribeCount": transforms.Increment(1)}, merge=True)
+
     return {"message": "Você não receberá mais e-mails de vagas."}
 
 

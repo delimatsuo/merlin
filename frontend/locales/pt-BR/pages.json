@@ -133,6 +133,8 @@
   "job.descriptionTitle": "Descrição da Vaga",
   "job.descriptionSubtitle": "Copie e cole a descrição completa.",
   "job.placeholder": "Cole aqui a descrição da vaga...",
+  "job.shortDescription": "Esta descrição pode estar incompleta. Para melhores resultados, cole a descrição completa do anúncio original.",
+  "job.openOriginal": "Abrir anúncio original",
   "job.analyze": "Analisar Vaga",
   "job.analyzing": "Analisando...",
   "job.newAnalysis": "Nova análise",

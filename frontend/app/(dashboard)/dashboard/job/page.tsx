@@ -14,6 +14,7 @@ import {
   XCircle,
   AlertCircle,
   AlertTriangle,
+  ExternalLink,
   Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -62,16 +63,20 @@ function VagaPageContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Pre-fill from job feed: fetch job raw_text and auto-trigger analysis
+  // Pre-fill from job feed: fetch job raw_text and show source link if short
+  const [prefillSourceUrl, setPrefillSourceUrl] = useState<string | null>(null);
+  const [prefillShort, setPrefillShort] = useState(false);
   useEffect(() => {
     if (!prefillJobId) return;
     let cancelled = false;
     (async () => {
       try {
-        const job = await api.get<{ raw_text: string }>(`/api/jobs/${prefillJobId}`);
+        const job = await api.get<{ raw_text: string; source_url?: string }>(`/api/jobs/${prefillJobId}`);
         if (!cancelled && job?.raw_text) {
           reset();
           setJobDescription(job.raw_text);
+          if (job.source_url) setPrefillSourceUrl(job.source_url);
+          if (job.raw_text.length < 1000) setPrefillShort(true);
         }
       } catch {
         // Job not found — user can still paste manually
@@ -249,6 +254,23 @@ function VagaPageContent() {
               disabled={!!result}
               className="resize-y rounded-xl bg-secondary border-0 text-sm leading-relaxed placeholder:text-muted-foreground/50 focus-visible:ring-2 focus-visible:ring-ring p-5"
             />
+            {prefillShort && prefillSourceUrl && (
+              <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/20 px-4 py-3 flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-yellow-600 shrink-0 mt-0.5" />
+                <div className="text-xs text-yellow-800">
+                  <p className="font-medium">{t("job.shortDescription")}</p>
+                  <a
+                    href={prefillSourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 mt-1 text-yellow-700 underline hover:text-yellow-900"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    {t("job.openOriginal")}
+                  </a>
+                </div>
+              </div>
+            )}
             <div className="flex justify-between items-center">
               <p className="text-xs text-muted-foreground tabular-nums">
                 {jobDescription.length} {t("common.characters")}

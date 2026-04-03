@@ -83,6 +83,17 @@ async def get_stats(
     }
 
 
+@router.get("/retention")
+@limiter.limit("20/minute")
+async def get_retention(
+    request: Request,
+    admin: AuthenticatedUser = Depends(get_admin_user),
+):
+    """Retention metrics: headline numbers + retention curve."""
+    fs = FirestoreService()
+    return await fs.get_retention_stats()
+
+
 @router.get("/users")
 @limiter.limit("20/minute")
 async def list_users(
@@ -305,6 +316,53 @@ async def get_jobs_stats(
         "usersWithPreferences": len(users_with_prefs),
         "matchesToday": total_matches_today,
         "batchStatus": batch_status,
+    }
+
+
+@router.get("/email-stats")
+@limiter.limit("20/minute")
+async def get_email_stats(
+    request: Request,
+    admin: AuthenticatedUser = Depends(get_admin_user),
+):
+    """Email digest stats: subscribers, emails sent per day, unsubscribes."""
+    from app.services.firestore import _brazil_today, _brazil_now
+    from datetime import timedelta
+
+    fs = FirestoreService()
+    now = _brazil_now()
+    today = _brazil_today()
+
+    # Count subscribers from users who have preferences (reuse existing method)
+    users_with_prefs = await fs.get_all_users_with_preferences()
+    total_with_prefs = len(users_with_prefs)
+    subscribers = sum(
+        1 for u in users_with_prefs
+        if u.get("preferences", {}).get("email_frequency", "daily") != "off"
+    )
+
+    # Daily email stats for last 14 days (from batchRuns + platformStats)
+    daily_stats = []
+    for i in range(14):
+        date = (now - timedelta(days=i)).strftime("%Y-%m-%d")
+        batch_doc = await fs.db.collection("batchRuns").document(date).get()
+        stats_doc = await fs.db.collection("platformStats").document(date).get()
+
+        emails = 0
+        unsubs = 0
+        if batch_doc.exists:
+            emails = batch_doc.to_dict().get("emails_sent", 0)
+        if stats_doc.exists:
+            unsubs = stats_doc.to_dict().get("unsubscribeCount", 0)
+
+        daily_stats.append({"date": date, "emails_sent": emails, "unsubscribes": unsubs})
+
+    daily_stats.reverse()  # oldest first for chart
+
+    return {
+        "subscribers": subscribers,
+        "totalWithPrefs": total_with_prefs,
+        "dailyStats": daily_stats,
     }
 
 
