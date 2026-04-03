@@ -11,6 +11,7 @@ from firebase_admin import firestore as fb_firestore
 
 from app.config import get_settings
 from app.jobs.apify_client import scrape_gupy, scrape_brazil_jobs
+from app.jobs.adzuna_client import scrape_adzuna
 from app.services.gemini_ai import extract_job_data_batch
 
 logger = structlog.get_logger()
@@ -141,6 +142,7 @@ async def run_scraping_pipeline() -> dict:
     sources_failed = 0
 
     for scraper_fn, source_name in [
+        (scrape_adzuna, "adzuna"),
         (scrape_gupy, "gupy"),
         (scrape_brazil_jobs, "brazil_jobs"),
     ]:

@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     apify_api_key: str = ""
     email_hmac_key: str = ""  # Dedicated HMAC key for unsubscribe tokens
 
+    # Adzuna (free API)
+    adzuna_app_id: str = ""
+    adzuna_app_key: str = ""
+
     # Sentry
     sentry_dsn: str = ""
 
@@ -83,6 +87,8 @@ def load_secrets_from_gcp() -> None:
                 "SENDGRID_API_KEY": "sendgrid_api_key",
                 "APIFY_API_KEY": "apify_api_key",
                 "EMAIL_HMAC_KEY": "email_hmac_key",
+                "ADZUNA_APP_ID": "adzuna_app_id",
+                "ADZUNA_APP_KEY": "adzuna_app_key",
             }
 
             for secret_name, env_name in secrets.items():
