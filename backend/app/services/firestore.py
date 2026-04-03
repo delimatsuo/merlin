@@ -896,10 +896,8 @@ class FirestoreService:
             active_days = data.get("activeDays", 0)
             last_activity = data.get("lastActivityAt", "")
 
-            # Check if activated (has knowledge file)
-            knowledge_ref = self.db.collection("users").document(doc.id).collection("knowledge").document("current")
-            knowledge_doc = await knowledge_ref.get()
-            if knowledge_doc.exists:
+            # Activated = has at least 1 active day (completed onboarding + used product)
+            if active_days >= 1:
                 activated += 1
 
             if active_days >= 3:
