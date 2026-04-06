@@ -85,7 +85,7 @@ async def scrape_gupy(search_terms: list[str], locations: list[str] | None = Non
             ACTORS["gupy"],
             run_input={
                 "searchQuery": "",  # Empty = all jobs
-                "maxResults": 500,  # Broad sample, 1 call
+                "maxResults": 200,  # Newest jobs only — $0.0025/job, ~$0.50/run
                 "sortBy": "newest",
             },
             timeout=600,  # Allow 10 minutes for large scrape
