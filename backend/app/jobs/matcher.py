@@ -293,9 +293,8 @@ def filter_by_preferences(jobs: list[dict], preferences: dict) -> list[dict]:
             job_significant = job_words - stop
             title_significant = title_words - stop
             overlap = job_significant & title_significant
-            # Require either 2+ words overlap, or 1 department-specific word
-            dept_overlap = overlap - level_words
-            if len(overlap) < 2 and not dept_overlap:
+            # Require at least 2 significant words overlap
+            if len(overlap) < 2:
                 continue
 
         # Work mode filter (if specified)
