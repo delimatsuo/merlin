@@ -50,8 +50,8 @@ class ApiClient {
         message = `Erro ${response.status}. Tente novamente.`;
       }
       const err = new Error(message);
-      // Don't report expected errors to Sentry (422=validation, 429=rate limit, 403=not admin, 503=overloaded)
-      if (response.status !== 422 && response.status !== 429 && response.status !== 403 && response.status !== 503) {
+      // Don't report expected errors to Sentry (404=not found, 422=validation, 429=rate limit, 403=not admin, 503=overloaded)
+      if (![404, 422, 429, 403, 503].includes(response.status)) {
         captureError(err, { status: response.status, url: response.url });
       }
       throw err;

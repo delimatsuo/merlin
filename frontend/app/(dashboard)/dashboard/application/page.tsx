@@ -55,7 +55,7 @@ function CandidaturaContent() {
         setJobTitle(appResult.title || "");
         setJobCompany(appResult.company || "");
       } catch {
-        // ignore
+        router.push("/dashboard");
       } finally {
         setLoading(false);
       }

@@ -246,6 +246,10 @@ async def run_scraping_pipeline() -> dict:
                     expires_at = posted_dt + timedelta(days=14)
                     posted_date = posted_dt.strftime("%Y-%m-%d")
 
+                # Reject stale jobs (older than 30 days) — catches bad scraper data
+                if (datetime.now(timezone.utc) - posted_dt).days > 30:
+                    continue
+
                 # Prefer scraper hints for location/work_mode (more reliable than AI)
                 job_location = (
                     _sanitize_field(raw_job.get("location_hint", ""))
