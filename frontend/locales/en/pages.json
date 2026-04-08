@@ -138,6 +138,8 @@
   "job.analyze": "Analyze Job",
   "job.analyzing": "Analyzing...",
   "job.analyzingTime": "This may take up to 1 minute.",
+  "job.analyzingBackground": "Analyzing job...",
+  "job.analysisComplete": "Job analysis complete",
   "job.newAnalysis": "New analysis",
   "job.atsScore": "ATS Score",
   "job.followUpTitle": "Follow-up Questions",

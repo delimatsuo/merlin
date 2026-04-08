@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
+import { startBackgroundPoll, isPolling } from "@/lib/poll";
 import { useApplicationStore, useWorkflowStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -94,6 +95,25 @@ function VagaPageContent() {
   const [textAnswers, setTextAnswers] = useState<string[]>([]);
   const [comment, setComment] = useState("");
 
+  const populateAnalysisResult = (data: Record<string, unknown>) => {
+    const res: AnalysisResult = {
+      analysis: (data.analysis as Record<string, unknown>) || {},
+      skillsMatrix: (data.skillsMatrix as SkillItem[]) || [],
+      atsScore: (data.atsScore as number | null) ?? null,
+      applicationId: (data.applicationId as string) || "",
+      followUp: (data.followUp as AnalysisResult["followUp"]) || null,
+    };
+    setResult(res);
+    setJobAnalysis(res.analysis);
+    setAtsScore(res.atsScore);
+    setSkillsMatrix(res.skillsMatrix as unknown as Record<string, unknown>);
+    setFollowUp(res.followUp);
+    if (res.followUp?.questions) {
+      setTextAnswers(new Array(res.followUp.questions.length).fill(""));
+    }
+    setLoading(false);
+  };
+
   const handleAnalyze = async (e: React.FormEvent) => {
     e.preventDefault();
     if (jobDescription.trim().length < 50) {
@@ -104,19 +124,36 @@ function VagaPageContent() {
     setLoading(true);
     setResult(null);
     try {
-      const res = await api.post<AnalysisResult>("/api/job/analyze", {
-        jobDescription,
-      });
-      setResult(res);
-      setJobAnalysis(res.analysis);
-      setAtsScore(res.atsScore);
-      setSkillsMatrix(res.skillsMatrix as unknown as Record<string, unknown>);
-      setApplicationId(res.applicationId);
-      setFollowUp(res.followUp);
+      const res = await api.post<{ applicationId: string; status: string }>(
+        "/api/job/analyze",
+        { jobDescription },
+      );
 
-      // Init text answers array
-      if (res.followUp?.questions) {
-        setTextAnswers(new Array(res.followUp.questions.length).fill(""));
+      const appId = res.applicationId;
+      setApplicationId(appId);
+
+      if (res.status === "analyzing") {
+        // Start background poll — user can navigate away
+        startBackgroundPoll({
+          taskId: `job-analysis-${appId}`,
+          label: t("job.analyzingBackground"),
+          link: `/dashboard/application?id=${appId}`,
+          doneLabel: t("job.analysisComplete"),
+          pollFn: () =>
+            api.get<{ status: string; [key: string]: unknown }>(
+              `/api/job/status/${appId}`,
+            ),
+          onReady: (data) => {
+            populateAnalysisResult({ ...data, applicationId: appId });
+          },
+          onError: (errorMsg) => {
+            setError(errorMsg);
+            setLoading(false);
+          },
+        });
+      } else {
+        // Fallback: synchronous response (shouldn't happen with new backend)
+        populateAnalysisResult(res as unknown as Record<string, unknown>);
       }
     } catch (err) {
       setError(
@@ -124,7 +161,6 @@ function VagaPageContent() {
           ? err.message
           : t("job.errorAnalyze")
       );
-    } finally {
       setLoading(false);
     }
   };

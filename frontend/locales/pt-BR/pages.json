@@ -138,6 +138,8 @@
   "job.analyze": "Analisar Vaga",
   "job.analyzing": "Analisando...",
   "job.analyzingTime": "Isso pode levar até 1 minuto.",
+  "job.analyzingBackground": "Analisando vaga...",
+  "job.analysisComplete": "Análise da vaga concluída",
   "job.newAnalysis": "Nova análise",
   "job.atsScore": "Score ATS",
   "job.followUpTitle": "Perguntas Complementares",
