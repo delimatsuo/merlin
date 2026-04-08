@@ -129,11 +129,13 @@ interface ProcessingTask {
   label: string;
   status: "running" | "done" | "error";
   error?: string;
+  link?: string;
+  doneLabel?: string;
 }
 
 interface ProcessingState {
   tasks: ProcessingTask[];
-  addTask: (id: string, label: string) => void;
+  addTask: (id: string, label: string, opts?: { link?: string; doneLabel?: string }) => void;
   completeTask: (id: string) => void;
   failTask: (id: string, error: string) => void;
   removeTask: (id: string) => void;
@@ -142,9 +144,9 @@ interface ProcessingState {
 
 export const useProcessingStore = create<ProcessingState>((set) => ({
   tasks: [],
-  addTask: (id, label) =>
+  addTask: (id, label, opts) =>
     set((state) => ({
-      tasks: [...state.tasks.filter((t) => t.id !== id), { id, label, status: "running" }],
+      tasks: [...state.tasks.filter((t) => t.id !== id), { id, label, status: "running", link: opts?.link, doneLabel: opts?.doneLabel }],
     })),
   completeTask: (id) =>
     set((state) => ({
