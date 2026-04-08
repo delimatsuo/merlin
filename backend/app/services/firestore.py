@@ -792,6 +792,19 @@ class FirestoreService:
         # Note: generationCount (user + platform) is now handled by
         # increment_global_generation() to avoid double-counting.
 
+    async def decrement_daily_usage(self, uid: str) -> None:
+        """Decrement daily usage counter (optimistic rollback on background task failure)."""
+        today = _brazil_today()
+        doc_ref = self.db.collection("users").document(uid)
+        doc = await doc_ref.get()
+        if doc.exists:
+            data = doc.to_dict()
+            usage = data.get("dailyUsage", {})
+            if usage.get("date") == today and usage.get("tailorCount", 0) > 0:
+                await doc_ref.update({
+                    "dailyUsage.tailorCount": usage["tailorCount"] - 1,
+                })
+
     async def touch_user_activity(self, uid: str) -> None:
         """Update lastActivityAt and activeDays without touching usage counters.
 
