@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { startBackgroundPoll, isPolling } from "@/lib/poll";
 import { useVersionStore, type ResumeVersion } from "@/lib/store";
 import { VersionSidebar } from "@/components/version-sidebar";
 import { ResumeEditor } from "@/components/resume-editor";
@@ -23,6 +24,7 @@ function CandidaturaContent() {
   const { setVersions } = useVersionStore();
 
   const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>(initialView);
   const [jobDescription, setJobDescription] = useState("");
   const [jobTitle, setJobTitle] = useState("");
@@ -54,6 +56,30 @@ function CandidaturaContent() {
         setJobDescription(appResult.jobDescription || "");
         setJobTitle(appResult.title || "");
         setJobCompany(appResult.company || "");
+
+        // If no versions yet, generation may be in progress — start polling
+        if (versionsResult.versions.length === 0 && !isPolling(`generate-${applicationId}`)) {
+          setGenerating(true);
+          startBackgroundPoll({
+            taskId: `generate-${applicationId}`,
+            label: t("application.generatingResume"),
+            pollFn: async () => {
+              const res = await api.get<{ versions: ResumeVersion[] }>(
+                `/api/tailor/versions/${applicationId}`,
+              );
+              return res.versions.length > 0
+                ? { status: "ready", versions: res.versions }
+                : { status: "generating" };
+            },
+            onReady: (data) => {
+              setVersions((data.versions as ResumeVersion[]) || []);
+              setGenerating(false);
+            },
+            onError: () => {
+              setGenerating(false);
+            },
+          });
+        }
       } catch {
         router.push("/dashboard");
       } finally {
@@ -62,7 +88,7 @@ function CandidaturaContent() {
     };
 
     fetchAll();
-  }, [applicationId, router, setVersions]);
+  }, [applicationId, router, setVersions, t]);
 
   const handleDownload = async (versionId: string, type: "resume" | "cover-letter") => {
     setDownloading(true);
@@ -131,10 +157,15 @@ function CandidaturaContent() {
     }
   };
 
-  if (loading) {
+  if (loading || generating) {
     return (
-      <div className="flex items-center justify-center py-32">
+      <div className="flex flex-col items-center justify-center py-32 gap-3">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        {generating && (
+          <p className="text-sm text-muted-foreground animate-pulse">
+            {t("application.generatingResume")}
+          </p>
+        )}
       </div>
     );
   }
