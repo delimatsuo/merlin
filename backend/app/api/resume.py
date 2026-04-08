@@ -106,6 +106,10 @@ async def upload_resume(
     )
 
     # Structure in background (AI call, ~30-60s)
+    # Note: On Cloud Run, background tasks may be killed if the container scales to
+    # zero after the response is sent. The deploy config uses min-instances=1 for
+    # staging/prod, keeping at least one container alive. The frontend polling has a
+    # 3-minute timeout with a retry-friendly error message as an additional safeguard.
     async def _process_in_background():
         try:
             profile_data = await structure_resume(raw_text)
@@ -117,7 +121,10 @@ async def upload_resume(
             logger.info("resume_bg_structure_complete", uid=user.uid, profile_id=profile_id)
         except Exception as e:
             logger.error("resume_bg_structure_error", uid=user.uid, profile_id=profile_id, error=str(e))
-            await fs.update_profile_status(user.uid, profile_id, "error")
+            try:
+                await fs.update_profile_status(user.uid, profile_id, "error")
+            except Exception as e2:
+                logger.error("resume_bg_status_update_failed", uid=user.uid, profile_id=profile_id, error=str(e2))
 
     asyncio.create_task(_process_in_background())
 

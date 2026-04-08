@@ -143,7 +143,7 @@ export default function PerfilPage() {
           const pollResult = await new Promise<Record<string, unknown>>((resolve, reject) => {
             let attempts = 0;
             const maxAttempts = 60; // 60 × 3s = 3 minutes
-            const interval = setInterval(async () => {
+            const poll = async () => {
               attempts++;
               try {
                 const status = await api.get<{
@@ -151,20 +151,19 @@ export default function PerfilPage() {
                   profile?: Record<string, unknown>;
                 }>(`/api/resume/status/${profileId}`);
                 if (status.status === "ready" && status.profile) {
-                  clearInterval(interval);
                   resolve(status.profile);
                 } else if (status.status === "error") {
-                  clearInterval(interval);
                   reject(new Error(t("profile.errorProcess")));
                 } else if (attempts >= maxAttempts) {
-                  clearInterval(interval);
                   reject(new Error(t("profile.errorProcess")));
+                } else {
+                  setTimeout(poll, 3000);
                 }
               } catch {
-                clearInterval(interval);
                 reject(new Error(t("profile.errorProcess")));
               }
-            }, 3000);
+            };
+            setTimeout(poll, 3000);
           });
           profileData = pollResult;
         }

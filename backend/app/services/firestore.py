@@ -89,7 +89,7 @@ class FirestoreService:
         doc_ref = self.db.collection("users").document(uid).collection("profiles").document(profile_id)
         await doc_ref.update({
             "structuredData": structured_data,
-            "status": "parsed",
+            "status": "ready",
             "updatedAt": datetime.now(timezone.utc).isoformat(),
         })
 
