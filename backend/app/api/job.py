@@ -46,8 +46,13 @@ async def analyze_job(
         job_description=job_text,
     )
 
-    # Process in background
+    # Extract scalars from request-scoped objects for background closure
+    uid = user.uid
+    user_email = user.email or ""
+
+    # Process in background (fresh FirestoreService to avoid request-scope issues)
     async def _analyze_in_background():
+        bg_fs = FirestoreService()
         try:
             # Phase 1: Parallel — job analysis + ATS keywords (independent)
             async def _analyze():
@@ -57,15 +62,15 @@ async def analyze_job(
                 try:
                     return await extract_ats_keywords(job_text)
                 except Exception as e:
-                    logger.warning("ats_extraction_error", uid=user.uid, error=str(e))
+                    logger.warning("ats_extraction_error", uid=uid, error=str(e))
                     return []
 
             analysis, ats_keywords = await asyncio.gather(_analyze(), _extract_keywords())
-            await fs.increment_global_generation("job_analysis", uid=user.uid)
+            await bg_fs.increment_global_generation("job_analysis", uid=uid)
 
             # Phase 2: Sequential — depends on analysis results
-            profile = await fs.get_latest_profile(user.uid)
-            knowledge = await fs.get_candidate_knowledge(user.uid)
+            profile = await bg_fs.get_latest_profile(uid)
+            knowledge = await bg_fs.get_candidate_knowledge(uid)
 
             skills_matrix = []
             ats_score = None
@@ -113,7 +118,7 @@ async def analyze_job(
                         })
                     ats_score = match_result.get("score", 0)
                 except Exception as e:
-                    logger.warning("semantic_match_fallback", uid=user.uid, error=str(e))
+                    logger.warning("semantic_match_fallback", uid=uid, error=str(e))
                     user_skills_lower = {s.lower() for s in candidate_skills}
                     for skill in required_skills:
                         if skill.lower() in user_skills_lower:
@@ -135,7 +140,7 @@ async def analyze_job(
                     questions = await generate_followup_questions(
                         knowledge or {}, analysis, missing_skills
                     )
-                    await fs.increment_global_generation("followup_questions", uid=user.uid)
+                    await bg_fs.increment_global_generation("followup_questions", uid=uid)
                     follow_up = {"decision": "text", "questions": questions[:max_questions]}
                 except Exception as e:
                     logger.warning("followup_generation_error", error=str(e))
@@ -143,8 +148,8 @@ async def analyze_job(
 
             # Update application with full results
             profile_id = profile.get("id", "") if profile else ""
-            await fs.update_application_analyzed(
-                uid=user.uid,
+            await bg_fs.update_application_analyzed(
+                uid=uid,
                 application_id=application_id,
                 profile_id=profile_id,
                 analysis=analysis,
@@ -155,19 +160,19 @@ async def analyze_job(
             )
 
             company = analysis.get("company", "")
-            await fs.log_activity(user.uid, user.email or "", "job_analysis", company=company)
-            logger.info("job_analysis_complete", uid=user.uid, application_id=application_id, ats_score=ats_score)
+            await bg_fs.log_activity(uid, user_email, "job_analysis", company=company)
+            logger.info("job_analysis_complete", uid=uid, application_id=application_id, ats_score=ats_score)
 
         except Exception as e:
-            logger.error("job_analysis_bg_error", uid=user.uid, application_id=application_id, error=str(e))
+            logger.error("job_analysis_bg_error", uid=uid, application_id=application_id, error=str(e))
             try:
-                await fs.update_application_status(user.uid, application_id, "error")
+                await bg_fs.update_application_status(uid, application_id, "error")
             except Exception as e2:
-                logger.error("job_analysis_status_update_failed", uid=user.uid, error=str(e2))
+                logger.error("job_analysis_status_update_failed", uid=uid, error=str(e2))
 
     asyncio.create_task(_analyze_in_background())
 
-    logger.info("job_analysis_accepted", uid=user.uid, application_id=application_id)
+    logger.info("job_analysis_accepted", uid=uid, application_id=application_id)
     return {"applicationId": application_id, "status": "analyzing"}
 
 

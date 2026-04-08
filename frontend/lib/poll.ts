@@ -43,6 +43,8 @@ export function startBackgroundPoll(opts: PollOptions): void {
   store.addTask(taskId, label, { link, doneLabel });
 
   let attempts = 0;
+  let consecutiveErrors = 0;
+  const maxConsecutiveErrors = 3;
 
   const poll = async () => {
     if (!activePolls.has(taskId)) return; // Cancelled
@@ -50,6 +52,7 @@ export function startBackgroundPoll(opts: PollOptions): void {
     attempts++;
     try {
       const result = await pollFn();
+      consecutiveErrors = 0; // Reset on success
 
       if (result.status === "analyzed" || result.status === "ready") {
         activePolls.delete(taskId);
@@ -69,10 +72,16 @@ export function startBackgroundPoll(opts: PollOptions): void {
         setTimeout(poll, intervalMs);
       }
     } catch {
-      activePolls.delete(taskId);
-      const errorMsg = "Erro de conexão. Tente novamente.";
-      useProcessingStore.getState().failTask(taskId, errorMsg);
-      onError?.(errorMsg);
+      consecutiveErrors++;
+      if (consecutiveErrors >= maxConsecutiveErrors) {
+        activePolls.delete(taskId);
+        const errorMsg = "Erro de conexão. Tente novamente.";
+        useProcessingStore.getState().failTask(taskId, errorMsg);
+        onError?.(errorMsg);
+      } else {
+        // Retry after transient error
+        setTimeout(poll, intervalMs);
+      }
     }
   };
 
