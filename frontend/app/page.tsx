@@ -10,6 +10,10 @@ import {
   Target,
   MessageSquareText,
   ArrowRight,
+  Layers,
+  Linkedin,
+  Briefcase,
+  Shield,
 } from "lucide-react";
 import { auth } from "@/lib/firebase";
 import { useTranslation } from "@/lib/hooks/useTranslation";
@@ -141,31 +145,30 @@ export default function LandingPage() {
 
       {/* Features */}
       <section className="px-6 md:px-12 py-20 max-w-4xl mx-auto">
+        <h2 className="text-2xl font-bold tracking-tight text-foreground text-center mb-14">
+          {t("landing.featuresTitle")}
+        </h2>
         <div className="grid md:grid-cols-3 gap-6">
-          <div className="apple-shadow rounded-2xl bg-card p-7 space-y-3">
-            <h3 className="text-sm font-semibold text-foreground">
-              {t("landing.feature1Title")}
-            </h3>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              {t("landing.feature1Desc")}
-            </p>
-          </div>
-          <div className="apple-shadow rounded-2xl bg-card p-7 space-y-3">
-            <h3 className="text-sm font-semibold text-foreground">
-              {t("landing.feature2Title")}
-            </h3>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              {t("landing.feature2Desc")}
-            </p>
-          </div>
-          <div className="apple-shadow rounded-2xl bg-card p-7 space-y-3">
-            <h3 className="text-sm font-semibold text-foreground">
-              {t("landing.feature3Title")}
-            </h3>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              {t("landing.feature3Desc")}
-            </p>
-          </div>
+          {[
+            { icon: Target, title: "feature1Title", desc: "feature1Desc" },
+            { icon: Sparkles, title: "feature2Title", desc: "feature2Desc" },
+            { icon: Layers, title: "feature3Title", desc: "feature3Desc" },
+            { icon: Linkedin, title: "feature4Title", desc: "feature4Desc" },
+            { icon: Briefcase, title: "feature5Title", desc: "feature5Desc" },
+            { icon: Shield, title: "feature6Title", desc: "feature6Desc" },
+          ].map(({ icon: Icon, title, desc }) => (
+            <div key={title} className="apple-shadow rounded-2xl bg-card p-7 space-y-3">
+              <div className="h-10 w-10 rounded-xl bg-secondary flex items-center justify-center">
+                <Icon className="h-4.5 w-4.5 text-foreground" />
+              </div>
+              <h3 className="text-sm font-semibold text-foreground">
+                {t(`landing.${title}`)}
+              </h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                {t(`landing.${desc}`)}
+              </p>
+            </div>
+          ))}
         </div>
       </section>
 

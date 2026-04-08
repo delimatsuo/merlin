@@ -42,7 +42,9 @@ export default function PrivacyPTBR() {
             "Dados de identificacao: nome, email e foto de perfil (via cadastro ou Google OAuth)",
             "Dados profissionais: curriculo enviado (experiencia, formacao, competencias, certificacoes, idiomas)",
             "Dados de entrevista: respostas textuais a perguntas de perfil e audio de voz (processado em tempo real via Google Cloud Speech-to-Text, nao armazenado apos transcricao)",
-            "Dados de candidatura: descricoes de vagas fornecidas por voce, curriculos personalizados gerados, cartas de apresentacao",
+            "Dados de candidatura: descricoes de vagas fornecidas por voce, curriculos personalizados gerados, cartas de apresentacao, resultados de analise ATS",
+            "Dados do LinkedIn: texto ou PDF do perfil do LinkedIn enviado para sugestoes de otimizacao (processado, nao armazenado separadamente)",
+            "Preferencias de vagas: cargos desejados, localizacoes, modelo de trabalho, senioridade e frequencia de resumo por email",
             "Dados de uso: logs de acesso, timestamps de operacoes",
           ].map((item) => (
             <li key={item} className="flex items-start gap-3 text-sm text-foreground/80">
@@ -68,6 +70,8 @@ export default function PrivacyPTBR() {
             "Personalizar curriculos e cartas de apresentacao para vagas especificas",
             "Analisar compatibilidade entre seu perfil e requisitos de vagas (ATS score)",
             "Gerar perguntas complementares para melhorar a personalizacao",
+            "Analisar seu perfil do LinkedIn e fornecer sugestoes de otimizacao",
+            "Encontrar vagas compativeis com seu perfil e entrega-las via dashboard ou resumo por email",
             "Melhorar a qualidade do servico (analytics agregados e anonimizados)",
           ].map((item) => (
             <li key={item} className="flex items-start gap-3 text-sm text-foreground/80">
@@ -94,7 +98,11 @@ export default function PrivacyPTBR() {
             },
             {
               name: "Google Gemini AI",
-              desc: "Texto do curriculo, descricoes de vagas e transcricoes de entrevista sao enviados para geracao de conteudo personalizado. Audio processado em tempo real via Speech-to-Text e nao armazenado. O Gemini API nao utiliza dados de clientes para treinamento de modelos.",
+              desc: "Estruturacao de curriculo, extracao de palavras-chave e correspondencia de competencias. Audio processado em tempo real via Speech-to-Text e nao armazenado. O Gemini API nao utiliza dados de clientes para treinamento de modelos.",
+            },
+            {
+              name: "Anthropic Claude AI",
+              desc: "Reescrita de curriculo, geracao de carta de apresentacao, analise de vagas, perguntas de entrevista e analise do LinkedIn. Texto do curriculo e descricoes de vagas sao enviados para geracao de conteudo. A Anthropic nao utiliza dados de clientes para treinamento de modelos.",
             },
             {
               name: "Firebase Authentication",
@@ -131,7 +139,7 @@ export default function PrivacyPTBR() {
         <p className="text-sm text-foreground/80 leading-relaxed">
           Os dados armazenados no Firestore e Cloud Storage permanecem na
           regiao <strong>southamerica-east1</strong> (Sao Paulo, Brasil). No
-          entanto, o processamento de IA via Google Gemini e Speech-to-Text
+          entanto, o processamento de IA via Google Gemini, Anthropic Claude e Speech-to-Text
           pode ocorrer em servidores fora do Brasil. Esta transferencia e
           realizada com base no Art. 33, II da LGPD (clausulas contratuais
           padrao da Google Cloud) e na politica de processamento de dados da

@@ -47,7 +47,9 @@ export default function PrivacyEN() {
             "Identification data: name, email, and profile photo (via registration or Google OAuth)",
             "Professional data: uploaded resume (work experience, education, skills, certifications, languages)",
             "Interview data: text responses to profile questions and voice audio (processed in real time via Google Cloud Speech-to-Text, not stored after transcription)",
-            "Application data: job descriptions you provide, generated tailored resumes, cover letters",
+            "Application data: job descriptions you provide, generated tailored resumes, cover letters, ATS analysis results",
+            "LinkedIn data: LinkedIn profile text or PDF uploaded for optimization suggestions (processed, not stored separately)",
+            "Job preferences: desired job titles, locations, work mode, seniority level, and email digest frequency",
             "Usage data: access logs, operation timestamps",
           ].map((item) => (
             <li key={item} className="flex items-start gap-3 text-sm text-foreground/80">
@@ -74,6 +76,8 @@ export default function PrivacyEN() {
             "Tailor resumes and cover letters for specific job openings",
             "Analyze compatibility between your profile and job requirements (ATS score)",
             "Generate follow-up questions to improve personalization",
+            "Analyze your LinkedIn profile and provide optimization suggestions",
+            "Match job openings to your profile and deliver them via dashboard or email digest",
             "Improve service quality (aggregated and anonymized analytics)",
           ].map((item) => (
             <li key={item} className="flex items-start gap-3 text-sm text-foreground/80">
@@ -99,7 +103,11 @@ export default function PrivacyEN() {
             },
             {
               name: "Google Gemini AI",
-              desc: "Resume text, job descriptions, and interview transcripts are sent for personalized content generation. Audio is processed in real time via Speech-to-Text and not stored. The Gemini API does not use customer data for model training.",
+              desc: "Resume structuring, keyword extraction, and skill matching. Audio is processed in real time via Speech-to-Text and not stored. The Gemini API does not use customer data for model training.",
+            },
+            {
+              name: "Anthropic Claude AI",
+              desc: "Resume rewriting, cover letter generation, job analysis, interview questions, and LinkedIn analysis. Resume text and job descriptions are sent for content generation. Anthropic does not use customer data for model training.",
             },
             {
               name: "Firebase Authentication",
@@ -138,11 +146,11 @@ export default function PrivacyEN() {
         <p className="text-sm text-foreground/80 leading-relaxed">
           Data stored in Firestore and Cloud Storage remains in the{" "}
           <strong>southamerica-east1</strong> region (Sao Paulo, Brazil). However,
-          AI processing via Google Gemini and Speech-to-Text may occur on servers
-          outside of Brazil. This transfer is carried out pursuant to LGPD Art. 33, II
-          (Google Cloud standard contractual clauses) and Google&apos;s data processing
-          policy, which ensures an adequate level of protection. Data may also be
-          processed in the United States through Google Cloud&apos;s global infrastructure.
+          AI processing via Google Gemini, Anthropic Claude, and Speech-to-Text may occur
+          on servers outside of Brazil. This transfer is carried out pursuant to LGPD Art.
+          33, II (standard contractual clauses) and the respective data processing policies
+          of Google Cloud and Anthropic, which ensure an adequate level of protection. Data
+          may also be processed in the United States through these providers&apos; infrastructure.
         </p>
       </section>
 

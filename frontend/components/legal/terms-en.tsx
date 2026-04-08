@@ -25,9 +25,11 @@ export default function TermsEN() {
           Merlin is an artificial intelligence platform that helps candidates tailor
           resumes and cover letters for specific job openings. The Service is provided
           by <strong>Ella Executive Search Ltda</strong> (CNPJ 44.891.922/0001-01).
-          The Service includes: resume upload and analysis; text-based profile
-          interview; job compatibility analysis; generation of tailored resumes and
-          cover letters; and export in DOCX format.
+          The Service includes: resume upload and AI structuring; text-based profile
+          interview; job compatibility analysis with ATS scoring; generation of tailored
+          resumes and cover letters; resume version management; LinkedIn profile
+          optimization; job matching feed with optional email digest; and export in
+          DOCX format.
         </p>
       </section>
 

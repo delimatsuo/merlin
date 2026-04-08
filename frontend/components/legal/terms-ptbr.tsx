@@ -27,9 +27,12 @@ export default function TermsPTBR() {
           candidatos a personalizar curriculos e cartas de apresentacao para
           vagas especificas. O Servico e oferecido pela{" "}
           <strong>Ella Executive Search Ltda</strong> (CNPJ 44.891.922/0001-01).
-          O Servico inclui: upload e analise de curriculos; entrevista de
-          perfil por texto; analise de compatibilidade com vagas; geracao de
-          curriculos e cartas personalizados; e exportacao em formato DOCX.
+          O Servico inclui: upload e estruturacao de curriculos por IA;
+          entrevista de perfil por texto; analise de compatibilidade com vagas
+          e pontuacao ATS; geracao de curriculos e cartas personalizados;
+          gerenciamento de versoes de curriculo; otimizacao de perfil do
+          LinkedIn; feed de vagas compativeis com opcao de resumo por email;
+          e exportacao em formato DOCX.
         </p>
       </section>
 
