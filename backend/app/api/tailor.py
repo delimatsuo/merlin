@@ -1,5 +1,7 @@
 """Resume tailoring endpoints."""
 
+import asyncio
+
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -20,14 +22,18 @@ settings = get_settings()
 limiter = Limiter(key_func=get_remote_address)
 
 
-@router.post("/generate", response_model=TailorResponse)
+@router.post("/generate")
 @limiter.limit("10/minute")
 async def generate_tailored_resume(
     request: Request,
     body: TailorRequest,
     user: AuthenticatedUser = Depends(get_current_user),
 ):
-    """Generate a tailored resume and cover letter."""
+    """Generate a tailored resume and cover letter.
+
+    Returns immediately with status="generating". AI work runs in background.
+    Frontend polls GET /versions/{application_id} to detect completion.
+    """
     logger.info("tailor_start", uid=user.uid)
 
     fs = FirestoreService()
@@ -66,76 +72,76 @@ async def generate_tailored_resume(
             detail="Vaga não encontrada.",
         )
 
+    # Capture data for background task (extract scalars from request-scoped objects)
+    uid = user.uid
+    user_email = user.email or ""
+    application_id = body.application_id
     structured_data = profile.get("structuredData", {})
     enrichment = profile.get("enrichedProfile") or {}
     job_analysis = application.get("jobAnalysis", {})
     job_description = application.get("jobDescriptionText", "")
     ats_keywords = application.get("atsKeywords", [])
-
-    # Fetch knowledge file for richer context
-    knowledge = await fs.get_candidate_knowledge(user.uid)
-
-    # Rewrite resume
-    try:
-        resume_content, changelog = await rewrite_resume(
-            profile=structured_data,
-            job_description=job_description,
-            job_analysis=job_analysis,
-            ats_keywords=ats_keywords,
-            knowledge=knowledge,
-            enrichment=enrichment,
-        )
-    except Exception as e:
-        logger.error("tailor_resume_error", uid=user.uid, error=str(e))
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Erro ao personalizar o currículo. Tente novamente em alguns minutos.",
-        )
-
-    # Generate cover letter
-    try:
-        cover_letter = await generate_cover_letter(
-            profile=structured_data,
-            job_description=job_description,
-            job_analysis=job_analysis,
-        )
-    except Exception as e:
-        logger.error("tailor_cover_letter_error", uid=user.uid, error=str(e))
-        cover_letter = ""
-
-    # Calculate updated ATS score
     ats_score = application.get("atsScore", 0) or 0
 
-    # Build version name from job analysis
     title = job_analysis.get("title", "")
     company = job_analysis.get("company", "")
     version_name = f"{company} — {title}" if company and title else title or company or ""
 
-    # Save result
-    await fs.save_tailored_resume(
-        uid=user.uid,
-        application_id=body.application_id,
-        resume_content=resume_content,
-        cover_letter=cover_letter,
-        ats_score=ats_score,
-        version_name=version_name,
-        changelog=changelog,
-    )
+    knowledge = await fs.get_candidate_knowledge(uid)
 
-    # Increment counters (global + daily + per-user) + log generation for admin dashboard
-    await fs.increment_daily_usage(user.uid)
-    await fs.increment_global_generation("resume_rewrite", uid=user.uid)
-    await fs.log_generation(user.uid, user.email or "", company)
+    # Generate in background — counters increment on success only
+    async def _generate_in_background():
+        bg_fs = FirestoreService()
+        try:
+            async def _rewrite():
+                return await rewrite_resume(
+                    profile=structured_data,
+                    job_description=job_description,
+                    job_analysis=job_analysis,
+                    ats_keywords=ats_keywords,
+                    knowledge=knowledge,
+                    enrichment=enrichment,
+                )
 
-    log_data_access(user.uid, "ai_generate_resume", "application", resource_id=body.application_id)
-    logger.info("tailor_complete", uid=user.uid)
+            async def _cover_letter():
+                try:
+                    return await generate_cover_letter(
+                        profile=structured_data,
+                        job_description=job_description,
+                        job_analysis=job_analysis,
+                    )
+                except Exception as e:
+                    logger.error("tailor_cover_letter_error", uid=uid, error=str(e))
+                    return ""
 
-    return TailorResponse(
-        resumeContent=resume_content,
-        coverLetter=cover_letter,
-        atsScore=ats_score,
-        changelog=changelog,
-    )
+            (resume_content, changelog), cover_letter = await asyncio.gather(
+                _rewrite(), _cover_letter()
+            )
+
+            await bg_fs.save_tailored_resume(
+                uid=uid,
+                application_id=application_id,
+                resume_content=resume_content,
+                cover_letter=cover_letter,
+                ats_score=ats_score,
+                version_name=version_name,
+                changelog=changelog,
+            )
+
+            # Increment counters on success (not optimistic)
+            await bg_fs.increment_daily_usage(uid)
+            await bg_fs.increment_global_generation("resume_rewrite", uid=uid)
+            await bg_fs.log_generation(uid, user_email, company)
+            log_data_access(uid, "ai_generate_resume", "application", resource_id=application_id)
+            logger.info("tailor_complete", uid=uid)
+
+        except Exception as e:
+            logger.error("tailor_bg_error", uid=uid, error=str(e))
+
+    asyncio.create_task(_generate_in_background())
+
+    logger.info("tailor_accepted", uid=user.uid, application_id=body.application_id)
+    return {"status": "generating", "applicationId": body.application_id}
 
 
 @router.get("/result/{application_id}")

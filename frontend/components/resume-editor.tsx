@@ -330,6 +330,11 @@ export function ResumeEditor({
                 </>
               )}
             </Button>
+            {regenerating && (
+              <p className="text-xs text-muted-foreground animate-pulse mt-1">
+                {t("editor.regeneratingTime")}
+              </p>
+            )}
           </div>
         </div>
       )}

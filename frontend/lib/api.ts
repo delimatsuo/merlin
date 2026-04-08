@@ -73,8 +73,43 @@ class ApiClient {
     return `Erro ${status}. Tente novamente.`;
   }
 
+  private fetchWithTimeout(
+    url: string,
+    options: RequestInit,
+    timeoutMs = 180_000,
+  ): Promise<Response> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    return fetch(url, { ...options, signal: controller.signal }).finally(() =>
+      clearTimeout(timer),
+    );
+  }
+
   private async retryWithBackoff(fn: () => Promise<Response>): Promise<Response> {
-    let response = await fn();
+    let response: Response;
+
+    try {
+      response = await fn();
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") {
+        throw new Error(
+          "A requisição demorou mais que o esperado. Tente novamente.",
+        );
+      }
+      if (e instanceof TypeError && e.message.includes("fetch")) {
+        // Retry once on network error before giving up
+        await new Promise((r) => setTimeout(r, 3000));
+        try {
+          response = await fn();
+        } catch {
+          throw new Error(
+            "Erro de conexão. Verifique sua internet e tente novamente.",
+          );
+        }
+        return response;
+      }
+      throw e;
+    }
 
     // Retry once on 401 (token expired)
     if (response.status === 401) {
@@ -107,7 +142,7 @@ class ApiClient {
     addBreadcrumb("api", `GET ${path}`);
     const response = await this.retryWithBackoff(async () => {
       const headers = await this.getHeaders();
-      return fetch(`${API_BASE_URL}${path}`, { headers });
+      return this.fetchWithTimeout(`${API_BASE_URL}${path}`, { headers });
     });
     return this.handleResponse<T>(response);
   }
@@ -116,7 +151,7 @@ class ApiClient {
     addBreadcrumb("api", `POST ${path}`);
     const response = await this.retryWithBackoff(async () => {
       const headers = await this.getHeaders();
-      return fetch(`${API_BASE_URL}${path}`, {
+      return this.fetchWithTimeout(`${API_BASE_URL}${path}`, {
         method: "POST",
         headers,
         body: body ? JSON.stringify(body) : undefined,
@@ -128,7 +163,7 @@ class ApiClient {
   async put<T>(path: string, body?: unknown): Promise<T> {
     const response = await this.retryWithBackoff(async () => {
       const headers = await this.getHeaders();
-      return fetch(`${API_BASE_URL}${path}`, {
+      return this.fetchWithTimeout(`${API_BASE_URL}${path}`, {
         method: "PUT",
         headers,
         body: body ? JSON.stringify(body) : undefined,
@@ -140,7 +175,7 @@ class ApiClient {
   async patch<T>(path: string, body?: unknown): Promise<T> {
     const response = await this.retryWithBackoff(async () => {
       const headers = await this.getHeaders();
-      return fetch(`${API_BASE_URL}${path}`, {
+      return this.fetchWithTimeout(`${API_BASE_URL}${path}`, {
         method: "PATCH",
         headers,
         body: body ? JSON.stringify(body) : undefined,
@@ -154,7 +189,7 @@ class ApiClient {
       const headers = await this.getAuthHeaders();
       const formData = new FormData();
       formData.append("file", file);
-      return fetch(`${API_BASE_URL}${path}`, {
+      return this.fetchWithTimeout(`${API_BASE_URL}${path}`, {
         method: "POST",
         headers,
         body: formData,
@@ -166,7 +201,7 @@ class ApiClient {
   async getBlob(path: string): Promise<Blob> {
     const response = await this.retryWithBackoff(async () => {
       const headers = await this.getAuthHeaders();
-      return fetch(`${API_BASE_URL}${path}`, { headers });
+      return this.fetchWithTimeout(`${API_BASE_URL}${path}`, { headers });
     });
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: "Erro desconhecido" }));
@@ -178,7 +213,7 @@ class ApiClient {
   async postBlob(path: string, body?: unknown): Promise<Blob> {
     const response = await this.retryWithBackoff(async () => {
       const headers = await this.getHeaders();
-      return fetch(`${API_BASE_URL}${path}`, {
+      return this.fetchWithTimeout(`${API_BASE_URL}${path}`, {
         method: "POST",
         headers,
         body: body ? JSON.stringify(body) : undefined,
@@ -196,7 +231,7 @@ class ApiClient {
       const headers = await this.getAuthHeaders();
       const formData = new FormData();
       formData.append("audio", audioBlob, "recording.webm");
-      return fetch(`${API_BASE_URL}${path}`, {
+      return this.fetchWithTimeout(`${API_BASE_URL}${path}`, {
         method: "POST",
         headers,
         body: formData,
@@ -208,7 +243,7 @@ class ApiClient {
   async delete<T>(path: string): Promise<T> {
     const response = await this.retryWithBackoff(async () => {
       const headers = await this.getHeaders();
-      return fetch(`${API_BASE_URL}${path}`, {
+      return this.fetchWithTimeout(`${API_BASE_URL}${path}`, {
         method: "DELETE",
         headers,
       });
