@@ -335,7 +335,7 @@ class FirestoreService:
         ats_score: Optional[float],
         ats_keywords: list,
     ) -> str:
-        """Save a job application analysis."""
+        """Save a job application analysis (synchronous, full data)."""
         application_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
 
@@ -357,6 +357,68 @@ class FirestoreService:
         await self._increment_user_stat(uid, "applicationCount", 1)
 
         return application_id
+
+    async def save_application_pending(
+        self,
+        uid: str,
+        job_description: str,
+    ) -> str:
+        """Save a pending application (fast return, background processing)."""
+        application_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+
+        doc_ref = (
+            self.db.collection("users").document(uid)
+            .collection("applications").document(application_id)
+        )
+        await doc_ref.set({
+            "profileId": "",
+            "jobDescriptionText": job_description,
+            "jobAnalysis": {},
+            "skillsMatrix": [],
+            "atsScore": None,
+            "atsKeywords": [],
+            "status": "analyzing",
+            "createdAt": now,
+        })
+
+        await self._increment_user_stat(uid, "applicationCount", 1)
+
+        return application_id
+
+    async def update_application_analyzed(
+        self,
+        uid: str,
+        application_id: str,
+        profile_id: str,
+        analysis: dict,
+        skills_matrix: list,
+        ats_score: Optional[float],
+        ats_keywords: list,
+        follow_up: Optional[dict] = None,
+    ) -> None:
+        """Update application with full analysis results."""
+        doc_ref = (
+            self.db.collection("users").document(uid)
+            .collection("applications").document(application_id)
+        )
+        await doc_ref.update({
+            "profileId": profile_id,
+            "jobAnalysis": analysis,
+            "skillsMatrix": skills_matrix,
+            "atsScore": ats_score,
+            "atsKeywords": ats_keywords,
+            "followUp": follow_up,
+            "status": "analyzed",
+        })
+
+    async def update_application_status(self, uid: str, application_id: str, status: str) -> None:
+        """Update application processing status."""
+        doc_ref = (
+            self.db.collection("users").document(uid)
+            .collection("applications").document(application_id)
+        )
+        await doc_ref.update({"status": status})
 
     async def get_user_applications(self, uid: str, limit: int = 20, start_after: str = "") -> list[dict]:
         """Get applications for a user, newest first. Cursor-based pagination."""
