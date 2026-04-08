@@ -276,23 +276,30 @@ function VagaPageContent() {
                 {jobDescription.length} {t("common.characters")}
               </p>
               {!result && (
-                <Button
-                  type="submit"
-                  disabled={loading || jobDescription.trim().length < 50}
-                  className="h-11 px-6 rounded-full text-sm font-semibold"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      {t("job.analyzing")}
-                    </>
-                  ) : (
-                    <>
-                      {t("job.analyze")}
-                      <ArrowRight className="ml-2 h-4 w-4" />
-                    </>
+                <>
+                  <Button
+                    type="submit"
+                    disabled={loading || jobDescription.trim().length < 50}
+                    className="h-11 px-6 rounded-full text-sm font-semibold"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        {t("job.analyzing")}
+                      </>
+                    ) : (
+                      <>
+                        {t("job.analyze")}
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </>
+                    )}
+                  </Button>
+                  {loading && (
+                    <p className="text-sm text-muted-foreground animate-pulse mt-2">
+                      {t("job.analyzingTime")}
+                    </p>
                   )}
-                </Button>
+                </>
               )}
               {result && (
                 <Button
@@ -534,7 +541,7 @@ function VagaPageContent() {
           </div>
 
           {/* Generate button */}
-          <div className="flex justify-end">
+          <div className="flex flex-col items-end gap-2">
             <Button
               onClick={handleGenerate}
               disabled={generating || !disclaimerAccepted}
@@ -552,6 +559,11 @@ function VagaPageContent() {
                 </>
               )}
             </Button>
+            {generating && (
+              <p className="text-sm text-muted-foreground animate-pulse">
+                {t("job.generatingTime")}
+              </p>
+            )}
           </div>
         </>
       )}

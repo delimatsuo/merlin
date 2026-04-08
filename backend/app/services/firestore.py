@@ -57,6 +57,7 @@ class FirestoreService:
         file_url: str = "",
         user_email: str = "",
         user_name: str = "",
+        status: str = "parsed",
     ) -> str:
         """Save a parsed resume profile."""
         profile_id = str(uuid.uuid4())
@@ -73,7 +74,7 @@ class FirestoreService:
             "enrichedProfile": None,
             "voiceAnswers": None,
             "fileUrl": file_url,
-            "status": "parsed",
+            "status": status,
             "createdAt": now,
             "updatedAt": now,
         })
@@ -82,6 +83,23 @@ class FirestoreService:
         await self._increment_user_stat(uid, "profileCount", 1)
 
         return profile_id
+
+    async def update_profile_structured(self, uid: str, profile_id: str, structured_data: dict) -> None:
+        """Update profile with structured data and set status to ready."""
+        doc_ref = self.db.collection("users").document(uid).collection("profiles").document(profile_id)
+        await doc_ref.update({
+            "structuredData": structured_data,
+            "status": "ready",
+            "updatedAt": datetime.now(timezone.utc).isoformat(),
+        })
+
+    async def update_profile_status(self, uid: str, profile_id: str, status: str) -> None:
+        """Update profile processing status."""
+        doc_ref = self.db.collection("users").document(uid).collection("profiles").document(profile_id)
+        await doc_ref.update({
+            "status": status,
+            "updatedAt": datetime.now(timezone.utc).isoformat(),
+        })
 
     async def get_profile(self, uid: str, profile_id: str) -> Optional[dict]:
         """Get a specific profile."""

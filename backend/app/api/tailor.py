@@ -1,5 +1,7 @@
 """Resume tailoring endpoints."""
 
+import asyncio
+
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -75,9 +77,9 @@ async def generate_tailored_resume(
     # Fetch knowledge file for richer context
     knowledge = await fs.get_candidate_knowledge(user.uid)
 
-    # Rewrite resume
-    try:
-        resume_content, changelog = await rewrite_resume(
+    # Run resume rewrite and cover letter generation in parallel
+    async def _rewrite():
+        return await rewrite_resume(
             profile=structured_data,
             job_description=job_description,
             job_analysis=job_analysis,
@@ -85,23 +87,28 @@ async def generate_tailored_resume(
             knowledge=knowledge,
             enrichment=enrichment,
         )
+
+    async def _cover_letter():
+        try:
+            return await generate_cover_letter(
+                profile=structured_data,
+                job_description=job_description,
+                job_analysis=job_analysis,
+            )
+        except Exception as e:
+            logger.error("tailor_cover_letter_error", uid=user.uid, error=str(e))
+            return ""
+
+    try:
+        (resume_content, changelog), cover_letter = await asyncio.gather(
+            _rewrite(), _cover_letter()
+        )
     except Exception as e:
         logger.error("tailor_resume_error", uid=user.uid, error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Erro ao personalizar o currículo. Tente novamente em alguns minutos.",
         )
-
-    # Generate cover letter
-    try:
-        cover_letter = await generate_cover_letter(
-            profile=structured_data,
-            job_description=job_description,
-            job_analysis=job_analysis,
-        )
-    except Exception as e:
-        logger.error("tailor_cover_letter_error", uid=user.uid, error=str(e))
-        cover_letter = ""
 
     # Calculate updated ATS score
     ats_score = application.get("atsScore", 0) or 0
