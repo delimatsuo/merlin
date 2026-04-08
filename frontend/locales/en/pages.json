@@ -157,6 +157,8 @@
   "job.generate": "Generate Personalized Resume",
   "job.generating": "Generating...",
   "job.generatingTime": "We're processing... This may take up to 2 minutes.",
+  "job.generatingBackground": "Generating personalized resume...",
+  "job.generationComplete": "Personalized resume ready",
   "job.errorMinChars": "The job description must be at least 50 characters.",
   "job.errorAnalyze": "Error analyzing the job. Please try again.",
   "job.errorGenerate": "Error generating resume. Please try again.",
@@ -209,6 +211,7 @@
   "interview.errorNoQuestions": "Upload your resume first to generate the questions.",
 
   "application.title": "Application",
+  "application.generatingResume": "Generating your personalized resume... This may take up to 2 minutes.",
   "application.jobDesc": "Job",
   "application.resume": "Resume",
   "application.jobDescTitle": "Job Description",

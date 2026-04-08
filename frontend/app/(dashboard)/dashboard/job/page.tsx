@@ -211,15 +211,32 @@ function VagaPageContent() {
         setGenerating(false);
         return;
       }
-      const genResult = await api.post<{
-        resumeContent: string;
-        coverLetter: string;
-      }>("/api/tailor/generate", {
-        profileId,
-        applicationId: result.applicationId,
+      await api.post<{ status: string; applicationId: string }>(
+        "/api/tailor/generate",
+        { profileId, applicationId: result.applicationId },
+      );
+
+      // Start background poll for generation completion
+      startBackgroundPoll({
+        taskId: `generate-${result.applicationId}`,
+        label: t("job.generatingBackground"),
+        link: `/dashboard/application?id=${result.applicationId}`,
+        doneLabel: t("job.generationComplete"),
+        pollFn: async () => {
+          const versions = await api.get<{ versions: { id: string }[] }>(
+            `/api/tailor/versions/${result.applicationId}`,
+          );
+          // If versions exist, generation is complete
+          return versions.versions.length > 0
+            ? { status: "ready" }
+            : { status: "generating" };
+        },
+        onReady: () => {
+          // Navigation handled by ProcessingBar link
+        },
       });
-      setTailoredResume(genResult.resumeContent);
-      setCoverLetter(genResult.coverLetter);
+
+      // Redirect immediately — application page will show generating state
       router.push(`/dashboard/application?id=${result.applicationId}`);
     } catch (err) {
       setError(
