@@ -1,5 +1,7 @@
 """Job description analysis endpoints."""
 
+import asyncio
+
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -29,9 +31,19 @@ async def analyze_job(
 
     job_text = body.job_description[: settings.max_job_description_chars]
 
+    # Run job analysis and ATS keyword extraction in parallel (independent, same input)
+    async def _analyze():
+        return await analyze_job_description(job_text)
+
+    async def _extract_keywords():
+        try:
+            return await extract_ats_keywords(job_text)
+        except Exception as e:
+            logger.warning("ats_extraction_error", uid=user.uid, error=str(e))
+            return []
+
     try:
-        # Analyze with Gemini
-        analysis = await analyze_job_description(job_text)
+        analysis, ats_keywords = await asyncio.gather(_analyze(), _extract_keywords())
     except Exception as e:
         logger.error("job_analysis_error", uid=user.uid, error=str(e))
         raise HTTPException(
@@ -42,13 +54,6 @@ async def analyze_job(
     # Track successful LLM call
     fs = FirestoreService()
     await fs.increment_global_generation("job_analysis", uid=user.uid)
-
-    # Extract ATS keywords
-    try:
-        ats_keywords = await extract_ats_keywords(job_text)
-    except Exception as e:
-        logger.warning("ats_extraction_error", uid=user.uid, error=str(e))
-        ats_keywords = []
 
     # Get user's profile and knowledge for skills matching
     profile = await fs.get_latest_profile(user.uid)
