@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
-import { startBackgroundPoll, isPolling } from "@/lib/poll";
+import { startBackgroundPoll } from "@/lib/poll";
 import { useApplicationStore, useWorkflowStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -50,8 +50,6 @@ function VagaPageContent() {
     setSkillsMatrix,
     setApplicationId,
     setFollowUp,
-    setTailoredResume,
-    setCoverLetter,
   reset,
   } = useApplicationStore();
 
