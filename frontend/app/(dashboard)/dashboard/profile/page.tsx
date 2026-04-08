@@ -131,17 +131,53 @@ export default function PerfilPage() {
         const result = await api.upload<{
           profileId: string;
           profile: Record<string, unknown>;
+          status: string;
         }>("/api/resume/upload", file);
+
+        const profileId = result.profileId;
+        setProfileId(profileId);
+
+        // Poll for completion if backend is processing in background
+        let profileData = result.profile;
+        if (result.status === "processing") {
+          const pollResult = await new Promise<Record<string, unknown>>((resolve, reject) => {
+            let attempts = 0;
+            const maxAttempts = 60; // 60 × 3s = 3 minutes
+            const interval = setInterval(async () => {
+              attempts++;
+              try {
+                const status = await api.get<{
+                  status: string;
+                  profile?: Record<string, unknown>;
+                }>(`/api/resume/status/${profileId}`);
+                if (status.status === "ready" && status.profile) {
+                  clearInterval(interval);
+                  resolve(status.profile);
+                } else if (status.status === "error") {
+                  clearInterval(interval);
+                  reject(new Error(t("profile.errorProcess")));
+                } else if (attempts >= maxAttempts) {
+                  clearInterval(interval);
+                  reject(new Error(t("profile.errorProcess")));
+                }
+              } catch {
+                clearInterval(interval);
+                reject(new Error(t("profile.errorProcess")));
+              }
+            }, 3000);
+          });
+          profileData = pollResult;
+        }
+
         setUploadedFile(file.name);
-        setProfile(result.profile as never);
-        setProfileId(result.profileId);
+        setProfile(profileData as never);
         markStep("upload");
 
         // Add to profiles list
         setAllProfiles((prev) => [
           {
-            id: result.profileId,
-            name: (result.profile as Record<string, string>).name || file.name,
+            id: profileId,
+            name: (profileData as Record<string, string>).name || file.name,
             status: "parsed",
             createdAt: new Date().toISOString(),
           },
@@ -150,7 +186,7 @@ export default function PerfilPage() {
 
         // Trigger background company research
         addTask("research", t("profile.researchTask"));
-        api.post(`/api/research/enrich/${result.profileId}`)
+        api.post(`/api/research/enrich/${profileId}`)
           .then(() => completeTask("research"))
           .catch(() => failTask("research", t("profile.researchFailed")));
 
