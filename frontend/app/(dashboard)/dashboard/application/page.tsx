@@ -4,7 +4,7 @@ import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
-import { startBackgroundPoll, isPolling } from "@/lib/poll";
+import { isPolling } from "@/lib/poll";
 import { useVersionStore, type ResumeVersion } from "@/lib/store";
 import { VersionSidebar } from "@/components/version-sidebar";
 import { ResumeEditor } from "@/components/resume-editor";
@@ -57,28 +57,25 @@ function CandidaturaContent() {
         setJobTitle(appResult.title || "");
         setJobCompany(appResult.company || "");
 
-        // If no versions yet, generation may be in progress — start polling
-        if (versionsResult.versions.length === 0 && !isPolling(`generate-${applicationId}`)) {
+        // Only poll if generation was actually triggered (poll already running from job page)
+        if (versionsResult.versions.length === 0 && isPolling(`generate-${applicationId}`)) {
           setGenerating(true);
-          startBackgroundPoll({
-            taskId: `generate-${applicationId}`,
-            label: t("application.generatingResume"),
-            pollFn: async () => {
-              const res = await api.get<{ versions: ResumeVersion[] }>(
+          // The poll is already running from the job page's handleGenerate.
+          // Just show the generating state until the existing poll completes.
+          const checkExistingPoll = () => {
+            if (!isPolling(`generate-${applicationId}`)) {
+              // Poll finished — re-fetch versions
+              api.get<{ versions: ResumeVersion[] }>(
                 `/api/tailor/versions/${applicationId}`,
-              );
-              return res.versions.length > 0
-                ? { status: "ready", versions: res.versions }
-                : { status: "generating" };
-            },
-            onReady: (data) => {
-              setVersions((data.versions as ResumeVersion[]) || []);
-              setGenerating(false);
-            },
-            onError: () => {
-              setGenerating(false);
-            },
-          });
+              ).then((res) => {
+                setVersions(res.versions);
+                setGenerating(false);
+              }).catch(() => setGenerating(false));
+              return;
+            }
+            setTimeout(checkExistingPoll, 2000);
+          };
+          setTimeout(checkExistingPoll, 2000);
         }
       } catch {
         router.push("/dashboard");
