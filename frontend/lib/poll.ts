@@ -1,3 +1,4 @@
+import { auth } from "./firebase";
 import { useProcessingStore } from "./store";
 
 interface PollOptions {
@@ -49,6 +50,13 @@ export function startBackgroundPoll(opts: PollOptions): void {
   const poll = async () => {
     if (!activePolls.has(taskId)) return; // Cancelled
 
+    // Stop polling if user logged out
+    if (!auth?.currentUser) {
+      activePolls.delete(taskId);
+      useProcessingStore.getState().removeTask(taskId);
+      return;
+    }
+
     attempts++;
     try {
       const result = await pollFn();
@@ -71,7 +79,15 @@ export function startBackgroundPoll(opts: PollOptions): void {
       } else {
         setTimeout(poll, intervalMs);
       }
-    } catch {
+    } catch (e) {
+      // Auth errors — stop immediately, don't retry
+      const msg = e instanceof Error ? e.message : "";
+      if (msg.includes("autenticação") || msg.includes("authentication") || msg.includes("401")) {
+        activePolls.delete(taskId);
+        useProcessingStore.getState().removeTask(taskId);
+        return;
+      }
+
       consecutiveErrors++;
       if (consecutiveErrors >= maxConsecutiveErrors) {
         activePolls.delete(taskId);
