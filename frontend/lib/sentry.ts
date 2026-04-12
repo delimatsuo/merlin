@@ -34,6 +34,15 @@ export function initSentry() {
       "Encountered full disk",
       "IndexedDB",
       "indexedDB",
+      // Expected 404 messages — not bugs, just normal user flows
+      "não encontrad",        // Perfil/Candidatura/Vaga não encontrada
+      "not found",
+      "Nenhum perfil LinkedIn",
+      // Auth/timeout — handled by UI
+      "Token de autenticação",
+      "Tempo limite atingido",
+      "demorou mais que o esperado",
+      "Erro de conexão",
     ],
 
     beforeSend(event) {
