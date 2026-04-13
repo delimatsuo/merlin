@@ -38,6 +38,10 @@ export function initSentry() {
       "não encontrad",        // Perfil/Candidatura/Vaga não encontrada
       "not found",
       "Nenhum perfil LinkedIn",
+      // Validation errors — shown to user, not bugs
+      "muito longo",
+      "muito grande",
+      "Formato não suportado",
       // Auth/timeout — handled by UI
       "Token de autenticação",
       "Tempo limite atingido",
