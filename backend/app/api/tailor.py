@@ -205,6 +205,11 @@ async def regenerate_resume(
         )
 
     profile_id = application.get("profileId", "")
+    if not profile_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Perfil não encontrado.",
+        )
     profile = await fs.get_profile(user.uid, profile_id)
     if not profile:
         raise HTTPException(
