@@ -30,52 +30,78 @@ _TITLE_TO_DEPT: dict[str, list[str]] = {
     "frontend": ["tech"], "backend": ["tech"], "full stack": ["tech"],
     "fullstack": ["tech"], "devops": ["tech"], "sre": ["tech"],
     "data engineer": ["tech"], "data scientist": ["tech"],
+    "engenheiro de dados": ["tech"], "analista de dados": ["tech"],
     "programador": ["tech"], "arquiteto de software": ["tech"],
+    "arquiteto de solucoes": ["tech"], "arquiteto": ["tech"],
+    "solutions architect": ["tech"],
     "tech lead": ["tech"], "mobile": ["tech"],
     "python": ["tech"], "java": ["tech"], "react": ["tech"],
     "node": ["tech"], "cloud": ["tech"], "ios": ["tech"], "android": ["tech"],
     "tecnologia": ["tech"], "informatica": ["tech"],
     "tecnologia da informacao": ["tech"], "de ti": ["tech"],
-    "cto": ["tech"], "cio": ["tech"],
+    "cto": ["tech"], "cio": ["tech"], "ceo": ["operations"],
+    "bi ": ["tech"], "inteligencia artificial": ["tech"],
+    "machine learning": ["tech"], "web analytics": ["tech", "marketing"],
     # HR
     "rh": ["hr"], "recursos humanos": ["hr"], "human resources": ["hr"],
-    "hr": ["hr"], "people": ["hr"], "recrutador": ["hr"],
+    "hr": ["hr"], "people": ["hr"], "recrutador": ["hr"], "recruiter": ["hr"],
     "talent": ["hr"], "departamento pessoal": ["hr"],
     "business partner": ["hr"],
     # Finance
     "financeiro": ["finance"], "finance": ["finance"], "contabil": ["finance"],
     "contador": ["finance"], "controller": ["finance"], "fiscal": ["finance"],
     "tesoureiro": ["finance"], "fp&a": ["finance"], "custos": ["finance"],
-    "cfo": ["finance"],
+    "cfo": ["finance"], "auditoria": ["finance"], "auditor": ["finance"],
+    "fraude": ["finance"], "prevencao a fraudes": ["finance"],
+    "grc": ["finance"], "pricing": ["finance"],
     # Marketing
     "marketing": ["marketing"], "social media": ["marketing"],
-    "comunicacao": ["marketing"], "copywriter": ["marketing"],
+    "comunicacao": ["marketing"], "communications": ["marketing"],
+    "copywriter": ["marketing"], "press": ["marketing"],
     "conteudo": ["marketing"], "brand": ["marketing"], "growth": ["marketing"],
     # Sales
     "vendas": ["sales"], "comercial": ["sales"], "sales": ["sales"],
     "sdr": ["sales"], "bdr": ["sales"], "account": ["sales"],
+    "key account": ["sales"],
     # Product
     "product manager": ["tech"], "product owner": ["tech"],
     "pm": ["tech"], "produto": ["tech"],
+    "product design": ["design", "tech"],
     # Design
     "designer": ["design"], "ux": ["design"], "ui": ["design"],
+    "design": ["design"], "estilista": ["design"], "moda": ["design"],
+    "fashion": ["design"],
     # Operations
     "operacoes": ["operations"], "operations": ["operations"],
     "processos": ["operations"], "coo": ["operations"],
+    "operador": ["operations"], "producao": ["operations"],
+    "sustentabilidade": ["operations"], "projetos": ["operations", "engineering"],
+    "project manager": ["operations"], "program": ["operations"],
+    "transformacao": ["operations"], "agil": ["operations", "tech"],
+    "consultor": ["operations"], "consultant": ["operations"],
     # Admin
     "administrativo": ["admin"], "secretaria": ["admin"],
     "recepcao": ["admin"], "escritorio": ["admin"],
     # Legal
     "juridico": ["legal"], "advogado": ["legal"], "compliance": ["legal"],
-    # Engineering
+    # Engineering (non-software)
+    "engenheiro": ["engineering"], "engenharia": ["engineering"],
     "engenheiro civil": ["engineering"], "engenheiro mecanico": ["engineering"],
     "engenheiro eletrico": ["engineering"], "engenheiro producao": ["engineering"],
+    "engenheiro de manutencao": ["engineering"], "mecanico": ["engineering"],
+    "mecanica": ["engineering"], "tecnico": ["engineering"],
+    "confiabilidade": ["engineering"], "manutencao": ["engineering"],
     # Supply chain
     "logistica": ["supply_chain"], "compras": ["supply_chain"],
-    "supply chain": ["supply_chain"],
+    "supply chain": ["supply_chain"], "suprimentos": ["supply_chain"],
     # Healthcare
     "enfermeiro": ["healthcare"], "farmaceutico": ["healthcare"],
     "nutricionista": ["healthcare"],
+    # Education
+    "professor": ["education"], "palestrante": ["education"],
+    "educacao": ["education"],
+    # Agriculture
+    "agronomo": ["engineering"], "agronomia": ["engineering"],
 }
 
 # Level tags — seniority/level of the role
@@ -88,7 +114,7 @@ _TITLE_TO_LEVEL: dict[str, str] = {
     "lider": "lead", "tech lead": "lead",
     "diretor": "director", "head": "director",
     "vp": "executive", "vice presidente": "executive",
-    "c-level": "executive", "cto": "executive", "cfo": "executive", "coo": "executive",
+    "c-level": "executive", "ceo": "executive", "cto": "executive", "cfo": "executive", "coo": "executive",
     "product manager": "manager",
 }
 
@@ -108,7 +134,7 @@ _LEVEL_COMPAT: dict[str, set[str]] = {
 
 # Combined mapping for backward compatibility (batch tag filter uses flat tags)
 _TITLE_TO_TAGS: dict[str, list[str]] = {
-    **{k: v for k, v in _TITLE_TO_DEPT.items()},
+    **_TITLE_TO_DEPT,
     # Level keywords as tags too (for Firestore category field)
     "estagiario": ["intern"], "jovem aprendiz": ["intern"],
     "trainee": ["entry"], "aprendiz": ["intern"],
@@ -118,6 +144,7 @@ _TITLE_TO_TAGS: dict[str, list[str]] = {
     "supervisor": ["manager"], "lider": ["lead"],
     "vp": ["executive"], "vice presidente": ["executive"],
     "c-level": ["executive"], "cto": ["executive", "tech"],
+    "ceo": ["executive", "operations"],
     "cfo": ["executive", "finance"], "coo": ["executive", "operations"],
 }
 
