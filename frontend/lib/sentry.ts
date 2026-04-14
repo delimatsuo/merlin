@@ -42,6 +42,8 @@ export function initSentry() {
       "muito longo",
       "muito grande",
       "Formato não suportado",
+      // Audio/media errors — transient, user can retry
+      "processar audio",
       // Auth/timeout — handled by UI
       "Token de autenticação",
       "Tempo limite atingido",
