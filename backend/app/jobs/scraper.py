@@ -114,7 +114,10 @@ BRAZILIAN_JOB_CATEGORIES = [
     "engenheiro",           # Engineering + tech + software
     "gerente",              # Management across all areas
     "desenvolvedor",        # Software dev specifically
-    "assistente",           # Entry-level + admin + support roles
+    "coordenador",          # Mid-management — product, marketing, HR, operations
+    "consultor",            # Consulting roles across all areas
+    "tecnico",              # Technical/hands-on roles — maintenance, mechanics, support
+    "diretor",              # Director/executive level across all areas
 ]
 
 
