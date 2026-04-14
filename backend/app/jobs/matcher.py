@@ -712,10 +712,12 @@ async def run_matching_pipeline() -> dict:
                     total_matches += len(matches)
 
                     # Send email digest based on frequency preference
-                    # Backward compat: old email_digest=True → "daily"
+                    # Backward compat: old email_digest=True → "daily", one_time → "daily"
                     freq = preferences.get("email_frequency", "")
                     if not freq:
                         freq = "daily" if preferences.get("email_digest", True) else "off"
+                    elif freq == "one_time":
+                        freq = "daily"  # Legacy one_time users now get daily
 
                     should_send = False
                     if freq == "daily":
