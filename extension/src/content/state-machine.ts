@@ -8,7 +8,7 @@ import { AutoApplyStep, ErrorType } from "../lib/types";
 import { detectScreen, isGupyLoggedIn, isGupyApplicationPage } from "./screens/detector";
 import { handleWelcome } from "./screens/welcome";
 import { handleAdditionalInfo } from "./screens/additional-info";
-import { handleCustomQuestions } from "./screens/custom-questions";
+import { handleCustomQuestions, type CustomQuestionsResult } from "./screens/custom-questions";
 import { handlePersonalization } from "./screens/personalization";
 import { randomDelay, waitForNavigation } from "./dom/helpers";
 import { getPiiProfile, isPiiComplete } from "../lib/pii-store";
@@ -122,10 +122,18 @@ export class StateMachine {
 
           case AutoApplyStep.CUSTOM_QUESTIONS_DETECT:
           case AutoApplyStep.CUSTOM_QUESTIONS_FILL: {
-            // Phase 3 will implement this fully
-            const qResult = await handleCustomQuestions();
+            const qResult: CustomQuestionsResult = await handleCustomQuestions();
             this.questionsAnswered += qResult.answered;
             this.llmCalls += qResult.llmCalls;
+
+            if (qResult.needsHuman.length > 0) {
+              this.transitionToError(
+                ErrorType.NEEDS_HUMAN,
+                `Pergunta precisa de resposta manual: "${qResult.needsHuman[0]}"`,
+              );
+              break;
+            }
+
             await randomDelay(1000, 2000);
             this.transition(detectScreen());
             break;
