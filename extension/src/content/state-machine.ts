@@ -1,14 +1,31 @@
 /**
  * State machine for the auto-apply flow.
- * Manages transitions between application screens.
+ * Manages transitions between application screens with a run loop,
+ * state persistence, and status broadcasting.
  */
 
 import { AutoApplyStep, ErrorType } from "../lib/types";
+import { detectScreen, isGupyLoggedIn, isGupyApplicationPage } from "./screens/detector";
+import { handleWelcome } from "./screens/welcome";
+import { handleAdditionalInfo } from "./screens/additional-info";
+import { handleCustomQuestions } from "./screens/custom-questions";
+import { handlePersonalization } from "./screens/personalization";
+import { randomDelay, waitForNavigation } from "./dom/helpers";
+import { getPiiProfile, isPiiComplete } from "../lib/pii-store";
+import { loadProfile } from "../lib/profile";
+
+const STATE_KEY_PREFIX = "autoapply_state_";
 
 export class StateMachine {
   private currentStep: AutoApplyStep = AutoApplyStep.IDLE;
   private errorType: ErrorType | null = null;
   private errorDetail: string | null = null;
+  private jobUrl: string = "";
+  private running: boolean = false;
+  private fieldsAnswered: number = 0;
+  private questionsAnswered: number = 0;
+  private llmCalls: number = 0;
+  private startTime: number = 0;
 
   getStep(): AutoApplyStep {
     return this.currentStep;
@@ -41,5 +58,242 @@ export class StateMachine {
     this.currentStep = AutoApplyStep.IDLE;
     this.errorType = null;
     this.errorDetail = null;
+  }
+
+  /**
+   * Main run loop. Drives the state machine from PRE_CHECK to REVIEW/COMPLETE.
+   */
+  async run(jobUrl: string): Promise<void> {
+    if (this.running) return;
+    this.running = true;
+    this.jobUrl = jobUrl;
+    this.startTime = Date.now();
+
+    try {
+      // Restore state if resuming
+      await this.restoreState();
+
+      // If starting fresh, begin with pre-checks
+      if (this.currentStep === AutoApplyStep.IDLE) {
+        this.transition(AutoApplyStep.PRE_CHECK);
+        this.broadcastStatus();
+
+        const preCheckOk = await this.runPreChecks();
+        if (!preCheckOk) return; // Error already set
+      }
+
+      // Main loop
+      while (
+        this.running &&
+        this.currentStep !== AutoApplyStep.COMPLETE &&
+        this.currentStep !== AutoApplyStep.ERROR &&
+        this.currentStep !== AutoApplyStep.REVIEW
+      ) {
+        // Detect current screen
+        const detectedScreen = detectScreen();
+
+        // If detection disagrees with our state, use detection (DOM is truth)
+        if (detectedScreen !== AutoApplyStep.IDLE && detectedScreen !== this.currentStep) {
+          console.log(`[SM] Screen detection override: ${this.currentStep} -> ${detectedScreen}`);
+          this.transition(detectedScreen);
+        }
+
+        this.broadcastStatus();
+        await this.persistState();
+
+        // Handle current state
+        switch (this.currentStep) {
+          case AutoApplyStep.WELCOME:
+            await handleWelcome();
+            await randomDelay(1000, 2000);
+            await waitForNavigation(15000);
+            this.transition(detectScreen()); // Re-detect after navigation
+            break;
+
+          case AutoApplyStep.ADDITIONAL_INFO: {
+            const infoResult = await handleAdditionalInfo();
+            this.fieldsAnswered += infoResult.filled;
+            this.llmCalls += infoResult.llmCalls;
+            await randomDelay(1000, 2000);
+            // Click next and wait for navigation is handled inside handleAdditionalInfo
+            this.transition(detectScreen());
+            break;
+          }
+
+          case AutoApplyStep.CUSTOM_QUESTIONS_DETECT:
+          case AutoApplyStep.CUSTOM_QUESTIONS_FILL: {
+            // Phase 3 will implement this fully
+            const qResult = await handleCustomQuestions();
+            this.questionsAnswered += qResult.answered;
+            this.llmCalls += qResult.llmCalls;
+            await randomDelay(1000, 2000);
+            this.transition(detectScreen());
+            break;
+          }
+
+          case AutoApplyStep.PERSONALIZATION:
+            // Phase 3 will implement this fully
+            await handlePersonalization();
+            this.llmCalls += 1;
+            await randomDelay(1000, 2000);
+            this.transition(detectScreen());
+            break;
+
+          default: {
+            // Unknown state or IDLE — try to detect
+            const detected = detectScreen();
+            if (detected === AutoApplyStep.IDLE) {
+              // Nothing to do — maybe page hasn't loaded
+              await randomDelay(2000, 3000);
+            } else {
+              this.transition(detected);
+            }
+            break;
+          }
+        }
+      }
+
+      // Reached REVIEW state (dry-run pause)
+      if (this.currentStep === AutoApplyStep.REVIEW) {
+        this.broadcastStatus();
+        // Phase 3 handles the review flow
+      }
+
+      // Reached COMPLETE
+      if (this.currentStep === AutoApplyStep.COMPLETE) {
+        await this.logApplication("dry-run");
+        this.broadcastStatus();
+        await this.clearState();
+      }
+    } catch (error) {
+      console.error("[SM] Unhandled error:", error);
+      this.transitionToError(ErrorType.LLM_FAILED, (error as Error).message);
+      this.broadcastStatus();
+    } finally {
+      this.running = false;
+    }
+  }
+
+  stop(): void {
+    this.running = false;
+  }
+
+  private async runPreChecks(): Promise<boolean> {
+    // Check 1: On a Gupy application page
+    if (!isGupyApplicationPage()) {
+      this.transitionToError(ErrorType.GUPY_LOGIN_REQUIRED, "Navegue para uma vaga no Gupy primeiro.");
+      this.broadcastStatus();
+      return false;
+    }
+
+    // Check 2: User logged into Gupy
+    if (!isGupyLoggedIn()) {
+      this.transitionToError(ErrorType.GUPY_LOGIN_REQUIRED, "Faça login no Gupy primeiro.");
+      this.broadcastStatus();
+      return false;
+    }
+
+    // Check 3: Extension authenticated
+    const authResponse = await chrome.runtime.sendMessage({ type: "GET_AUTH_STATE" });
+    if (!authResponse?.isAuthenticated) {
+      this.transitionToError(ErrorType.AUTH_REQUIRED, "Faça login na extensão primeiro.");
+      this.broadcastStatus();
+      return false;
+    }
+
+    // Check 4: PII profile configured
+    const pii = await getPiiProfile();
+    if (!isPiiComplete(pii)) {
+      this.transitionToError(ErrorType.AUTH_REQUIRED, "Configure seu perfil PII na extensão.");
+      this.broadcastStatus();
+      return false;
+    }
+
+    // Check 5: Professional profile loaded
+    try {
+      await loadProfile();
+    } catch {
+      this.transitionToError(ErrorType.LLM_FAILED, "Não foi possível carregar o perfil profissional.");
+      this.broadcastStatus();
+      return false;
+    }
+
+    // All checks passed — detect initial screen
+    const screen = detectScreen();
+    this.transition(screen !== AutoApplyStep.IDLE ? screen : AutoApplyStep.WELCOME);
+    return true;
+  }
+
+  private broadcastStatus(): void {
+    chrome.runtime.sendMessage({
+      type: "STATUS_UPDATE",
+      step: this.currentStep,
+      error: this.errorType,
+      detail: this.errorDetail || undefined,
+      fieldsAnswered: this.fieldsAnswered,
+      questionsAnswered: this.questionsAnswered,
+    }).catch(() => {}); // Ignore if no listener
+  }
+
+  private async persistState(): Promise<void> {
+    const key = STATE_KEY_PREFIX + this.jobUrl;
+    await chrome.storage.session.set({
+      [key]: {
+        step: this.currentStep,
+        fieldsAnswered: this.fieldsAnswered,
+        questionsAnswered: this.questionsAnswered,
+        llmCalls: this.llmCalls,
+        startTime: this.startTime,
+      },
+    });
+  }
+
+  private async restoreState(): Promise<void> {
+    const key = STATE_KEY_PREFIX + this.jobUrl;
+    const result = await chrome.storage.session.get(key);
+    const state = result[key] as {
+      step?: AutoApplyStep;
+      fieldsAnswered?: number;
+      questionsAnswered?: number;
+      llmCalls?: number;
+      startTime?: number;
+    } | undefined;
+    if (state) {
+      this.currentStep = state.step ?? AutoApplyStep.IDLE;
+      this.fieldsAnswered = state.fieldsAnswered ?? 0;
+      this.questionsAnswered = state.questionsAnswered ?? 0;
+      this.llmCalls = state.llmCalls ?? 0;
+      this.startTime = state.startTime ?? Date.now();
+      console.log(`[SM] Restored state: ${this.currentStep}`);
+    }
+  }
+
+  private async clearState(): Promise<void> {
+    const key = STATE_KEY_PREFIX + this.jobUrl;
+    await chrome.storage.session.remove(key);
+  }
+
+  private async logApplication(status: "success" | "failed" | "dry-run"): Promise<void> {
+    try {
+      const duration = Math.round((Date.now() - this.startTime) / 1000);
+      await chrome.runtime.sendMessage({
+        type: "API_REQUEST",
+        method: "POST",
+        path: "/api/autoapply/log",
+        body: {
+          job_url: this.jobUrl,
+          company: "", // Will be populated from page in Phase 3
+          job_title: "", // Will be populated from page in Phase 3
+          status,
+          fields_answered: this.fieldsAnswered,
+          questions_answered: this.questionsAnswered,
+          llm_calls: this.llmCalls,
+          errors: [],
+          duration_seconds: duration,
+        },
+      });
+    } catch (error) {
+      console.error("[SM] Failed to log application:", error);
+    }
   }
 }
