@@ -373,9 +373,20 @@ document.addEventListener("DOMContentLoaded", async () => {
   const zipInput = document.getElementById("zip") as HTMLInputElement | null;
   if (zipInput) applyCepMask(zipInput);
 
-  // 1. Check auth
+  // 1. Check auth — also check storage directly in case SW hasn't restored yet
   try {
-    const authResponse = await chrome.runtime.sendMessage({ type: "GET_AUTH_STATE" });
+    // First try the service worker
+    let authResponse = await chrome.runtime.sendMessage({ type: "GET_AUTH_STATE" });
+
+    // If SW says not authenticated, double-check storage directly
+    // (SW may have been killed and not restored state yet)
+    if (!authResponse?.isAuthenticated) {
+      const stored = await chrome.storage.session.get("authState");
+      const storedAuth = stored.authState as { token?: string; user?: any } | undefined;
+      if (storedAuth?.token) {
+        authResponse = { isAuthenticated: true, user: storedAuth.user };
+      }
+    }
 
     if (!authResponse?.isAuthenticated) {
       showSection("login-section");
