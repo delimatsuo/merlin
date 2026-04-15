@@ -45,6 +45,7 @@ Thumbs.db
 !package-lock.json
 !tsconfig.json
 !components.json
+!extension/manifest.json
 
 # Logs
 *.log

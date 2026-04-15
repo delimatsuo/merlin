@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Gupy AutoApply",
+  "version": "0.1.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0gP2t1l7mXV2b+LqWd6rCJ0wF6TP3U3jzNILCsWcnJlQ5R7h8K8Hj4k2XGfkWz6n5R+VJ6vN7cTq9XdF+bK7hQdR3w9YR8LkKm7NvHKxq8MN3VBK6b0Z+2j8PcKW+l5N7zcGy1RpQ+Dg1fRKZ8V6HzQ+vB1XY8kSq+W7eN0fJ3cK5Q9Z6M+h2L4nQ1p8K7Y+R3T+bX5V+dG6w9N+S1F8H2j+kL4mP7Q8R+W3n5T+bV6Y+dJ1cK8Q+S9Z7M+H2R4L+nP1Q8K7Y+W3T+bR5V+dX6J+cN1S8Q+K9Z7M+H2W4L+nR1P8Q7Y+T3W+bK5V+dR6J+cX1SQIDAQAB",
+  "permissions": ["activeTab", "storage", "offscreen", "scripting"],
+  "host_permissions": ["*://*.gupy.io/*"],
+  "background": { "service_worker": "dist/service-worker.js" },
+  "content_scripts": [{
+    "matches": ["*://*.gupy.io/*"],
+    "js": ["dist/content.js"],
+    "run_at": "document_idle"
+  }],
+  "action": {
+    "default_popup": "dist/popup.html",
+    "default_icon": {
+      "16": "assets/icon-16.png",
+      "48": "assets/icon-48.png",
+      "128": "assets/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "assets/icon-16.png",
+    "48": "assets/icon-48.png",
+    "128": "assets/icon-128.png"
+  }
+}

@@ -2,7 +2,7 @@
  * Screen detector — identifies which Gupy application screen is currently displayed.
  */
 
-import { AutoApplyStep } from "../state-machine";
+import { AutoApplyStep } from "../../lib/types";
 
 export function detectScreen(): AutoApplyStep {
   // TODO: Implement screen detection based on DOM selectors
