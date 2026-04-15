@@ -170,6 +170,22 @@ async def answer_question(
     )
 
 
+@router.get("/logs")
+@limiter.limit("30/minute")
+async def get_application_logs(
+    request: Request,
+    limit: int = 10,
+    user: AuthenticatedUser = Depends(get_current_user),
+):
+    """Get recent autoapply application logs."""
+    if limit > 50:
+        limit = 50
+
+    fs = FirestoreService()
+    logs = await fs.get_autoapply_logs(user.uid, limit=limit)
+    return {"logs": logs}
+
+
 @router.post("/log")
 @limiter.limit("60/minute")
 async def log_application(

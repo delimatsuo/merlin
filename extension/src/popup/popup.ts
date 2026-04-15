@@ -177,6 +177,98 @@ async function loadDailyUsage(): Promise<void> {
   }
 }
 
+async function loadApplicationHistory(): Promise<void> {
+  const listEl = document.getElementById("history-list");
+  if (!listEl) return;
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: "API_REQUEST",
+      method: "GET",
+      path: "/api/autoapply/logs?limit=10",
+    });
+
+    if (response?.error || !response?.data?.logs) {
+      listEl.innerHTML = '<p class="card-detail">Nenhuma candidatura registrada.</p>';
+      return;
+    }
+
+    const logs = response.data.logs as Array<{
+      id: string;
+      company: string;
+      job_title: string;
+      status: string;
+      fields_answered: number;
+      questions_answered: number;
+      duration_seconds: number;
+      timestamp: string;
+      job_url: string;
+    }>;
+
+    if (logs.length === 0) {
+      listEl.innerHTML = '<p class="card-detail">Nenhuma candidatura registrada.</p>';
+      return;
+    }
+
+    listEl.innerHTML = logs.map(log => {
+      const statusBadge = {
+        "success": '<span class="history-badge badge-success">Enviada</span>',
+        "dry-run": '<span class="history-badge badge-dryrun">Dry-run</span>',
+        "failed": '<span class="history-badge badge-failed">Falhou</span>',
+      }[log.status] || '<span class="history-badge">' + escapeHtml(log.status) + '</span>';
+
+      const company = log.company || "\u2014";
+      const title = log.job_title || "Vaga";
+      const time = formatRelativeTime(log.timestamp);
+      const stats = `${log.fields_answered || 0} campos, ${log.questions_answered || 0} perguntas`;
+
+      return `
+        <div class="history-item">
+          <div class="history-main">
+            <span class="history-title">${escapeHtml(title)}</span>
+            ${statusBadge}
+          </div>
+          <div class="history-meta">
+            <span>${escapeHtml(company)}</span>
+            <span>&middot;</span>
+            <span>${stats}</span>
+            <span>&middot;</span>
+            <span>${time}</span>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+  } catch {
+    listEl.innerHTML = '<p class="card-detail">Erro ao carregar historico.</p>';
+  }
+}
+
+function formatRelativeTime(isoString: string): string {
+  try {
+    const date = new Date(isoString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 1) return "agora";
+    if (diffMins < 60) return `${diffMins}min atras`;
+    if (diffHours < 24) return `${diffHours}h atras`;
+    if (diffDays < 7) return `${diffDays}d atras`;
+    return date.toLocaleDateString("pt-BR");
+  } catch {
+    return "";
+  }
+}
+
+function escapeHtml(text: string): string {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
+}
+
 function updatePreChecks(pii: PiiProfile | null): void {
   const startBtn = document.getElementById("start-btn") as HTMLButtonElement | null;
   if (!startBtn) return;
@@ -306,12 +398,18 @@ document.addEventListener("DOMContentLoaded", async () => {
     await Promise.all([
       loadProfessionalProfile(),
       loadDailyUsage(),
+      loadApplicationHistory(),
     ]);
 
     // 5. Update pre-check status
     updatePreChecks(pii);
 
-    // 6. Load mode setting
+    // 6. Refresh history button
+    document.getElementById("refresh-history")?.addEventListener("click", () => {
+      loadApplicationHistory();
+    });
+
+    // 7. Load mode setting
     await loadModeSetting();
   } catch {
     showSection("login-section");
@@ -560,6 +658,12 @@ function updateStatusDisplay(status: {
     } else {
       statusEl.textContent = stepNames[status.step] || status.step;
       statusEl.style.color = status.step === "COMPLETE" ? "#16a34a" : "#4b5563";
+
+      // Refresh history and usage when complete
+      if (status.step === "COMPLETE") {
+        loadApplicationHistory();
+        loadDailyUsage();
+      }
     }
 
     if (status.fieldsAnswered || status.questionsAnswered) {

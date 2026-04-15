@@ -1630,6 +1630,21 @@ class FirestoreService:
 
     # --- AutoApply Operations ---
 
+    async def get_autoapply_logs(self, uid: str, limit: int = 10) -> list[dict]:
+        """Get recent autoapply application logs, ordered by timestamp descending."""
+        query = (
+            self.db.collection("users").document(uid)
+            .collection("autoapplyLogs")
+            .order_by("timestamp", direction=firestore.Query.DESCENDING)
+            .limit(limit)
+        )
+        results = []
+        async for doc in query.stream():
+            data = doc.to_dict()
+            data["id"] = doc.id
+            results.append(data)
+        return results
+
     async def log_autoapply_attempt(self, uid: str, log_data: dict) -> str:
         """Log an autoapply application attempt. Returns the log document ID."""
         log_id = str(uuid.uuid4())
