@@ -1,17 +1,35 @@
-/**
- * Firebase Auth integration for the extension.
- * Uses the offscreen document to perform auth operations.
- */
+import { initializeApp, getApps } from "firebase/app";
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, type User } from "firebase/auth";
 
-export async function getAuthToken(): Promise<string | null> {
-  // TODO: Request auth token via offscreen document
-  return null;
+// Same Firebase project as the main Merlin app
+const firebaseConfig = {
+  apiKey: "AIzaSyAPhPf4qzo94WplQwQl9gbjauBbFOi7J3w",
+  authDomain: "merlin-489714.firebaseapp.com",
+  projectId: "merlin-489714",
+  storageBucket: "merlin-489714.firebasestorage.app",
+  messagingSenderId: "531233742939",
+  appId: "1:531233742939:web:xxxxxxx",  // Placeholder - works for auth
+};
+
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+export const auth = getAuth(app);
+export const googleProvider = new GoogleAuthProvider();
+
+export async function signIn(): Promise<User> {
+  const result = await signInWithPopup(auth, googleProvider);
+  return result.user;
 }
 
-export async function signIn(): Promise<void> {
-  // TODO: Trigger sign-in flow
+export function getCurrentUser(): User | null {
+  return auth.currentUser;
 }
 
-export async function signOut(): Promise<void> {
-  // TODO: Clear auth state
+export async function getIdToken(forceRefresh = false): Promise<string | null> {
+  const user = auth.currentUser;
+  if (!user) return null;
+  return user.getIdToken(forceRefresh);
+}
+
+export function onAuthChange(callback: (user: User | null) => void): () => void {
+  return onAuthStateChanged(auth, callback);
 }

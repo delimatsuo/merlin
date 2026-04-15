@@ -1,15 +1,32 @@
 /**
- * API client for communicating with the Merlin backend.
+ * API client for the Chrome extension.
+ * All requests are routed through the service worker to avoid
+ * exposing the Firebase token in the content script context.
  */
 
-const BACKEND_URL = "https://merlin-backend-531233742939.southamerica-east1.run.app";
-
-export async function apiRequest<T>(
-  _endpoint: string,
-  _options?: RequestInit
-): Promise<T> {
-  // TODO: Implement authenticated API calls to the Merlin backend
-  throw new Error("Not implemented");
+export async function apiGet<T = any>(path: string): Promise<T> {
+  const response = await chrome.runtime.sendMessage({
+    type: "API_REQUEST",
+    method: "GET",
+    path,
+  });
+  if (response.error) throw new Error(response.error);
+  if (response.status && response.status >= 400) {
+    throw new Error(response.data?.detail || `API error: ${response.status}`);
+  }
+  return response.data;
 }
 
-export { BACKEND_URL };
+export async function apiPost<T = any>(path: string, body: unknown): Promise<T> {
+  const response = await chrome.runtime.sendMessage({
+    type: "API_REQUEST",
+    method: "POST",
+    path,
+    body,
+  });
+  if (response.error) throw new Error(response.error);
+  if (response.status && response.status >= 400) {
+    throw new Error(response.data?.detail || `API error: ${response.status}`);
+  }
+  return response.data;
+}
