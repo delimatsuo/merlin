@@ -22,35 +22,56 @@ const FIREBASE_API_KEY = "AIzaSyAPhPf4qzo94WplQwQl9gbjauBbFOi7J3w";
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000; // Refresh 5 min before expiry
 const TOKEN_LIFETIME_MS = 60 * 60 * 1000; // Firebase tokens last 1 hour
 
-// --- Auth Functions (chrome.identity → Firebase) ---
+// --- Auth Functions (launchWebAuthFlow → Firebase) ---
+
+const GOOGLE_CLIENT_ID = "531233742939-4vqg9iv7c0v4jr89hb5a428f1486pltj.apps.googleusercontent.com";
+const REDIRECT_URI = `https://${chrome.runtime.id}.chromiumapp.org`;
+const SCOPES = "openid email profile";
 
 /**
- * Sign in using chrome.identity.getAuthToken (Google OAuth via manifest oauth2 config)
- * then exchange the Google token for a Firebase ID token.
+ * Sign in via chrome.identity.launchWebAuthFlow (opens Google consent in a tab).
+ * Gets a Google id_token, then exchanges it for a Firebase ID token.
  */
 async function signIn(): Promise<{ success: boolean; error?: string }> {
   try {
-    // Step 1: Get Google OAuth token via chrome.identity
-    const googleToken = await new Promise<string>((resolve, reject) => {
-      chrome.identity.getAuthToken({ interactive: true }, (result: any) => {
-        const token = typeof result === "string" ? result : result?.token;
-        if (chrome.runtime.lastError || !token) {
-          reject(new Error(chrome.runtime.lastError?.message || "Auth cancelled"));
-        } else {
-          resolve(token);
-        }
-      });
+    // Step 1: Build Google OAuth URL
+    const nonce = crypto.randomUUID();
+    const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+    authUrl.searchParams.set("client_id", GOOGLE_CLIENT_ID);
+    authUrl.searchParams.set("response_type", "token id_token");
+    authUrl.searchParams.set("redirect_uri", REDIRECT_URI);
+    authUrl.searchParams.set("scope", SCOPES);
+    authUrl.searchParams.set("nonce", nonce);
+    authUrl.searchParams.set("prompt", "select_account");
+
+    // Step 2: Launch auth flow — opens Google sign-in in a browser tab
+    const responseUrl = await chrome.identity.launchWebAuthFlow({
+      url: authUrl.toString(),
+      interactive: true,
     });
 
-    // Step 2: Exchange Google token for Firebase ID token
+    if (!responseUrl) {
+      throw new Error("Auth flow returned no URL");
+    }
+
+    // Step 3: Extract tokens from the redirect URL fragment
+    const hashParams = new URLSearchParams(responseUrl.split("#")[1] || "");
+    const googleIdToken = hashParams.get("id_token");
+    const accessToken = hashParams.get("access_token");
+
+    if (!googleIdToken) {
+      throw new Error("No id_token in auth response");
+    }
+
+    // Step 4: Exchange Google id_token for Firebase ID token
     const firebaseResponse = await fetch(
       `https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=${FIREBASE_API_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          postBody: `access_token=${googleToken}&providerId=google.com`,
-          requestUri: `https://${chrome.runtime.id}.chromiumapp.org`,
+          postBody: `id_token=${googleIdToken}&access_token=${accessToken}&providerId=google.com`,
+          requestUri: REDIRECT_URI,
           returnIdpCredential: true,
           returnSecureToken: true,
         }),
@@ -62,15 +83,15 @@ async function signIn(): Promise<{ success: boolean; error?: string }> {
       throw new Error(err.error?.message || "Firebase auth failed");
     }
 
-    const firebaseData = await firebaseResponse.json();
+    const data = await firebaseResponse.json();
 
     authState = {
-      token: firebaseData.idToken,
+      token: data.idToken,
       tokenExpiry: Date.now() + TOKEN_LIFETIME_MS,
       user: {
-        uid: firebaseData.localId,
-        email: firebaseData.email || null,
-        displayName: firebaseData.displayName || null,
+        uid: data.localId,
+        email: data.email || null,
+        displayName: data.displayName || null,
       },
     };
     chrome.storage.session.set({ authState });
@@ -82,15 +103,6 @@ async function signIn(): Promise<{ success: boolean; error?: string }> {
 }
 
 async function signOutUser(): Promise<void> {
-  // Revoke the Google token
-  if (authState.token) {
-    chrome.identity.getAuthToken({ interactive: false }, (result: any) => {
-      const token = typeof result === "string" ? result : result?.token;
-      if (token) {
-        chrome.identity.removeCachedAuthToken({ token });
-      }
-    });
-  }
   authState = { token: null, tokenExpiry: 0, user: null };
   chrome.storage.session.set({ authState });
 }
@@ -101,41 +113,37 @@ async function getValidToken(): Promise<string | null> {
     return authState.token;
   }
 
-  // Token expired — get a fresh Google token and re-exchange
+  // Token expired — try silent re-auth via launchWebAuthFlow (non-interactive)
   try {
-    // Force remove cached token so we get a fresh one
-    const oldGoogleToken = await new Promise<string | undefined>((resolve) => {
-      chrome.identity.getAuthToken({ interactive: false }, (result: any) => {
-        resolve(typeof result === "string" ? result : result?.token);
-      });
-    });
-    if (oldGoogleToken) {
-      await new Promise<void>((resolve) => {
-        chrome.identity.removeCachedAuthToken({ token: oldGoogleToken }, resolve);
-      });
-    }
+    const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+    authUrl.searchParams.set("client_id", GOOGLE_CLIENT_ID);
+    authUrl.searchParams.set("response_type", "token id_token");
+    authUrl.searchParams.set("redirect_uri", REDIRECT_URI);
+    authUrl.searchParams.set("scope", SCOPES);
+    authUrl.searchParams.set("nonce", crypto.randomUUID());
+    authUrl.searchParams.set("prompt", "none"); // Silent — no user interaction
 
-    // Get new Google token
-    const googleToken = await new Promise<string>((resolve, reject) => {
-      chrome.identity.getAuthToken({ interactive: false }, (result: any) => {
-        const token = typeof result === "string" ? result : result?.token;
-        if (chrome.runtime.lastError || !token) {
-          reject(new Error("Token refresh failed"));
-        } else {
-          resolve(token);
-        }
-      });
+    const responseUrl = await chrome.identity.launchWebAuthFlow({
+      url: authUrl.toString(),
+      interactive: false, // Silent refresh
     });
 
-    // Exchange for Firebase token
+    if (!responseUrl) return null;
+
+    const hashParams = new URLSearchParams(responseUrl.split("#")[1] || "");
+    const googleIdToken = hashParams.get("id_token");
+    const accessToken = hashParams.get("access_token");
+
+    if (!googleIdToken) return null;
+
     const firebaseResponse = await fetch(
       `https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=${FIREBASE_API_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          postBody: `access_token=${googleToken}&providerId=google.com`,
-          requestUri: `https://${chrome.runtime.id}.chromiumapp.org`,
+          postBody: `id_token=${googleIdToken}&access_token=${accessToken}&providerId=google.com`,
+          requestUri: REDIRECT_URI,
           returnSecureToken: true,
         }),
       }
@@ -146,6 +154,11 @@ async function getValidToken(): Promise<string | null> {
     const data = await firebaseResponse.json();
     authState.token = data.idToken;
     authState.tokenExpiry = Date.now() + TOKEN_LIFETIME_MS;
+    authState.user = {
+      uid: data.localId,
+      email: data.email || null,
+      displayName: data.displayName || null,
+    };
     chrome.storage.session.set({ authState });
     return data.idToken;
   } catch {

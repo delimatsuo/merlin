@@ -4,10 +4,6 @@
   "version": "0.1.0",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA9/e25mv+xYQmgNZC1yQgWmX/JgMvvxakdutp7SESJRqE2AMdFnv63eUcSbWvOQo4jekZaHGevlXqOMMuxrLL4vZuOR7Jf6HFD8r1l5h72vIvQDR5+ZcaBkx6FfPMYRKK9syhgeng6Sypuf2fs6W+Cjg22RZQZ+N96dawIkbcvna70aonkR/ux2lev5tbx4gRfhKEhxsgM4glBLWrq4FkC+004NsrM80e9/r1Zzv3fkPgJuaLdielvpT/VRs8h77Sq6zWj00J26e7jogenAksHCnPbjoEUS+axMU5SEo3dyolkwMKoKigITHYpPh3b03ObnsYlCBVLRVRL7wHA2TDwQIDAQAB",
   "permissions": ["activeTab", "storage", "identity", "scripting"],
-  "oauth2": {
-    "client_id": "531233742939-4vqg9iv7c0v4jr89hb5a428f1486pltj.apps.googleusercontent.com",
-    "scopes": ["openid", "email", "profile"]
-  },
   "host_permissions": ["*://*.gupy.io/*"],
   "background": { "service_worker": "dist/service-worker.js" },
   "content_scripts": [{
