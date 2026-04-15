@@ -8,7 +8,7 @@ const firebaseConfig = {
   projectId: "merlin-489714",
   storageBucket: "merlin-489714.firebasestorage.app",
   messagingSenderId: "531233742939",
-  appId: "1:531233742939:web:xxxxxxx",  // Placeholder - works for auth
+  appId: "1:531233742939:web:ca00cb4179af522e689f7e",
 };
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];

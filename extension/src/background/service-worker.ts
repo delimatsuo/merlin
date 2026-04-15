@@ -13,7 +13,11 @@ interface SessionState {
 let authState: AuthState = { token: null, tokenExpiry: 0, user: null };
 let session: SessionState = { activeTabId: null, jobUrl: null };
 
-const API_BASE = "https://merlin-backend-531233742939.southamerica-east1.run.app";
+// Toggle for local development vs production
+const IS_DEV = !("update_url" in chrome.runtime.getManifest());
+const API_BASE = IS_DEV
+  ? "http://localhost:8000"
+  : "https://merlin-backend-531233742939.southamerica-east1.run.app";
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000; // Refresh 5 min before expiry
 const TOKEN_LIFETIME_MS = 60 * 60 * 1000; // Firebase tokens last 1 hour
 
