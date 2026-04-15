@@ -23,6 +23,7 @@ from app.prompts.recommendations import get_recommendations_prompt
 from app.prompts.linkedin_structure import LINKEDIN_STRUCTURING_PROMPT
 from app.prompts.linkedin_analysis import get_linkedin_analysis_prompt
 from app.prompts.job_extraction import JOB_EXTRACTION_PROMPT, JOB_BATCH_EXTRACTION_PROMPT
+from app.prompts.autoapply import FIELD_MATCHING_PROMPT, CUSTOM_QUESTION_PROMPT
 
 logger = structlog.get_logger()
 
@@ -62,6 +63,23 @@ def _get_anthropic_client() -> anthropic.AsyncAnthropic:
             timeout=httpx.Timeout(settings.generation_timeout, connect=10.0),
         )
     return _anthropic_client
+
+
+# ---------------------------------------------------------------------------
+# PII protection
+# ---------------------------------------------------------------------------
+
+# Fields that must never enter LLM prompts
+PII_BLOCKLIST = frozenset({
+    "cpf", "rg", "motherName", "mother_name", "birthDate", "birth_date",
+    "phone", "address", "gender", "ethnicity", "disability", "maritalStatus",
+    "marital_status",
+})
+
+
+def _strip_pii(profile: dict) -> dict:
+    """Remove PII fields from a profile dict before sending to LLM."""
+    return {k: v for k, v in profile.items() if k not in PII_BLOCKLIST}
 
 
 # ---------------------------------------------------------------------------
@@ -955,3 +973,97 @@ Return ONLY a JSON object: {"relevant": true} or {"relevant": false}
 
     # Fallback: check if any keyword appears
     return False
+
+
+# ---------------------------------------------------------------------------
+# AUTOAPPLY — Form field matching + custom question answering
+# ---------------------------------------------------------------------------
+
+async def match_form_fields(fields: list[dict], profile: dict) -> dict:
+    """Match form fields to candidate profile values using Flash-Lite.
+
+    Args:
+        fields: list of {label, type, options?} dicts (from scraped form)
+        profile: candidate professional profile (NO PII — already stripped by caller)
+
+    Returns:
+        dict with {label: value} mapping. Value is "NEEDS_HUMAN" for uncertain fields.
+    """
+    safe_profile = _strip_pii(profile)
+
+    context = json.dumps({
+        "fields": fields,
+        "profile": safe_profile,
+    }, ensure_ascii=False, indent=2)
+
+    content = await _call_flash_lite(
+        system=FIELD_MATCHING_PROMPT,
+        user_content=context,
+        task="autoapply_field_match",
+    )
+
+    result = _parse_json_response(content)
+    if result and isinstance(result, dict):
+        return result
+
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        logger.warning("field_matching_parse_failure", content=content[:200])
+        return {}
+
+
+async def answer_custom_question(
+    question: str,
+    field_type: str,
+    options: list[str] | None,
+    job_context: dict,
+    profile: dict,
+) -> tuple[str | None, bool, str]:
+    """Answer a custom job application question.
+
+    Args:
+        question: the question text
+        field_type: "text", "select", "radio", "checkbox", "textarea"
+        options: available options for select/radio
+        job_context: {company_name, job_title, job_url}
+        profile: candidate professional profile (NO PII)
+
+    Returns:
+        (answer, needs_human, model_used) tuple.
+        If needs_human is True, answer may be None.
+    """
+    safe_profile = _strip_pii(profile)
+
+    context = json.dumps({
+        "question": question,
+        "field_type": field_type,
+        "options": options,
+        "job_context": job_context,
+        "profile": safe_profile,
+    }, ensure_ascii=False, indent=2)
+
+    try:
+        answer = await _call_flash(
+            system=CUSTOM_QUESTION_PROMPT,
+            user_content=context,
+            task="autoapply_question",
+            response_mime_type="text/plain",
+        )
+
+        if answer.strip() == "NEEDS_HUMAN":
+            return (None, True, "flash")
+        return (answer.strip(), False, "flash")
+
+    except AIProviderOverloadedError:
+        logger.warning("autoapply_flash_overloaded_falling_back_to_sonnet")
+
+        answer = await _call_sonnet(
+            system=CUSTOM_QUESTION_PROMPT,
+            user_content=context,
+            task="autoapply_question",
+        )
+
+        if answer.strip() == "NEEDS_HUMAN":
+            return (None, True, "sonnet")
+        return (answer.strip(), False, "sonnet")

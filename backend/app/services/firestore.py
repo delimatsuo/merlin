@@ -1627,3 +1627,66 @@ class FirestoreService:
             count += 1
         logger.info("expired_jobs_cleaned", count=count)
         return count
+
+    # --- AutoApply Operations ---
+
+    async def log_autoapply_attempt(self, uid: str, log_data: dict) -> str:
+        """Log an autoapply application attempt. Returns the log document ID."""
+        log_id = str(uuid.uuid4())
+        log_data["timestamp"] = datetime.now(timezone.utc).isoformat()
+
+        doc_ref = (
+            self.db.collection("users").document(uid)
+            .collection("autoapplyLogs").document(log_id)
+        )
+        await doc_ref.set(log_data)
+        logger.info("autoapply_attempt_logged", uid=uid, log_id=log_id)
+        return log_id
+
+    async def check_daily_llm_budget(self, uid: str, limit: int = 50) -> tuple[int, bool]:
+        """Check if user has remaining daily LLM budget.
+
+        Returns (current_count, within_budget).
+        """
+        today = _brazil_today()
+        doc_ref = (
+            self.db.collection("users").document(uid)
+            .collection("autoapplyUsage").document(today)
+        )
+        doc = await doc_ref.get()
+        if not doc.exists:
+            return (0, True)
+
+        count = doc.to_dict().get("llmCallCount", 0)
+        return (count, count < limit)
+
+    async def increment_llm_usage(self, uid: str) -> int:
+        """Increment daily LLM usage counter. Returns new count."""
+        today = _brazil_today()
+        now_iso = datetime.now(timezone.utc).isoformat()
+        doc_ref = (
+            self.db.collection("users").document(uid)
+            .collection("autoapplyUsage").document(today)
+        )
+
+        transaction = self.db.transaction()
+
+        @async_transactional
+        async def update_in_transaction(txn, ref):
+            doc = await ref.get(transaction=txn)
+            if doc.exists:
+                count = doc.to_dict().get("llmCallCount", 0) + 1
+                txn.update(ref, {
+                    "llmCallCount": count,
+                    "lastCallAt": now_iso,
+                })
+                return count
+            else:
+                txn.set(ref, {
+                    "llmCallCount": 1,
+                    "lastCallAt": now_iso,
+                })
+                return 1
+
+        new_count = await update_in_transaction(transaction, doc_ref)
+        return new_count
