@@ -31,6 +31,7 @@ module.exports = {
     new CopyWebpackPlugin({
       patterns: [
         { from: "src/popup/popup.html", to: "popup.html" },
+        { from: "src/popup/popup.css", to: "popup.css" },
         { from: "src/offscreen/offscreen.html", to: "offscreen.html" },
       ],
     }),
