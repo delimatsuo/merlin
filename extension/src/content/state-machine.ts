@@ -9,7 +9,7 @@ import { detectScreen, isGupyLoggedIn, isGupyApplicationPage } from "./screens/d
 import { handleWelcome } from "./screens/welcome";
 import { handleAdditionalInfo } from "./screens/additional-info";
 import { handleCustomQuestions, type CustomQuestionsResult } from "./screens/custom-questions";
-import { handlePersonalization } from "./screens/personalization";
+import { handlePersonalization, type PersonalizationResult } from "./screens/personalization";
 import { randomDelay, waitForNavigation } from "./dom/helpers";
 import { getPiiProfile, isPiiComplete } from "../lib/pii-store";
 import { loadProfile } from "../lib/profile";
@@ -139,13 +139,21 @@ export class StateMachine {
             break;
           }
 
-          case AutoApplyStep.PERSONALIZATION:
-            // Phase 3 will implement this fully
-            await handlePersonalization();
-            this.llmCalls += 1;
+          case AutoApplyStep.PERSONALIZATION: {
+            const pResult: PersonalizationResult = await handlePersonalization();
+            if (pResult.answered) this.questionsAnswered += 1;
+            this.llmCalls += pResult.llmCalls;
             await randomDelay(1000, 2000);
-            this.transition(detectScreen());
+            // After personalization, check if we're now on the review/finish screen
+            const nextScreen = detectScreen();
+            if (nextScreen === AutoApplyStep.COMPLETE || nextScreen === AutoApplyStep.IDLE) {
+              // We're at the end — transition to REVIEW for dry-run pause
+              this.transition(AutoApplyStep.REVIEW);
+            } else {
+              this.transition(nextScreen);
+            }
             break;
+          }
 
           default: {
             // Unknown state or IDLE — try to detect
@@ -164,7 +172,11 @@ export class StateMachine {
       // Reached REVIEW state (dry-run pause)
       if (this.currentStep === AutoApplyStep.REVIEW) {
         this.broadcastStatus();
-        // Phase 3 handles the review flow
+        await this.persistState();
+        console.log("[SM] Dry-run: paused at REVIEW. Waiting for user confirmation...");
+        // The state machine stops here. The popup will show confirm/cancel.
+        // When user confirms, the popup sends CONFIRM_SUBMIT to content script,
+        // which calls sm.confirmSubmit() or sm.cancelSubmit()
       }
 
       // Reached COMPLETE
@@ -183,6 +195,39 @@ export class StateMachine {
   }
 
   stop(): void {
+    this.running = false;
+  }
+
+  async confirmSubmit(): Promise<void> {
+    if (this.currentStep !== AutoApplyStep.REVIEW) return;
+
+    console.log("[SM] User confirmed submission");
+    this.running = true;
+
+    // Find and click the finish/submit button
+    const { findFinishButton } = await import("./screens/detector");
+    const finishBtn = findFinishButton();
+
+    if (finishBtn) {
+      const { humanLikeClick, waitForNavigation } = await import("./dom/helpers");
+      await humanLikeClick(finishBtn);
+      await waitForNavigation(15000);
+    }
+
+    this.transition(AutoApplyStep.COMPLETE);
+    await this.logApplication("success");
+    this.broadcastStatus();
+    await this.clearState();
+    this.running = false;
+  }
+
+  cancelSubmit(): void {
+    if (this.currentStep !== AutoApplyStep.REVIEW) return;
+
+    console.log("[SM] User cancelled submission");
+    this.transition(AutoApplyStep.IDLE);
+    this.broadcastStatus();
+    this.clearState();
     this.running = false;
   }
 
@@ -281,17 +326,35 @@ export class StateMachine {
     await chrome.storage.session.remove(key);
   }
 
+  private extractPageContext(): { company: string; jobTitle: string } {
+    const hostname = window.location.hostname;
+    const subdomain = hostname.split(".")[0];
+    const company = subdomain !== "www" ? subdomain : "";
+
+    let jobTitle = "";
+    const headings = document.querySelectorAll("h1, h2");
+    for (let i = 0; i < headings.length; i++) {
+      const text = headings[i].textContent?.trim();
+      if (text && text.length > 5 && text.length < 200) {
+        jobTitle = text;
+        break;
+      }
+    }
+    return { company, jobTitle };
+  }
+
   private async logApplication(status: "success" | "failed" | "dry-run"): Promise<void> {
     try {
       const duration = Math.round((Date.now() - this.startTime) / 1000);
+      const { company, jobTitle } = this.extractPageContext();
       await chrome.runtime.sendMessage({
         type: "API_REQUEST",
         method: "POST",
         path: "/api/autoapply/log",
         body: {
           job_url: this.jobUrl,
-          company: "", // Will be populated from page in Phase 3
-          job_title: "", // Will be populated from page in Phase 3
+          company,
+          job_title: jobTitle,
           status,
           fields_answered: this.fieldsAnswered,
           questions_answered: this.questionsAnswered,

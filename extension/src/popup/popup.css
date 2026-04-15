@@ -360,3 +360,30 @@ body {
     transform: translateY(0);
   }
 }
+
+/* Automation status */
+#automation-card {
+  border-left: 3px solid #3b82f6;
+}
+
+.status-text {
+  font-size: 13px;
+  color: #4b5563;
+  padding: 8px 0;
+}
+
+/* Review panel */
+.review-text {
+  font-size: 13px;
+  color: #4b5563;
+  margin: 8px 0 12px;
+}
+
+.review-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.review-actions .btn {
+  flex: 1;
+}

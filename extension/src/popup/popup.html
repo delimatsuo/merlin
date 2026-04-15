@@ -190,10 +190,24 @@
         Iniciar candidatura
       </button>
 
-      <!-- Status area -->
-      <div id="status-area" class="status-area" style="display:none">
-        <div id="status-step" class="status-step"></div>
-        <div id="status-error" class="status-error" style="display:none"></div>
+      <!-- Automation Status -->
+      <div class="card" id="automation-card" style="display: none;">
+        <div class="card-header">
+          <span class="card-label">Status da candidatura</span>
+        </div>
+        <div id="automation-status" class="status-text"></div>
+      </div>
+
+      <!-- Review Panel (shown during dry-run pause) -->
+      <div id="review-panel" class="card" style="display: none;">
+        <div class="card-header">
+          <span class="card-label">Revisar e enviar</span>
+        </div>
+        <p class="review-text">A candidatura esta pronta para envio. Revise as respostas na pagina e confirme.</p>
+        <div class="review-actions">
+          <button id="confirm-submit" class="btn btn-primary">Enviar candidatura</button>
+          <button id="cancel-submit" class="btn btn-secondary">Cancelar</button>
+        </div>
       </div>
 
       <!-- Daily usage -->

@@ -184,16 +184,15 @@ function updatePreChecks(pii: PiiProfile | null): void {
   const piiOk = isPiiComplete(pii);
   const allOk = piiOk && professionalProfileLoaded;
 
-  // Phase 1: start button is always disabled (dry-run mode, not wired yet)
-  startBtn.disabled = true;
+  startBtn.disabled = !allOk;
   startBtn.title = !piiOk
     ? "Complete seus dados pessoais primeiro"
     : !professionalProfileLoaded
       ? "Configure seu perfil profissional no merlincv.com"
-      : "Disponivel em breve (modo dry-run)";
+      : "Iniciar candidatura automatica";
 
   if (allOk) {
-    startBtn.textContent = "Iniciar candidatura (em breve)";
+    startBtn.textContent = "Iniciar candidatura";
   }
 }
 
@@ -361,6 +360,71 @@ document.getElementById("toggle-pii-form")?.addEventListener("click", async () =
   togglePiiForm(!isVisible);
 });
 
+// Start auto-apply
+document.getElementById("start-btn")?.addEventListener("click", async () => {
+  const btn = document.getElementById("start-btn") as HTMLButtonElement;
+  btn.disabled = true;
+  btn.textContent = "Iniciando...";
+
+  try {
+    // Send START_AUTOAPPLY to content script in the active tab
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) {
+      showError("Nenhuma aba ativa encontrada.");
+      btn.disabled = false;
+      btn.textContent = "Iniciar candidatura";
+      return;
+    }
+
+    const response = await chrome.tabs.sendMessage(tab.id, { type: "START_AUTOAPPLY" });
+    if (response?.success) {
+      showSuccess("Candidatura iniciada!");
+      btn.textContent = "Em andamento...";
+      // Show automation status card
+      const automationCard = document.getElementById("automation-card");
+      if (automationCard) automationCard.style.display = "block";
+      // Start listening for status updates
+      startStatusListener();
+    } else {
+      showError(response?.error || "Erro ao iniciar.");
+      btn.disabled = false;
+      btn.textContent = "Iniciar candidatura";
+    }
+  } catch {
+    showError("Erro: a pagina pode nao ser do Gupy.");
+    btn.disabled = false;
+    btn.textContent = "Iniciar candidatura";
+  }
+});
+
+// Confirm submit (review flow)
+document.getElementById("confirm-submit")?.addEventListener("click", async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab?.id) {
+    await chrome.tabs.sendMessage(tab.id, { type: "CONFIRM_SUBMIT" });
+    showSuccess("Candidatura enviada!");
+    const reviewPanel = document.getElementById("review-panel");
+    if (reviewPanel) reviewPanel.style.display = "none";
+  }
+});
+
+// Cancel submit (review flow)
+document.getElementById("cancel-submit")?.addEventListener("click", async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab?.id) {
+    await chrome.tabs.sendMessage(tab.id, { type: "CANCEL_SUBMIT" });
+    showToast("Candidatura cancelada.", "error");
+    const reviewPanel = document.getElementById("review-panel");
+    if (reviewPanel) reviewPanel.style.display = "none";
+
+    const startBtn = document.getElementById("start-btn") as HTMLButtonElement | null;
+    if (startBtn) {
+      startBtn.disabled = false;
+      startBtn.textContent = "Iniciar candidatura";
+    }
+  }
+});
+
 // PII form submission
 document.getElementById("pii-form")?.addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -390,3 +454,67 @@ document.getElementById("pii-form")?.addEventListener("submit", async (e) => {
   togglePiiForm(false);
   showSuccess("Perfil salvo com sucesso!");
 });
+
+// --- Status Listener ---
+
+function startStatusListener(): void {
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message.type === "STATUS_UPDATE") {
+      updateStatusDisplay(message);
+    }
+  });
+}
+
+function updateStatusDisplay(status: {
+  step: string;
+  error?: string;
+  detail?: string;
+  fieldsAnswered?: number;
+  questionsAnswered?: number;
+}): void {
+  const statusEl = document.getElementById("automation-status");
+  const reviewPanel = document.getElementById("review-panel");
+  const automationCard = document.getElementById("automation-card");
+
+  const stepNames: Record<string, string> = {
+    PRE_CHECK: "Verificando pre-requisitos...",
+    WELCOME: "Tela de boas-vindas...",
+    ADDITIONAL_INFO: "Preenchendo informacoes...",
+    CUSTOM_QUESTIONS_DETECT: "Detectando perguntas...",
+    CUSTOM_QUESTIONS_FILL: "Respondendo perguntas...",
+    PERSONALIZATION: "Gerando personalizacao...",
+    REVIEW: "Aguardando confirmacao",
+    COMPLETE: "Candidatura finalizada!",
+    ERROR: `Erro: ${status.detail || status.error || "Desconhecido"}`,
+  };
+
+  if (automationCard) {
+    automationCard.style.display = "block";
+  }
+
+  if (statusEl) {
+    let text = stepNames[status.step] || status.step;
+    if (status.fieldsAnswered || status.questionsAnswered) {
+      text += ` (${status.fieldsAnswered || 0} campos, ${status.questionsAnswered || 0} perguntas)`;
+    }
+    statusEl.textContent = text;
+    statusEl.style.display = "block";
+  }
+
+  // Show review panel when in REVIEW state
+  if (reviewPanel) {
+    reviewPanel.style.display = status.step === "REVIEW" ? "block" : "none";
+  }
+
+  // Update start button state
+  const startBtn = document.getElementById("start-btn") as HTMLButtonElement | null;
+  if (startBtn) {
+    if (status.step === "COMPLETE") {
+      startBtn.disabled = false;
+      startBtn.textContent = "Iniciar candidatura";
+    } else if (status.step === "ERROR") {
+      startBtn.disabled = false;
+      startBtn.textContent = "Tentar novamente";
+    }
+  }
+}
