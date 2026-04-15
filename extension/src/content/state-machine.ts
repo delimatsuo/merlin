@@ -5,14 +5,15 @@
  */
 
 import { AutoApplyStep, ErrorType } from "../lib/types";
-import { detectScreen, isGupyLoggedIn, isGupyApplicationPage } from "./screens/detector";
+import { detectScreen, isGupyLoggedIn, isGupyApplicationPage, findFinishButton } from "./screens/detector";
 import { handleWelcome } from "./screens/welcome";
 import { handleAdditionalInfo } from "./screens/additional-info";
 import { handleCustomQuestions, type CustomQuestionsResult } from "./screens/custom-questions";
 import { handlePersonalization, type PersonalizationResult } from "./screens/personalization";
-import { randomDelay, waitForNavigation } from "./dom/helpers";
+import { randomDelay, waitForNavigation, humanLikeClick } from "./dom/helpers";
 import { getPiiProfile, isPiiComplete } from "../lib/pii-store";
 import { loadProfile } from "../lib/profile";
+import { getMode } from "../lib/settings";
 
 const STATE_KEY_PREFIX = "autoapply_state_";
 
@@ -22,6 +23,7 @@ export class StateMachine {
   private errorDetail: string | null = null;
   private jobUrl: string = "";
   private running: boolean = false;
+  private mode: "dry-run" | "auto" = "dry-run";
   private fieldsAnswered: number = 0;
   private questionsAnswered: number = 0;
   private llmCalls: number = 0;
@@ -72,6 +74,10 @@ export class StateMachine {
     try {
       // Restore state if resuming
       await this.restoreState();
+
+      // Load mode setting
+      this.mode = await getMode();
+      console.log(`[SM] Running in ${this.mode} mode`);
 
       // If starting fresh, begin with pre-checks
       if (this.currentStep === AutoApplyStep.IDLE) {
@@ -147,8 +153,13 @@ export class StateMachine {
             // After personalization, check if we're now on the review/finish screen
             const nextScreen = detectScreen();
             if (nextScreen === AutoApplyStep.COMPLETE || nextScreen === AutoApplyStep.IDLE) {
-              // We're at the end — transition to REVIEW for dry-run pause
-              this.transition(AutoApplyStep.REVIEW);
+              if (this.mode === "auto") {
+                // Auto mode: submit directly
+                await this.autoSubmit();
+              } else {
+                // Dry-run: pause for review
+                this.transition(AutoApplyStep.REVIEW);
+              }
             } else {
               this.transition(nextScreen);
             }
@@ -204,12 +215,8 @@ export class StateMachine {
     console.log("[SM] User confirmed submission");
     this.running = true;
 
-    // Find and click the finish/submit button
-    const { findFinishButton } = await import("./screens/detector");
     const finishBtn = findFinishButton();
-
     if (finishBtn) {
-      const { humanLikeClick, waitForNavigation } = await import("./dom/helpers");
       await humanLikeClick(finishBtn);
       await waitForNavigation(15000);
     }
@@ -219,6 +226,21 @@ export class StateMachine {
     this.broadcastStatus();
     await this.clearState();
     this.running = false;
+  }
+
+  private async autoSubmit(): Promise<void> {
+    console.log("[SM] Auto mode: submitting directly");
+
+    const finishBtn = findFinishButton();
+    if (finishBtn) {
+      await humanLikeClick(finishBtn);
+      await waitForNavigation(15000);
+    }
+
+    this.transition(AutoApplyStep.COMPLETE);
+    await this.logApplication("success");
+    this.broadcastStatus();
+    await this.clearState();
   }
 
   cancelSubmit(): void {

@@ -310,6 +310,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // 5. Update pre-check status
     updatePreChecks(pii);
+
+    // 6. Load mode setting
+    await loadModeSetting();
   } catch {
     showSection("login-section");
   }
@@ -453,6 +456,51 @@ document.getElementById("pii-form")?.addEventListener("submit", async (e) => {
   updatePreChecks(pii);
   togglePiiForm(false);
   showSuccess("Perfil salvo com sucesso!");
+});
+
+// --- Mode Toggle ---
+
+async function loadModeSetting(): Promise<void> {
+  const { getSettings } = await import("../lib/settings");
+  const settings = await getSettings();
+  const toggle = document.getElementById("mode-toggle") as HTMLInputElement | null;
+
+  if (toggle) {
+    toggle.checked = settings.mode === "auto";
+  }
+  updateModeDisplay(settings.mode === "auto");
+}
+
+function updateModeDisplay(isAuto: boolean): void {
+  const label = document.getElementById("mode-label");
+  const desc = document.getElementById("mode-desc");
+
+  if (label) label.textContent = isAuto ? "Modo: Auto" : "Modo: Dry-run";
+  if (desc) desc.textContent = isAuto
+    ? "Candidaturas enviadas automaticamente"
+    : "Pausa antes de enviar para revisão";
+}
+
+document.getElementById("mode-toggle")?.addEventListener("change", async (e) => {
+  const toggle = e.target as HTMLInputElement;
+  const newMode = toggle.checked ? "auto" : "dry-run";
+
+  if (newMode === "auto") {
+    // Confirmation dialog
+    const confirmed = confirm(
+      "Tem certeza?\n\nNo modo Auto, as candidaturas serão enviadas automaticamente sem pausa para revisão.\n\nVocê não poderá revisar as respostas antes do envio."
+    );
+
+    if (!confirmed) {
+      toggle.checked = false;
+      return;
+    }
+  }
+
+  const { saveSettings } = await import("../lib/settings");
+  await saveSettings({ mode: newMode });
+  updateModeDisplay(toggle.checked);
+  showSuccess(newMode === "auto" ? "Modo Auto ativado" : "Modo Dry-run ativado");
 });
 
 // --- Status Listener ---

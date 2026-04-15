@@ -179,10 +179,16 @@
         <p id="profile-detail" class="card-detail">Carregando perfil do Merlin...</p>
       </div>
 
-      <!-- Mode indicator -->
-      <div class="mode-bar">
-        <span class="mode-label">Modo: Dry-run</span>
-        <span class="mode-desc">Simula sem submeter</span>
+      <!-- Mode toggle -->
+      <div class="mode-bar" id="mode-bar">
+        <div class="mode-toggle">
+          <span class="mode-label" id="mode-label">Modo: Dry-run</span>
+          <label class="switch">
+            <input type="checkbox" id="mode-toggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <span class="mode-desc" id="mode-desc">Pausa antes de enviar para revisão</span>
       </div>
 
       <!-- Start button -->

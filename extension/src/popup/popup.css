@@ -289,6 +289,56 @@ body {
   color: #3b82f6;
 }
 
+/* Mode toggle switch */
+.mode-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: #d1d5db;
+  transition: 0.3s;
+  border-radius: 22px;
+}
+
+.slider::before {
+  content: "";
+  position: absolute;
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.3s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: #f59e0b;
+}
+
+input:checked + .slider::before {
+  transform: translateX(18px);
+}
+
 /* Status area */
 .status-area {
   padding: 8px 10px;
