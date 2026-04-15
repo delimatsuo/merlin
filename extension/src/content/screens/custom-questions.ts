@@ -12,12 +12,14 @@ import { findNextButton } from "./detector";
 import { findBestOption } from "../field-matcher";
 import { apiPost } from "../../lib/api-client";
 import { getCachedProfile } from "../../lib/profile";
+import { detectValidationErrors, type ValidationError } from "../dom/errors";
 
 export interface CustomQuestionsResult {
   answered: number;
   skipped: number;
   llmCalls: number;
   needsHuman: string[];  // Labels of questions that need manual input
+  validationErrors: ValidationError[];
 }
 
 /**
@@ -38,7 +40,7 @@ export async function handleCustomQuestions(): Promise<CustomQuestionsResult> {
       await humanLikeClick(nextBtn);
       await waitForNavigation(15000);
     }
-    return { answered: 0, skipped: 0, llmCalls: 0, needsHuman: [] };
+    return { answered: 0, skipped: 0, llmCalls: 0, needsHuman: [], validationErrors: [] };
   }
 
   const jobUrl = window.location.href;
@@ -121,7 +123,7 @@ export async function handleCustomQuestions(): Promise<CustomQuestionsResult> {
 
   // If there are needs_human fields, DON'T click next — let the state machine handle it
   if (needsHuman.length > 0) {
-    return { answered, skipped, llmCalls, needsHuman };
+    return { answered, skipped, llmCalls, needsHuman, validationErrors: [] };
   }
 
   // All answered — click next
@@ -132,7 +134,14 @@ export async function handleCustomQuestions(): Promise<CustomQuestionsResult> {
     await waitForNavigation(15000);
   }
 
-  return { answered, skipped, llmCalls, needsHuman };
+  // After clicking next, check for validation errors
+  const validationErrors = await detectValidationErrors();
+  if (validationErrors.length > 0) {
+    console.warn("[CustomQuestions] Validation errors:", validationErrors);
+    return { answered, skipped, llmCalls, needsHuman, validationErrors };
+  }
+
+  return { answered, skipped, llmCalls, needsHuman, validationErrors: [] };
 }
 
 /**

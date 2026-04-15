@@ -7,7 +7,7 @@
 import { AutoApplyStep, ErrorType } from "../lib/types";
 import { detectScreen, isGupyLoggedIn, isGupyApplicationPage, findFinishButton } from "./screens/detector";
 import { handleWelcome } from "./screens/welcome";
-import { handleAdditionalInfo } from "./screens/additional-info";
+import { handleAdditionalInfo, type AdditionalInfoResult } from "./screens/additional-info";
 import { handleCustomQuestions, type CustomQuestionsResult } from "./screens/custom-questions";
 import { handlePersonalization, type PersonalizationResult } from "./screens/personalization";
 import { randomDelay, waitForNavigation, humanLikeClick } from "./dom/helpers";
@@ -28,6 +28,7 @@ export class StateMachine {
   private questionsAnswered: number = 0;
   private llmCalls: number = 0;
   private startTime: number = 0;
+  private errors: string[] = [];
 
   getStep(): AutoApplyStep {
     return this.currentStep;
@@ -54,6 +55,9 @@ export class StateMachine {
     this.currentStep = AutoApplyStep.ERROR;
     this.errorType = errorType;
     this.errorDetail = detail || null;
+    if (detail) {
+      this.errors.push(`${errorType}: ${detail}`);
+    }
   }
 
   reset(): void {
@@ -117,9 +121,19 @@ export class StateMachine {
             break;
 
           case AutoApplyStep.ADDITIONAL_INFO: {
-            const infoResult = await handleAdditionalInfo();
+            const infoResult: AdditionalInfoResult = await handleAdditionalInfo();
             this.fieldsAnswered += infoResult.filled;
             this.llmCalls += infoResult.llmCalls;
+
+            if (infoResult.validationErrors.length > 0) {
+              const firstError = infoResult.validationErrors[0];
+              this.transitionToError(
+                ErrorType.VALIDATION_ERROR,
+                `Erro em "${firstError.field}": ${firstError.message}`,
+              );
+              break;
+            }
+
             await randomDelay(1000, 2000);
             // Click next and wait for navigation is handled inside handleAdditionalInfo
             this.transition(detectScreen());
@@ -131,6 +145,15 @@ export class StateMachine {
             const qResult: CustomQuestionsResult = await handleCustomQuestions();
             this.questionsAnswered += qResult.answered;
             this.llmCalls += qResult.llmCalls;
+
+            if (qResult.validationErrors.length > 0) {
+              const firstError = qResult.validationErrors[0];
+              this.transitionToError(
+                ErrorType.VALIDATION_ERROR,
+                `Erro em "${firstError.field}": ${firstError.message}`,
+              );
+              break;
+            }
 
             if (qResult.needsHuman.length > 0) {
               this.transitionToError(
@@ -381,7 +404,7 @@ export class StateMachine {
           fields_answered: this.fieldsAnswered,
           questions_answered: this.questionsAnswered,
           llm_calls: this.llmCalls,
-          errors: [],
+          errors: this.errors,
           duration_seconds: duration,
         },
       });

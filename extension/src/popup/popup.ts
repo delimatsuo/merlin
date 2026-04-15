@@ -521,31 +521,51 @@ function updateStatusDisplay(status: {
   questionsAnswered?: number;
 }): void {
   const statusEl = document.getElementById("automation-status");
-  const reviewPanel = document.getElementById("review-panel");
   const automationCard = document.getElementById("automation-card");
+  const reviewPanel = document.getElementById("review-panel");
 
-  const stepNames: Record<string, string> = {
-    PRE_CHECK: "Verificando pre-requisitos...",
-    WELCOME: "Tela de boas-vindas...",
-    ADDITIONAL_INFO: "Preenchendo informacoes...",
-    CUSTOM_QUESTIONS_DETECT: "Detectando perguntas...",
-    CUSTOM_QUESTIONS_FILL: "Respondendo perguntas...",
-    PERSONALIZATION: "Gerando personalizacao...",
-    REVIEW: "Aguardando confirmacao",
-    COMPLETE: "Candidatura finalizada!",
-    ERROR: `Erro: ${status.detail || status.error || "Desconhecido"}`,
-  };
-
-  if (automationCard) {
-    automationCard.style.display = "block";
-  }
+  // Show automation card
+  if (automationCard) automationCard.style.display = "block";
 
   if (statusEl) {
-    let text = stepNames[status.step] || status.step;
-    if (status.fieldsAnswered || status.questionsAnswered) {
-      text += ` (${status.fieldsAnswered || 0} campos, ${status.questionsAnswered || 0} perguntas)`;
+    const stepNames: Record<string, string> = {
+      PRE_CHECK: "Verificando pre-requisitos...",
+      WELCOME: "Tela de boas-vindas...",
+      ADDITIONAL_INFO: "Preenchendo informacoes...",
+      CUSTOM_QUESTIONS_DETECT: "Detectando perguntas...",
+      CUSTOM_QUESTIONS_FILL: "Respondendo perguntas...",
+      PERSONALIZATION: "Gerando personalizacao...",
+      REVIEW: "Aguardando confirmacao",
+      COMPLETE: "Candidatura finalizada!",
+      ERROR: "",
+    };
+
+    if (status.step === "ERROR") {
+      const errorMessages: Record<string, string> = {
+        VALIDATION_ERROR: "Erro de validacao no formulario",
+        NEEDS_HUMAN: "Pergunta precisa de resposta manual",
+        BUDGET_EXCEEDED: "Limite diario de IA atingido",
+        LLM_FAILED: "Erro no servico de IA",
+        AUTH_REQUIRED: "Faca login novamente",
+        GUPY_LOGIN_REQUIRED: "Faca login no Gupy",
+        TIMEOUT: "Tempo esgotado aguardando a pagina",
+      };
+
+      const errorBase = errorMessages[status.error || ""] || "Erro desconhecido";
+      statusEl.textContent = `\u2715 ${errorBase}`;
+      if (status.detail) {
+        statusEl.textContent += `: ${status.detail}`;
+      }
+      statusEl.style.color = "#dc2626";
+    } else {
+      statusEl.textContent = stepNames[status.step] || status.step;
+      statusEl.style.color = status.step === "COMPLETE" ? "#16a34a" : "#4b5563";
     }
-    statusEl.textContent = text;
+
+    if (status.fieldsAnswered || status.questionsAnswered) {
+      statusEl.textContent += ` (${status.fieldsAnswered || 0} campos, ${status.questionsAnswered || 0} perguntas)`;
+    }
+
     statusEl.style.display = "block";
   }
 
@@ -554,15 +574,18 @@ function updateStatusDisplay(status: {
     reviewPanel.style.display = status.step === "REVIEW" ? "block" : "none";
   }
 
-  // Update start button state
+  // Update start button
   const startBtn = document.getElementById("start-btn") as HTMLButtonElement | null;
   if (startBtn) {
     if (status.step === "COMPLETE") {
       startBtn.disabled = false;
-      startBtn.textContent = "Iniciar candidatura";
+      startBtn.textContent = "Iniciar outra candidatura";
     } else if (status.step === "ERROR") {
       startBtn.disabled = false;
       startBtn.textContent = "Tentar novamente";
+    } else if (status.step !== "REVIEW") {
+      startBtn.disabled = true;
+      startBtn.textContent = "Em andamento...";
     }
   }
 }

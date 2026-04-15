@@ -15,11 +15,13 @@ import {
 } from "../dom/helpers";
 import { findNextButton } from "./detector";
 import { matchAndFillFields, findBestOption } from "../field-matcher";
+import { detectValidationErrors, type ValidationError } from "../dom/errors";
 
-interface AdditionalInfoResult {
+export interface AdditionalInfoResult {
   filled: number;
   skipped: number;
   llmCalls: number;
+  validationErrors: ValidationError[];
 }
 
 export async function handleAdditionalInfo(): Promise<AdditionalInfoResult> {
@@ -35,7 +37,7 @@ export async function handleAdditionalInfo(): Promise<AdditionalInfoResult> {
       await humanLikeClick(nextBtn);
       await waitForNavigation(15000);
     }
-    return { filled: 0, skipped: 0, llmCalls: 0 };
+    return { filled: 0, skipped: 0, llmCalls: 0, validationErrors: [] };
   }
 
   // Run the 3-tier field matcher
@@ -74,7 +76,14 @@ export async function handleAdditionalInfo(): Promise<AdditionalInfoResult> {
     await waitForNavigation(15000);
   }
 
-  return { filled, skipped, llmCalls };
+  // After clicking next, check for validation errors
+  const validationErrors = await detectValidationErrors();
+  if (validationErrors.length > 0) {
+    console.warn("[AdditionalInfo] Validation errors:", validationErrors);
+    return { filled, skipped, llmCalls, validationErrors };
+  }
+
+  return { filled, skipped, llmCalls, validationErrors: [] };
 }
 
 async function fillField(
