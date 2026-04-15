@@ -82,6 +82,8 @@ async def ai_overloaded_handler(request: Request, exc: AIProviderOverloadedError
 
 # CORS — explicit methods and headers
 origins = settings.allowed_origins.split(",")
+if settings.chrome_extension_origin:
+    origins.append(settings.chrome_extension_origin)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -136,6 +138,7 @@ from app.api.admin import router as admin_router
 from app.api.linkedin import router as linkedin_router
 from app.api.feedback import router as feedback_router
 from app.api.jobs import router as jobs_router
+from app.api.autoapply import router as autoapply_router
 
 app.include_router(resume_router, prefix="/api/resume", tags=["resume"])
 app.include_router(voice_router, prefix="/api/voice", tags=["voice"])
@@ -149,6 +152,7 @@ app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
 app.include_router(linkedin_router, prefix="/api/linkedin", tags=["linkedin"])
 app.include_router(feedback_router, prefix="/api/feedback", tags=["feedback"])
 app.include_router(jobs_router, prefix="/api/jobs", tags=["jobs"])
+app.include_router(autoapply_router, prefix="/api/autoapply", tags=["autoapply"])
 
 
 @app.on_event("startup")
