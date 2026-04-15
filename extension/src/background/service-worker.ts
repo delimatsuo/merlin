@@ -18,77 +18,139 @@ const IS_DEV = !("update_url" in chrome.runtime.getManifest());
 const API_BASE = IS_DEV
   ? "http://localhost:8000"
   : "https://merlin-backend-531233742939.southamerica-east1.run.app";
+const FIREBASE_API_KEY = "AIzaSyAPhPf4qzo94WplQwQl9gbjauBbFOi7J3w";
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000; // Refresh 5 min before expiry
 const TOKEN_LIFETIME_MS = 60 * 60 * 1000; // Firebase tokens last 1 hour
 
-// --- Offscreen Document Management ---
+// --- Auth Functions (chrome.identity → Firebase) ---
 
-let offscreenCreated = false;
+/**
+ * Sign in using chrome.identity.getAuthToken (Google OAuth via manifest oauth2 config)
+ * then exchange the Google token for a Firebase ID token.
+ */
+async function signIn(): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Step 1: Get Google OAuth token via chrome.identity
+    const googleToken = await new Promise<string>((resolve, reject) => {
+      chrome.identity.getAuthToken({ interactive: true }, (result: any) => {
+        const token = typeof result === "string" ? result : result?.token;
+        if (chrome.runtime.lastError || !token) {
+          reject(new Error(chrome.runtime.lastError?.message || "Auth cancelled"));
+        } else {
+          resolve(token);
+        }
+      });
+    });
 
-async function ensureOffscreen(): Promise<void> {
-  if (offscreenCreated) return;
+    // Step 2: Exchange Google token for Firebase ID token
+    const firebaseResponse = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=${FIREBASE_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          postBody: `access_token=${googleToken}&providerId=google.com`,
+          requestUri: `https://${chrome.runtime.id}.chromiumapp.org`,
+          returnIdpCredential: true,
+          returnSecureToken: true,
+        }),
+      }
+    );
 
-  // Check if already exists
-  const existingContexts = await (chrome.runtime as any).getContexts({
-    contextTypes: ["OFFSCREEN_DOCUMENT"],
-  });
+    if (!firebaseResponse.ok) {
+      const err = await firebaseResponse.json();
+      throw new Error(err.error?.message || "Firebase auth failed");
+    }
 
-  if (existingContexts.length > 0) {
-    offscreenCreated = true;
-    return;
+    const firebaseData = await firebaseResponse.json();
+
+    authState = {
+      token: firebaseData.idToken,
+      tokenExpiry: Date.now() + TOKEN_LIFETIME_MS,
+      user: {
+        uid: firebaseData.localId,
+        email: firebaseData.email || null,
+        displayName: firebaseData.displayName || null,
+      },
+    };
+    chrome.storage.session.set({ authState });
+
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
-
-  await chrome.offscreen.createDocument({
-    url: "dist/offscreen.html",
-    reasons: [chrome.offscreen.Reason.DOM_PARSER],
-    justification: "Firebase Auth requires DOM for popup sign-in",
-  });
-  offscreenCreated = true;
 }
 
-// --- Auth Functions ---
-
-async function signIn(): Promise<{ success: boolean; error?: string }> {
-  await ensureOffscreen();
-  return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ target: "offscreen", type: "SIGN_IN" }, (response) => {
-      if (chrome.runtime.lastError) {
-        resolve({ success: false, error: chrome.runtime.lastError.message || "Offscreen communication failed" });
-        return;
+async function signOutUser(): Promise<void> {
+  // Revoke the Google token
+  if (authState.token) {
+    chrome.identity.getAuthToken({ interactive: false }, (result: any) => {
+      const token = typeof result === "string" ? result : result?.token;
+      if (token) {
+        chrome.identity.removeCachedAuthToken({ token });
       }
-      if (response?.success) {
-        authState = {
-          token: response.token,
-          tokenExpiry: Date.now() + TOKEN_LIFETIME_MS,
-          user: { uid: "", email: response.email, displayName: response.displayName },
-        };
-        chrome.storage.session.set({ authState });
-      }
-      resolve(response || { success: false, error: "No response from offscreen" });
     });
-  });
+  }
+  authState = { token: null, tokenExpiry: 0, user: null };
+  chrome.storage.session.set({ authState });
 }
 
 async function getValidToken(): Promise<string | null> {
-  // Check if token needs refresh
+  // Check if token is still valid
   if (authState.token && Date.now() < authState.tokenExpiry - TOKEN_REFRESH_BUFFER_MS) {
     return authState.token;
   }
 
-  // Token expired or about to expire — refresh
-  await ensureOffscreen();
-  return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ target: "offscreen", type: "GET_TOKEN", forceRefresh: true }, (response) => {
-      if (response?.success && response.token) {
-        authState.token = response.token;
-        authState.tokenExpiry = Date.now() + TOKEN_LIFETIME_MS;
-        chrome.storage.session.set({ authState });
-        resolve(response.token);
-      } else {
-        resolve(null);
-      }
+  // Token expired — get a fresh Google token and re-exchange
+  try {
+    // Force remove cached token so we get a fresh one
+    const oldGoogleToken = await new Promise<string | undefined>((resolve) => {
+      chrome.identity.getAuthToken({ interactive: false }, (result: any) => {
+        resolve(typeof result === "string" ? result : result?.token);
+      });
     });
-  });
+    if (oldGoogleToken) {
+      await new Promise<void>((resolve) => {
+        chrome.identity.removeCachedAuthToken({ token: oldGoogleToken }, resolve);
+      });
+    }
+
+    // Get new Google token
+    const googleToken = await new Promise<string>((resolve, reject) => {
+      chrome.identity.getAuthToken({ interactive: false }, (result: any) => {
+        const token = typeof result === "string" ? result : result?.token;
+        if (chrome.runtime.lastError || !token) {
+          reject(new Error("Token refresh failed"));
+        } else {
+          resolve(token);
+        }
+      });
+    });
+
+    // Exchange for Firebase token
+    const firebaseResponse = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=${FIREBASE_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          postBody: `access_token=${googleToken}&providerId=google.com`,
+          requestUri: `https://${chrome.runtime.id}.chromiumapp.org`,
+          returnSecureToken: true,
+        }),
+      }
+    );
+
+    if (!firebaseResponse.ok) return null;
+
+    const data = await firebaseResponse.json();
+    authState.token = data.idToken;
+    authState.tokenExpiry = Date.now() + TOKEN_LIFETIME_MS;
+    chrome.storage.session.set({ authState });
+    return data.idToken;
+  } catch {
+    return null;
+  }
 }
 
 // --- API Proxy ---
@@ -160,21 +222,6 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 // --- Message Handler ---
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  // Ignore messages targeted at the offscreen document
-  if (message.target === "offscreen") return false;
-
-  // Auth state change from offscreen
-  if (message.type === "AUTH_STATE_CHANGED") {
-    if (message.user) {
-      authState.user = message.user;
-      chrome.storage.session.set({ authState });
-    } else {
-      authState = { token: null, tokenExpiry: 0, user: null };
-      chrome.storage.session.set({ authState });
-    }
-    return;
-  }
-
   // From popup or content script
   const handle = async () => {
     switch (message.type) {
@@ -182,10 +229,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return signIn();
 
       case "SIGN_OUT":
-        await ensureOffscreen();
-        return new Promise((resolve) => {
-          chrome.runtime.sendMessage({ target: "offscreen", type: "SIGN_OUT" }, resolve);
-        });
+        await signOutUser();
+        return { success: true };
 
       case "GET_AUTH_STATE":
         return { user: authState.user, isAuthenticated: !!authState.token };
