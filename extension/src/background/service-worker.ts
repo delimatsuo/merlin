@@ -245,8 +245,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         await signOutUser();
         return { success: true };
 
-      case "GET_AUTH_STATE":
-        return { user: authState.user, isAuthenticated: !!authState.token };
+      case "GET_AUTH_STATE": {
+        // Read directly from storage to avoid race with SW startup restore
+        const stored = await chrome.storage.session.get("authState");
+        const state = (stored.authState || authState) as AuthState;
+        // Also sync in-memory state if it was stale
+        if (state.token && !authState.token) {
+          authState = state;
+        }
+        return { user: state.user, isAuthenticated: !!state.token };
+      }
 
       case "API_REQUEST":
         return apiRequest(message.method, message.path, message.body);
