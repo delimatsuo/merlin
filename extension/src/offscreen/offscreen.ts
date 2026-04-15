@@ -1,8 +1,10 @@
 import { signIn, getIdToken, onAuthChange, auth } from "../lib/firebase-auth";
 import { signOut } from "firebase/auth";
 
-// Listen for messages from the service worker
+// Listen for messages from the service worker (only those targeted at us)
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message.target !== "offscreen") return false;
+
   if (message.type === "SIGN_IN") {
     signIn()
       .then(async (user) => {

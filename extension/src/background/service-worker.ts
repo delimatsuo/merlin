@@ -51,14 +51,17 @@ async function ensureOffscreen(): Promise<void> {
 async function signIn(): Promise<{ success: boolean; error?: string }> {
   await ensureOffscreen();
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ type: "SIGN_IN" }, (response) => {
+    chrome.runtime.sendMessage({ target: "offscreen", type: "SIGN_IN" }, (response) => {
+      if (chrome.runtime.lastError) {
+        resolve({ success: false, error: chrome.runtime.lastError.message || "Offscreen communication failed" });
+        return;
+      }
       if (response?.success) {
         authState = {
           token: response.token,
           tokenExpiry: Date.now() + TOKEN_LIFETIME_MS,
           user: { uid: "", email: response.email, displayName: response.displayName },
         };
-        // Store in session storage
         chrome.storage.session.set({ authState });
       }
       resolve(response || { success: false, error: "No response from offscreen" });
@@ -75,7 +78,7 @@ async function getValidToken(): Promise<string | null> {
   // Token expired or about to expire — refresh
   await ensureOffscreen();
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ type: "GET_TOKEN", forceRefresh: true }, (response) => {
+    chrome.runtime.sendMessage({ target: "offscreen", type: "GET_TOKEN", forceRefresh: true }, (response) => {
       if (response?.success && response.token) {
         authState.token = response.token;
         authState.tokenExpiry = Date.now() + TOKEN_LIFETIME_MS;
@@ -157,6 +160,9 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 // --- Message Handler ---
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // Ignore messages targeted at the offscreen document
+  if (message.target === "offscreen") return false;
+
   // Auth state change from offscreen
   if (message.type === "AUTH_STATE_CHANGED") {
     if (message.user) {
@@ -178,7 +184,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case "SIGN_OUT":
         await ensureOffscreen();
         return new Promise((resolve) => {
-          chrome.runtime.sendMessage({ type: "SIGN_OUT" }, resolve);
+          chrome.runtime.sendMessage({ target: "offscreen", type: "SIGN_OUT" }, resolve);
         });
 
       case "GET_AUTH_STATE":
