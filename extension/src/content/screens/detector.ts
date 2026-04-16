@@ -105,11 +105,27 @@ function isWelcomeScreen(): boolean {
     if (findElementByText("button, a", text)) return true;
   }
 
+  // Look for "Continue" button (confirmation page)
+  if (findElementByText("button, a", "continue") || findElementByText("button, a", "continuar")) {
+    // Only if it's not a form page (avoid matching "Save and continue")
+    const hasFormInputs = document.querySelectorAll("input[type='text'], textarea, input[type='radio']").length;
+    if (hasFormInputs < 2) return true;
+  }
+
+  // Look for "Answer now" / "Responder agora" button (gateway before custom questions)
+  for (const text of SELECTORS.buttonText.answerNow) {
+    if (findElementByText("button, a", text)) return true;
+  }
+
   // Or check URL for job listing page
   const isJobPage = /\/candidate\/job\/\d+/.test(window.location.pathname) &&
                     !window.location.pathname.includes("/apply");
+  if (isJobPage) return true;
 
-  return isJobPage;
+  // Job posting page (e.g., /jobs/12345)
+  if (/\/jobs\/\d+/.test(window.location.pathname)) return true;
+
+  return false;
 }
 
 /**
@@ -133,7 +149,7 @@ export function isGupyApplicationPage(): boolean {
   const hostname = window.location.hostname;
   const pathname = window.location.pathname;
   return hostname.endsWith("gupy.io") &&
-         (pathname.includes("/candidate/job/") || pathname.includes("/candidates/applications/") || pathname.includes("/apply"));
+         (pathname.includes("/candidate/job/") || pathname.includes("/candidates/applications/") || pathname.includes("/apply") || pathname.includes("/jobs/"));
 }
 
 /**
