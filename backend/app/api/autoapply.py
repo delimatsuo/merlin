@@ -2,8 +2,6 @@
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 from app.auth import AuthenticatedUser, get_current_user
 from app.schemas.autoapply import (
@@ -25,13 +23,11 @@ from app.services.gemini_ai import (
 
 logger = structlog.get_logger()
 router = APIRouter()
-limiter = Limiter(key_func=get_remote_address)
 
 DAILY_LLM_LIMIT = 50
 
 
 @router.get("")
-@limiter.limit("30/minute")
 async def get_profile(
     request: Request,
     user: AuthenticatedUser = Depends(get_current_user),
@@ -50,7 +46,6 @@ async def get_profile(
 
 
 @router.post("/answer-fields")
-@limiter.limit("60/minute")
 async def answer_fields(
     request: Request,
     body: AnswerFieldsRequest,
@@ -109,7 +104,6 @@ async def answer_fields(
 
 
 @router.post("/answer-question")
-@limiter.limit("10/minute")
 async def answer_question(
     request: Request,
     body: AnswerQuestionRequest,
@@ -173,7 +167,6 @@ async def answer_question(
 
 
 @router.post("/save-answers")
-@limiter.limit("10/minute")
 async def save_answers(
     request: Request,
     body: SaveAnswersRequest,
@@ -202,7 +195,6 @@ async def save_answers(
 
 
 @router.get("/logs")
-@limiter.limit("30/minute")
 async def get_application_logs(
     request: Request,
     limit: int = 10,
@@ -218,7 +210,6 @@ async def get_application_logs(
 
 
 @router.post("/log")
-@limiter.limit("60/minute")
 async def log_application(
     request: Request,
     body: ApplicationLogRequest,
