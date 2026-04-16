@@ -69,11 +69,12 @@ export async function handleAdditionalInfo(): Promise<AdditionalInfoResult> {
   console.log(`[AdditionalInfo] Filled: ${filled}, Skipped: ${skipped}`);
 
   // Click next/continue
-  await randomDelay(1000, 2000);
+  await randomDelay(300, 600);
   const nextBtn = findNextButton();
   if (nextBtn) {
-    await humanLikeClick(nextBtn);
-    await waitForNavigation(15000);
+    console.log(`[AdditionalInfo] Clicking next: "${nextBtn.textContent?.trim()}" (${nextBtn.tagName})`);
+    nextBtn.click();
+    await waitForNavigation(5000);
   }
 
   // After clicking next, check for validation errors

@@ -45,46 +45,44 @@ export async function handleCustomQuestions(): Promise<CustomQuestionsResult> {
   console.log(`[CustomQuestions] Found ${fields.length} question fields`);
 
   if (fields.length === 0) {
-    // Try "next" button first, then "answer now" (gateway page)
-    const clickable = "button, a, div, span, [role='button'], [class*='btn'], [class*='Btn'], [class*='button'], [class*='Button']";
+    // Gateway page (0 fields) — look for "Answer now" FIRST, then "next"
+    // (findNextButton can match paragraph text containing "continue")
     let clicked = false;
 
-    const nextBtn = findNextButton();
-    if (nextBtn) {
-      await humanLikeClick(nextBtn);
-      clicked = true;
-    }
-
-    if (!clicked) {
-      // Look for "Answer now" / "Responder agora" — try <a> first, then any element
-      for (const text of ["answer now", "responder agora"]) {
-        // Prefer actual <a> links — their native .click() triggers navigation
-        const link = findElementByText("a", text);
-        if (link) {
-          const href = (link as HTMLAnchorElement).href;
-          console.log(`[CustomQuestions] Found gateway link: "${link.textContent?.trim()}" href=${href}`);
-          if (href && href !== "#" && !href.startsWith("javascript:")) {
-            // Direct navigation — most reliable for SPA links
-            window.location.href = href;
-          } else {
-            link.click();
-          }
-          clicked = true;
-          break;
+    // 1. "Answer now" / "Responder agora" — gateway to actual questions
+    for (const text of ["answer now", "responder agora"]) {
+      const link = findElementByText("a", text);
+      if (link) {
+        const href = (link as HTMLAnchorElement).href;
+        console.log(`[CustomQuestions] Gateway link: "${link.textContent?.trim()}" href=${href}`);
+        if (href && !href.endsWith("#") && !href.startsWith("javascript:")) {
+          window.location.href = href;
+        } else {
+          link.click();
         }
-
-        // Fallback: any clickable element
-        const btn = findElementByText(clickable, text);
-        if (btn) {
-          console.log(`[CustomQuestions] Found gateway button: "${btn.textContent?.trim()}" (${btn.tagName})`);
-          btn.click();
-          clicked = true;
-          break;
-        }
+        clicked = true;
+        break;
+      }
+      const btn = findElementByText("button, [role='button']", text);
+      if (btn) {
+        console.log(`[CustomQuestions] Gateway button: "${btn.textContent?.trim()}"`);
+        btn.click();
+        clicked = true;
+        break;
       }
     }
 
-    if (clicked) await waitForNavigation(15000);
+    // 2. Regular next/continue button
+    if (!clicked) {
+      const nextBtn = findNextButton();
+      if (nextBtn) {
+        console.log(`[CustomQuestions] Next button: "${nextBtn.textContent?.trim()}" (${nextBtn.tagName})`);
+        nextBtn.click();
+        clicked = true;
+      }
+    }
+
+    if (clicked) await waitForNavigation(5000);
     return { answered: 0, skipped: 0, llmCalls: 0, needsHuman: [], unansweredFields: [], validationErrors: [] };
   }
 
