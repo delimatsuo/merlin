@@ -118,12 +118,12 @@ function isWelcomeScreen(): boolean {
   }
 
   // Or check URL for job listing page
-  const isJobPage = /\/candidate\/job\/\d+/.test(window.location.pathname) &&
+  const isJobPage = window.location.pathname.includes("/candidate/job/") &&
                     !window.location.pathname.includes("/apply");
   if (isJobPage) return true;
 
-  // Job posting page (e.g., /jobs/12345)
-  if (/\/jobs\/\d+/.test(window.location.pathname)) return true;
+  // Job posting page — Gupy uses various ID formats (numeric, alphanumeric)
+  if (window.location.pathname.startsWith("/jobs/")) return true;
 
   return false;
 }

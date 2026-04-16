@@ -47,7 +47,7 @@ export const SELECTORS = {
 
   // Text patterns for button detection (Portuguese)
   buttonText: {
-    apply: ["candidatar", "aplicar", "apply", "inscrever"],
+    apply: ["candidatar-se", "candidatar", "aplicar", "apply", "inscrever", "quero me candidatar"],
     next: ["próximo", "proximo", "continuar", "continue", "salvar e continuar", "save and continue", "avançar", "avancar"],
     finish: ["enviar candidatura", "finalizar", "finish application", "finish", "enviar", "submit"],
     skip: ["pular", "skip"],
