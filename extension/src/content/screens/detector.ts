@@ -90,10 +90,9 @@ function isAdditionalInfoScreen(): boolean {
     if (hasInputs) return true;
   }
 
-  // Fallback: if we're on an application URL and there are visible input fields, it's likely additional info
+  // Fallback: if we're on an application URL and there are visible form elements, it's likely additional info
   if (window.location.pathname.includes("/candidates/applications/")) {
-    const inputs = document.querySelectorAll("input[type='text'], input:not([type]), textarea, select");
-    // Only count visible inputs (not hidden ones like CSRF tokens)
+    const inputs = document.querySelectorAll("input[type='text'], input[type='radio'], input:not([type]), textarea, select");
     let visibleCount = 0;
     inputs.forEach((el) => {
       const htmlEl = el as HTMLElement;
