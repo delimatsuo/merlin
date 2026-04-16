@@ -334,6 +334,23 @@ export function findElementByText(
   const elements = root.querySelectorAll(selector);
   const needle = text.trim().toLowerCase();
 
+  // Pass 1: exact match (trimmed text equals needle)
+  for (let i = 0; i < elements.length; i++) {
+    const el = elements[i] as HTMLElement;
+    const content = el.textContent?.trim().toLowerCase() || "";
+    if (content === needle) return el;
+  }
+
+  // Pass 2: short text containing needle (likely a button label, not a paragraph)
+  for (let i = 0; i < elements.length; i++) {
+    const el = elements[i] as HTMLElement;
+    const content = el.textContent?.trim().toLowerCase() || "";
+    if (content.includes(needle) && content.length < needle.length * 3 + 20) {
+      return el;
+    }
+  }
+
+  // Pass 3: any match (fallback)
   for (let i = 0; i < elements.length; i++) {
     const el = elements[i] as HTMLElement;
     if (el.textContent?.toLowerCase().includes(needle)) {
