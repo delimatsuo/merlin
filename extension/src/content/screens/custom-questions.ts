@@ -44,11 +44,31 @@ export async function handleCustomQuestions(): Promise<CustomQuestionsResult> {
   console.log(`[CustomQuestions] Found ${fields.length} question fields`);
 
   if (fields.length === 0) {
+    // Try "next" button first, then "answer now" (gateway page)
+    const clickable = "button, a, div, span, [role='button'], [class*='btn'], [class*='Btn'], [class*='button'], [class*='Button']";
+    let clicked = false;
+
     const nextBtn = findNextButton();
     if (nextBtn) {
       await humanLikeClick(nextBtn);
-      await waitForNavigation(15000);
+      clicked = true;
     }
+
+    if (!clicked) {
+      // Look for "Answer now" / "Responder agora" buttons
+      const { findElementByText: find } = await import("../dom/helpers");
+      for (const text of ["answer now", "responder agora"]) {
+        const btn = find(clickable, text);
+        if (btn) {
+          console.log(`[CustomQuestions] Clicking gateway: "${text}"`);
+          await humanLikeClick(btn);
+          clicked = true;
+          break;
+        }
+      }
+    }
+
+    if (clicked) await waitForNavigation(15000);
     return { answered: 0, skipped: 0, llmCalls: 0, needsHuman: [], unansweredFields: [], validationErrors: [] };
   }
 

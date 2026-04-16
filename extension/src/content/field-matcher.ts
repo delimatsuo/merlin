@@ -127,6 +127,30 @@ const CONSERVATIVE_MATCHERS: ConservativePattern[] = [
     ],
     value: "Não",
   },
+  {
+    // "Someone who works at this company referred you?" / "Alguém indicou?"
+    patterns: [
+      "referred",
+      "indicou",
+      "indicação",
+      "indicacao",
+      "referr",
+    ],
+    value: "No",
+  },
+  {
+    // "Do you work at [company]?" / "Você trabalha na"
+    patterns: [
+      "do you work at",
+      "you work at",
+      "trabalha na",
+      "trabalha no",
+      "trabalha em",
+      "funcionário da",
+      "funcionario da",
+    ],
+    value: "No",
+  },
 ];
 
 // --- Matching Logic ---
