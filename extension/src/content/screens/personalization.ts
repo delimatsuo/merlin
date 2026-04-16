@@ -20,14 +20,15 @@ export async function handlePersonalization(): Promise<PersonalizationResult> {
   const textareaField = fields.find(f => f.type === "textarea");
 
   if (!textareaField) {
-    console.log("[Personalization] No textarea found, checking for skip option");
-    // Some Gupy flows have a "skip personalization" option
-    const skipTexts = ["pular", "skip", "não personalizar"];
+    console.log("[Personalization] No textarea found, checking for finish/skip option");
+    // Gupy shows "Finish application" / "Finalizar" to skip personalization
+    const finishTexts = ["finish application", "finalizar candidatura", "finalizar", "pular", "skip", "não personalizar"];
     const buttons = document.querySelectorAll("button, a");
     for (let i = 0; i < buttons.length; i++) {
       const b = buttons[i] as HTMLElement;
-      const btnText = b.textContent?.toLowerCase() || "";
-      if (skipTexts.some(t => btnText.includes(t))) {
+      const btnText = b.textContent?.toLowerCase().trim() || "";
+      if (finishTexts.some(t => btnText.includes(t))) {
+        console.log(`[Personalization] Clicking "${b.textContent?.trim()}"`);
         await humanLikeClick(b);
         await waitForNavigation(15000);
         return { answered: false, llmCalls: 0 };

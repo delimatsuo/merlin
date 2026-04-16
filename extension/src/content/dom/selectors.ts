@@ -48,8 +48,8 @@ export const SELECTORS = {
   // Text patterns for button detection (Portuguese)
   buttonText: {
     apply: ["candidatar", "aplicar", "apply", "inscrever"],
-    next: ["próximo", "proximo", "continuar", "salvar e continuar", "save and continue", "avançar", "avancar"],
-    finish: ["enviar candidatura", "finalizar", "enviar", "finish", "submit"],
+    next: ["próximo", "proximo", "continuar", "continue", "salvar e continuar", "save and continue", "avançar", "avancar"],
+    finish: ["enviar candidatura", "finalizar", "finish application", "finish", "enviar", "submit"],
     skip: ["pular", "skip"],
     answerNow: ["responder agora", "answer now"],
     personalize: ["personalizar", "personalize"],

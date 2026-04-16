@@ -28,12 +28,23 @@ interface PiiPattern {
   getValue: (pii: PiiProfile) => string;
 }
 
+/** Convert YYYY-MM-DD (HTML date input) to DD/MM/YYYY (Brazilian format). */
+function toBrazilianDate(dateStr: string): string {
+  if (!dateStr) return "";
+  // Already in DD/MM/YYYY format
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) return dateStr;
+  // Convert from YYYY-MM-DD
+  const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) return `${match[3]}/${match[2]}/${match[1]}`;
+  return dateStr;
+}
+
 const PII_MATCHERS: PiiPattern[] = [
   { patterns: ["cpf"], getValue: (pii) => pii.cpf },
   {
-    // Match "RG" only when it's the document number itself, not issuing authority
+    // Match "RG" only when it's the document number itself, not issuing authority or date
     patterns: ["rg ", " rg", "identidade"],
-    exclude: ["órgão", "orgao", "emissão", "emissao", "estado de emissão"],
+    exclude: ["órgão", "orgao", "emissão", "emissao", "estado de emissão", "expedição", "expedicao", "data de"],
     getValue: (pii) => pii.rg,
   },
   {
@@ -50,7 +61,7 @@ const PII_MATCHERS: PiiPattern[] = [
     // Match birth DATE specifically, not "nascimento" in general (which could mean birthplace)
     patterns: ["data de nascimento", "data nascimento", "date of birth"],
     exclude: ["cidade", "naturalidade", "local de nascimento", "estado de nascimento"],
-    getValue: (pii) => pii.birthDate,
+    getValue: (pii) => toBrazilianDate(pii.birthDate),
   },
   {
     patterns: ["deficiência", "deficiencia", "pcd", "pessoa com deficiência"],
