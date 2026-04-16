@@ -337,14 +337,34 @@ export function findElementByText(
   const elements = root.querySelectorAll(selector);
   const needle = text.trim().toLowerCase();
 
-  // Pass 1: exact match (trimmed text equals needle)
+  // Pass 1: exact match on native clickable elements (button, a, input)
+  for (let i = 0; i < elements.length; i++) {
+    const el = elements[i] as HTMLElement;
+    const tag = el.tagName.toLowerCase();
+    if (tag !== "button" && tag !== "a" && tag !== "input") continue;
+    const content = el.textContent?.trim().toLowerCase() || "";
+    if (content === needle) return el;
+  }
+
+  // Pass 2: exact match on any element
   for (let i = 0; i < elements.length; i++) {
     const el = elements[i] as HTMLElement;
     const content = el.textContent?.trim().toLowerCase() || "";
     if (content === needle) return el;
   }
 
-  // Pass 2: short text containing needle (likely a button label, not a paragraph)
+  // Pass 3: short text match on native clickable elements
+  for (let i = 0; i < elements.length; i++) {
+    const el = elements[i] as HTMLElement;
+    const tag = el.tagName.toLowerCase();
+    if (tag !== "button" && tag !== "a" && tag !== "input") continue;
+    const content = el.textContent?.trim().toLowerCase() || "";
+    if (content.includes(needle) && content.length < needle.length * 3 + 20) {
+      return el;
+    }
+  }
+
+  // Pass 4: short text match on any element
   for (let i = 0; i < elements.length; i++) {
     const el = elements[i] as HTMLElement;
     const content = el.textContent?.trim().toLowerCase() || "";
@@ -353,7 +373,7 @@ export function findElementByText(
     }
   }
 
-  // Pass 3: any match (fallback)
+  // Pass 5: any match (fallback)
   for (let i = 0; i < elements.length; i++) {
     const el = elements[i] as HTMLElement;
     if (el.textContent?.toLowerCase().includes(needle)) {

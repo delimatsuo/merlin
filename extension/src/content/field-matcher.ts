@@ -151,6 +151,17 @@ const CONSERVATIVE_MATCHERS: ConservativePattern[] = [
     ],
     value: "No",
   },
+  {
+    // "Where did you find this job?" — optional, always skip (empty = skip in fill logic)
+    patterns: [
+      "where did you find",
+      "onde encontrou",
+      "como ficou sabendo",
+      "como soube",
+      "fonte da vaga",
+    ],
+    value: "",
+  },
 ];
 
 // --- Matching Logic ---
