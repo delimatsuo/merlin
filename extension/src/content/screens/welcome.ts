@@ -12,11 +12,13 @@ export async function handleWelcome(): Promise<void> {
   // Priority order: Apply → Answer Now → Continue
   // Each represents a different gateway page in the Gupy flow
 
+  const clickableSelector = "button, a, div[role='button'], span[role='button'], [role='button'], [class*='btn'], [class*='Btn'], [class*='button'], [class*='Button']";
+
   // 1. Apply / Candidatar button (job posting page)
   for (const text of SELECTORS.buttonText.apply) {
-    const btn = findElementByText("button, a", text);
-    if (btn && !(btn as HTMLButtonElement).disabled) {
-      console.log(`[Welcome] Clicking apply: "${text}"`);
+    const btn = findElementByText(clickableSelector, text);
+    if (btn) {
+      console.log(`[Welcome] Clicking apply: "${text}" (${btn.tagName})`);
       await humanLikeClick(btn);
       await waitForNavigation(15000);
       return;
@@ -25,9 +27,9 @@ export async function handleWelcome(): Promise<void> {
 
   // 2. "Answer now" / "Responder agora" button (gateway before custom questions)
   for (const text of SELECTORS.buttonText.answerNow) {
-    const btn = findElementByText("button, a", text);
-    if (btn && !(btn as HTMLButtonElement).disabled) {
-      console.log(`[Welcome] Clicking answer now: "${text}"`);
+    const btn = findElementByText(clickableSelector, text);
+    if (btn) {
+      console.log(`[Welcome] Clicking answer now: "${text}" (${btn.tagName})`);
       await humanLikeClick(btn);
       await waitForNavigation(15000);
       return;
@@ -35,14 +37,15 @@ export async function handleWelcome(): Promise<void> {
   }
 
   // 3. Continue / Continuar button (confirmation page)
+  // Search broadly — Gupy renders buttons as various element types
   const continueTexts = ["continue", "continuar"];
   for (const text of continueTexts) {
-    const btn = findElementByText("button, a", text);
-    if (btn && !(btn as HTMLButtonElement).disabled) {
-      // Avoid matching "Save and continue" (that's a form submit, not a welcome button)
+    const btn = findElementByText("button, a, div, span, [role='button']", text);
+    if (btn) {
       const btnText = btn.textContent?.toLowerCase().trim() || "";
+      // Avoid matching "Save and continue" (that's a form submit, not a welcome button)
       if (!btnText.includes("save") && !btnText.includes("salvar")) {
-        console.log(`[Welcome] Clicking continue: "${btnText}"`);
+        console.log(`[Welcome] Clicking continue: "${btnText}" (${btn.tagName})`);
         await humanLikeClick(btn);
         await waitForNavigation(15000);
         return;
