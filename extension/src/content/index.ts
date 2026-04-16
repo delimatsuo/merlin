@@ -41,6 +41,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === "SUBMIT_USER_ANSWERS") {
+    sm.submitUserAnswers(message.answers);
+    sendResponse({ success: true });
+    return true;
+  }
+
   if (message.type === "GET_CONTENT_STATUS") {
     sendResponse({
       step: sm.getStep(),

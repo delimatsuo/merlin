@@ -609,6 +609,9 @@ function startStatusListener(): void {
     if (message.type === "STATUS_UPDATE") {
       updateStatusDisplay(message);
     }
+    if (message.type === "NEEDS_HUMAN_INPUT") {
+      showHumanInputPanel(message.fields);
+    }
   });
 }
 
@@ -694,3 +697,161 @@ function updateStatusDisplay(status: {
     }
   }
 }
+
+// --- Human Input Panel ---
+
+interface HumanField {
+  label: string;
+  type: string;
+  options?: string[];
+}
+
+function showHumanInputPanel(fields: HumanField[]): void {
+  const panel = document.getElementById("human-input-panel");
+  const container = document.getElementById("human-input-fields");
+  const automationCard = document.getElementById("automation-card");
+
+  if (!panel || !container) return;
+
+  // Show the panel, hide automation status
+  panel.style.display = "block";
+  if (automationCard) {
+    const statusEl = document.getElementById("automation-status");
+    if (statusEl) statusEl.textContent = "Aguardando suas respostas...";
+  }
+
+  // Build input fields
+  container.innerHTML = fields.map((field, i) => {
+    if (field.type === "select" && field.options?.length) {
+      const opts = field.options.map((o) =>
+        `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`
+      ).join("");
+      return `
+        <div class="form-group">
+          <label>${escapeHtml(field.label)}</label>
+          <select class="human-answer" data-label="${escapeHtml(field.label)}">
+            <option value="">Selecione...</option>
+            ${opts}
+          </select>
+        </div>`;
+    }
+
+    if (field.type === "radio" && field.options?.length) {
+      const radios = field.options.map((o, j) => `
+        <label class="radio-label">
+          <input type="radio" name="human_radio_${i}" value="${escapeHtml(o)}" class="human-answer-radio" data-label="${escapeHtml(field.label)}">
+          ${escapeHtml(o)}
+        </label>`
+      ).join("");
+      return `
+        <div class="form-group">
+          <label>${escapeHtml(field.label)}</label>
+          ${radios}
+        </div>`;
+    }
+
+    const inputType = field.type === "textarea" ? "textarea" : "input";
+    if (inputType === "textarea") {
+      return `
+        <div class="form-group">
+          <label>${escapeHtml(field.label)}</label>
+          <textarea class="human-answer" data-label="${escapeHtml(field.label)}" rows="2"></textarea>
+        </div>`;
+    }
+
+    return `
+      <div class="form-group">
+        <label>${escapeHtml(field.label)}</label>
+        <input type="text" class="human-answer" data-label="${escapeHtml(field.label)}">
+      </div>`;
+  }).join("");
+}
+
+function collectHumanAnswers(): Record<string, string> {
+  const answers: Record<string, string> = {};
+
+  // Text inputs, textareas, selects
+  document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+    ".human-answer"
+  ).forEach((el) => {
+    const label = el.dataset.label;
+    if (label && el.value.trim()) {
+      answers[label] = el.value.trim();
+    }
+  });
+
+  // Radio buttons
+  document.querySelectorAll<HTMLInputElement>(
+    ".human-answer-radio:checked"
+  ).forEach((el) => {
+    const label = el.dataset.label;
+    if (label) {
+      answers[label] = el.value;
+    }
+  });
+
+  return answers;
+}
+
+// Submit human answers
+document.getElementById("submit-human-answers")?.addEventListener("click", async () => {
+  const answers = collectHumanAnswers();
+  if (Object.keys(answers).length === 0) {
+    showError("Preencha pelo menos um campo.");
+    return;
+  }
+
+  const btn = document.getElementById("submit-human-answers") as HTMLButtonElement;
+  btn.disabled = true;
+  btn.textContent = "Preenchendo...";
+
+  try {
+    // Send answers to content script to fill the form
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab?.id) {
+      await chrome.tabs.sendMessage(tab.id, {
+        type: "SUBMIT_USER_ANSWERS",
+        answers,
+      });
+    }
+
+    // Optionally save to knowledge file
+    const saveCheck = document.getElementById("save-answers-check") as HTMLInputElement;
+    if (saveCheck?.checked) {
+      try {
+        await chrome.runtime.sendMessage({
+          type: "API_REQUEST",
+          method: "POST",
+          path: "/api/autoapply/save-answers",
+          body: { answers },
+        });
+        showSuccess(`${Object.keys(answers).length} respostas salvas!`);
+      } catch {
+        // Non-blocking — answers are already filled in the form
+        console.warn("Failed to save answers to knowledge file");
+      }
+    }
+
+    // Hide the panel
+    const panel = document.getElementById("human-input-panel");
+    if (panel) panel.style.display = "none";
+
+    showSuccess("Respostas preenchidas!");
+  } catch {
+    showError("Erro ao preencher respostas.");
+    btn.disabled = false;
+    btn.textContent = "Preencher";
+  }
+});
+
+// Skip human answers
+document.getElementById("skip-human-answers")?.addEventListener("click", () => {
+  const panel = document.getElementById("human-input-panel");
+  if (panel) panel.style.display = "none";
+
+  const startBtn = document.getElementById("start-btn") as HTMLButtonElement | null;
+  if (startBtn) {
+    startBtn.disabled = false;
+    startBtn.textContent = "Iniciar candidatura";
+  }
+});

@@ -56,6 +56,16 @@ class ApplicationLogRequest(BaseModel):
     duration_seconds: int = Field(ge=0)
 
 
+# --- Save Answers to Knowledge ---
+
+class SaveAnswersRequest(BaseModel):
+    answers: dict[str, str] = Field(max_length=20)
+
+
+class SaveAnswersResponse(BaseModel):
+    saved: int
+
+
 # --- Profile for Extension ---
 
 class ProfileResponse(BaseModel):

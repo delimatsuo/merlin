@@ -1630,6 +1630,31 @@ class FirestoreService:
 
     # --- AutoApply Operations ---
 
+    async def save_autoapply_answers(self, uid: str, answers: dict[str, str]) -> None:
+        """Merge user-provided answers into the knowledge file's saved_answers field.
+
+        Merges with existing saved_answers so previous entries are preserved.
+        """
+        doc_ref = (
+            self.db.collection("users").document(uid)
+            .collection("knowledge").document("current")
+        )
+        doc = await doc_ref.get()
+        existing_answers = {}
+        if doc.exists:
+            existing_answers = doc.to_dict().get("saved_answers", {})
+
+        existing_answers.update(answers)
+
+        await doc_ref.set(
+            {
+                "saved_answers": existing_answers,
+                "savedAnswersUpdatedAt": datetime.now(timezone.utc).isoformat(),
+            },
+            merge=True,
+        )
+        logger.info("autoapply_answers_saved", uid=uid, count=len(answers))
+
     async def get_autoapply_logs(self, uid: str, limit: int = 10) -> list[dict]:
         """Get recent autoapply application logs, ordered by timestamp descending."""
         query = (

@@ -216,6 +216,25 @@
         </div>
       </div>
 
+      <!-- User Input Panel (shown when fields need manual answers) -->
+      <div id="human-input-panel" class="card" style="display: none;">
+        <div class="card-header">
+          <span class="card-label">Respostas necessarias</span>
+        </div>
+        <p class="card-detail">Preencha os campos que a IA nao conseguiu responder:</p>
+        <div id="human-input-fields"></div>
+        <div class="form-group" style="margin-top: 8px;">
+          <label class="checkbox-label">
+            <input type="checkbox" id="save-answers-check" checked>
+            Salvar para futuras candidaturas
+          </label>
+        </div>
+        <div class="review-actions">
+          <button id="submit-human-answers" class="btn btn-primary">Preencher</button>
+          <button id="skip-human-answers" class="btn btn-secondary">Pular</button>
+        </div>
+      </div>
+
       <!-- Application History -->
       <div class="card" id="history-card">
         <div class="card-header">

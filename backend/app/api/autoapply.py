@@ -13,6 +13,8 @@ from app.schemas.autoapply import (
     AnswerQuestionResponse,
     ApplicationLogRequest,
     ProfileResponse,
+    SaveAnswersRequest,
+    SaveAnswersResponse,
 )
 from app.services.firestore import FirestoreService
 from app.services.gemini_ai import (
@@ -168,6 +170,35 @@ async def answer_question(
         needs_human=needs_human,
         model_used=model_used,
     )
+
+
+@router.post("/save-answers")
+@limiter.limit("10/minute")
+async def save_answers(
+    request: Request,
+    body: SaveAnswersRequest,
+    user: AuthenticatedUser = Depends(get_current_user),
+):
+    """Save user-provided answers to the knowledge file for future use."""
+    fs = FirestoreService()
+
+    # Verify knowledge file exists
+    knowledge = await fs.get_candidate_knowledge(user.uid)
+    if not knowledge:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Perfil profissional não encontrado. Complete o onboarding no Merlin primeiro.",
+        )
+
+    await fs.save_autoapply_answers(user.uid, body.answers)
+
+    logger.info(
+        "autoapply_answers_saved_endpoint",
+        uid=user.uid,
+        count=len(body.answers),
+    )
+
+    return SaveAnswersResponse(saved=len(body.answers))
 
 
 @router.get("/logs")

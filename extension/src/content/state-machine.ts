@@ -8,7 +8,7 @@ import { AutoApplyStep, ErrorType } from "../lib/types";
 import { detectScreen, isGupyLoggedIn, isGupyApplicationPage, findFinishButton } from "./screens/detector";
 import { handleWelcome } from "./screens/welcome";
 import { handleAdditionalInfo, type AdditionalInfoResult } from "./screens/additional-info";
-import { handleCustomQuestions, type CustomQuestionsResult } from "./screens/custom-questions";
+import { handleCustomQuestions, fillUserAnswers, type CustomQuestionsResult, type UnansweredField } from "./screens/custom-questions";
 import { handlePersonalization, type PersonalizationResult } from "./screens/personalization";
 import { randomDelay, waitForNavigation, humanLikeClick } from "./dom/helpers";
 import { getPiiProfile, isPiiComplete } from "../lib/pii-store";
@@ -29,6 +29,7 @@ export class StateMachine {
   private llmCalls: number = 0;
   private startTime: number = 0;
   private errors: string[] = [];
+  private pendingFields: UnansweredField[] = [];
 
   getStep(): AutoApplyStep {
     return this.currentStep;
@@ -156,11 +157,13 @@ export class StateMachine {
             }
 
             if (qResult.needsHuman.length > 0) {
-              this.transitionToError(
-                ErrorType.NEEDS_HUMAN,
-                `Pergunta precisa de resposta manual: "${qResult.needsHuman[0]}"`,
-              );
-              break;
+              // Pause for user input instead of erroring out
+              this.pendingFields = qResult.unansweredFields;
+              this.transition(AutoApplyStep.CUSTOM_QUESTIONS_FILL);
+              this.broadcastNeedsHuman(qResult.unansweredFields);
+              await this.persistState();
+              this.running = false; // Pause — will resume when user provides answers
+              return;
             }
 
             await randomDelay(1000, 2000);
@@ -274,6 +277,36 @@ export class StateMachine {
     this.broadcastStatus();
     this.clearState();
     this.running = false;
+  }
+
+  /**
+   * Called when the user provides answers for NEEDS_HUMAN fields from the popup.
+   * Fills the form fields and resumes the state machine.
+   */
+  async submitUserAnswers(answers: Record<string, string>): Promise<void> {
+    if (this.currentStep !== AutoApplyStep.CUSTOM_QUESTIONS_FILL) return;
+
+    console.log("[SM] Filling user-provided answers:", Object.keys(answers));
+    const filled = await fillUserAnswers(answers);
+    this.questionsAnswered += filled;
+    this.pendingFields = [];
+
+    // Resume the state machine — re-detect screen and continue
+    this.running = true;
+    this.transition(detectScreen());
+    this.broadcastStatus();
+
+    // Continue the main loop
+    await this.run(this.jobUrl);
+  }
+
+  private broadcastNeedsHuman(fields: UnansweredField[]): void {
+    chrome.runtime.sendMessage({
+      type: "NEEDS_HUMAN_INPUT",
+      fields,
+      fieldsAnswered: this.fieldsAnswered,
+      questionsAnswered: this.questionsAnswered,
+    }).catch(() => {});
   }
 
   private async runPreChecks(): Promise<boolean> {

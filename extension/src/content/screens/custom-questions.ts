@@ -16,11 +16,18 @@ import { apiPost } from "../../lib/api-client";
 import { getCachedProfile } from "../../lib/profile";
 import { detectValidationErrors, type ValidationError } from "../dom/errors";
 
+export interface UnansweredField {
+  label: string;
+  type: "text" | "select" | "radio" | "checkbox" | "textarea";
+  options?: string[];
+}
+
 export interface CustomQuestionsResult {
   answered: number;
   skipped: number;
   llmCalls: number;
   needsHuman: string[];  // Labels of questions that need manual input
+  unansweredFields: UnansweredField[];  // Full field info for popup input form
   validationErrors: ValidationError[];
 }
 
@@ -42,7 +49,7 @@ export async function handleCustomQuestions(): Promise<CustomQuestionsResult> {
       await humanLikeClick(nextBtn);
       await waitForNavigation(15000);
     }
-    return { answered: 0, skipped: 0, llmCalls: 0, needsHuman: [], validationErrors: [] };
+    return { answered: 0, skipped: 0, llmCalls: 0, needsHuman: [], unansweredFields: [], validationErrors: [] };
   }
 
   const jobUrl = window.location.href;
@@ -52,6 +59,7 @@ export async function handleCustomQuestions(): Promise<CustomQuestionsResult> {
   let skipped = 0;
   let llmCalls = 0;
   const needsHuman: string[] = [];
+  const unansweredFields: UnansweredField[] = [];
 
   // Filter to only fields that need filling
   const fieldsToFill = fields.filter((f) => {
@@ -69,7 +77,7 @@ export async function handleCustomQuestions(): Promise<CustomQuestionsResult> {
   });
 
   if (fieldsToFill.length === 0) {
-    return finishAndNavigate(answered, skipped, llmCalls, needsHuman);
+    return finishAndNavigate(answered, skipped, llmCalls, needsHuman, []);
   }
 
   // --- 3-tier matching (PII → conservative → batch LLM) ---
@@ -146,8 +154,41 @@ export async function handleCustomQuestions(): Promise<CustomQuestionsResult> {
     }
   }
 
+  // Build unansweredFields from all fields whose labels ended up in needsHuman
+  const needsHumanSet = new Set(needsHuman);
+  const allFields = [...fieldsToFill, ...fields.filter((f) => (f.type as string) === "file")];
+  for (const f of allFields) {
+    if (needsHumanSet.has(f.label)) {
+      unansweredFields.push({ label: f.label, type: f.type, options: f.options });
+    }
+  }
+
   console.log(`[CustomQuestions] Answered: ${answered}, Skipped: ${skipped}, LLM calls: ${llmCalls}`);
-  return finishAndNavigate(answered, skipped, llmCalls, needsHuman);
+  return finishAndNavigate(answered, skipped, llmCalls, needsHuman, unansweredFields);
+}
+
+/**
+ * Fill unanswered fields with user-provided answers.
+ * Called when the user submits answers from the popup.
+ */
+export async function fillUserAnswers(answers: Record<string, string>): Promise<number> {
+  const fields = scrapeFormFields();
+  let filled = 0;
+
+  for (const [label, value] of Object.entries(answers)) {
+    const field = fields.find((f) => f.label === label);
+    if (field && value) {
+      try {
+        await fillQuestionField(field, value);
+        filled++;
+        await randomDelay(200, 500);
+      } catch (err) {
+        console.error(`[CustomQuestions] Failed to fill user answer for "${label}":`, err);
+      }
+    }
+  }
+
+  return filled;
 }
 
 async function finishAndNavigate(
@@ -155,9 +196,10 @@ async function finishAndNavigate(
   skipped: number,
   llmCalls: number,
   needsHuman: string[],
+  unansweredFields: UnansweredField[],
 ): Promise<CustomQuestionsResult> {
   if (needsHuman.length > 0) {
-    return { answered, skipped, llmCalls, needsHuman, validationErrors: [] };
+    return { answered, skipped, llmCalls, needsHuman, unansweredFields, validationErrors: [] };
   }
 
   await randomDelay(1000, 2000);
@@ -170,10 +212,10 @@ async function finishAndNavigate(
   const validationErrors = await detectValidationErrors();
   if (validationErrors.length > 0) {
     console.warn("[CustomQuestions] Validation errors:", validationErrors);
-    return { answered, skipped, llmCalls, needsHuman, validationErrors };
+    return { answered, skipped, llmCalls, needsHuman, unansweredFields, validationErrors };
   }
 
-  return { answered, skipped, llmCalls, needsHuman, validationErrors: [] };
+  return { answered, skipped, llmCalls, needsHuman, unansweredFields: [], validationErrors: [] };
 }
 
 /**
