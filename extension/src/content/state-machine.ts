@@ -15,7 +15,7 @@ import { getPiiProfile, isPiiComplete } from "../lib/pii-store";
 import { loadProfile } from "../lib/profile";
 import { getMode } from "../lib/settings";
 
-const STATE_KEY_PREFIX = "autoapply_state_";
+const ACTIVE_SESSION_KEY = "autoapply_active_session";
 
 export class StateMachine {
   private currentStep: AutoApplyStep = AutoApplyStep.IDLE;
@@ -367,27 +367,31 @@ export class StateMachine {
   }
 
   private async persistState(): Promise<void> {
-    const key = STATE_KEY_PREFIX + this.jobUrl;
     await chrome.storage.session.set({
-      [key]: {
+      [ACTIVE_SESSION_KEY]: {
         step: this.currentStep,
         fieldsAnswered: this.fieldsAnswered,
         questionsAnswered: this.questionsAnswered,
         llmCalls: this.llmCalls,
         startTime: this.startTime,
+        jobUrl: this.jobUrl,
+        mode: this.mode,
+        running: this.running,
       },
     });
   }
 
   private async restoreState(): Promise<void> {
-    const key = STATE_KEY_PREFIX + this.jobUrl;
-    const result = await chrome.storage.session.get(key);
-    const state = result[key] as {
+    const result = await chrome.storage.session.get(ACTIVE_SESSION_KEY);
+    const state = result[ACTIVE_SESSION_KEY] as {
       step?: AutoApplyStep;
       fieldsAnswered?: number;
       questionsAnswered?: number;
       llmCalls?: number;
       startTime?: number;
+      jobUrl?: string;
+      mode?: "dry-run" | "auto";
+      running?: boolean;
     } | undefined;
     if (state) {
       this.currentStep = state.step ?? AutoApplyStep.IDLE;
@@ -395,13 +399,21 @@ export class StateMachine {
       this.questionsAnswered = state.questionsAnswered ?? 0;
       this.llmCalls = state.llmCalls ?? 0;
       this.startTime = state.startTime ?? Date.now();
+      if (state.jobUrl) this.jobUrl = state.jobUrl;
+      if (state.mode) this.mode = state.mode;
       console.log(`[SM] Restored state: ${this.currentStep}`);
     }
   }
 
+  /** Check if there's an active session to resume (called on content script load). */
+  async hasActiveSession(): Promise<boolean> {
+    const result = await chrome.storage.session.get(ACTIVE_SESSION_KEY);
+    const state = result[ACTIVE_SESSION_KEY] as { running?: boolean } | undefined;
+    return !!state?.running;
+  }
+
   private async clearState(): Promise<void> {
-    const key = STATE_KEY_PREFIX + this.jobUrl;
-    await chrome.storage.session.remove(key);
+    await chrome.storage.session.remove(ACTIVE_SESSION_KEY);
   }
 
   private extractPageContext(): { company: string; jobTitle: string } {
