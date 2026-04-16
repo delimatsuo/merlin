@@ -23,14 +23,14 @@ export async function handlePersonalization(): Promise<PersonalizationResult> {
     console.log("[Personalization] No textarea found, checking for finish/skip option");
     // Gupy shows "Finish application" / "Finalizar" to skip personalization
     const finishTexts = ["finish application", "finalizar candidatura", "finalizar", "pular", "skip", "não personalizar"];
-    const buttons = document.querySelectorAll("button, a");
+    const buttons = document.querySelectorAll("button, a, div, span, [role='button'], [class*='btn'], [class*='Btn'], [class*='button'], [class*='Button']");
     for (let i = 0; i < buttons.length; i++) {
       const b = buttons[i] as HTMLElement;
-      const btnText = b.textContent?.toLowerCase().trim() || "";
-      if (finishTexts.some(t => btnText.includes(t))) {
-        console.log(`[Personalization] Clicking "${b.textContent?.trim()}"`);
-        await humanLikeClick(b);
-        await waitForNavigation(15000);
+      const btnText = b.textContent?.trim().toLowerCase() || "";
+      if (btnText.length < 40 && finishTexts.some(t => btnText.includes(t))) {
+        console.log(`[Personalization] Clicking "${b.textContent?.trim()}" (${b.tagName})`);
+        b.click();
+        await waitForNavigation(5000);
         return { answered: false, llmCalls: 0 };
       }
     }
