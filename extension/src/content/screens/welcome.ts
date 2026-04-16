@@ -50,14 +50,21 @@ export async function handleWelcome(): Promise<void> {
     }
   }
 
-  // Fallback: try the generic apply button selector
-  const applyBtn = document.querySelector(SELECTORS.gupy.applyButton) as HTMLElement | null;
-  if (applyBtn) {
-    console.log("[Welcome] Found apply button via selector");
-    await humanLikeClick(applyBtn);
-    await waitForNavigation(15000);
-    return;
+  // Fallback: look for any prominent button/link on the page
+  // Gupy job pages have the Apply button in the header or as a CTA
+  const allButtons = document.querySelectorAll("button, a[role='button'], a.btn, a[class*='apply'], a[class*='Apply'], button[class*='apply'], button[class*='Apply']");
+  for (let i = 0; i < allButtons.length; i++) {
+    const b = allButtons[i] as HTMLElement;
+    const text = b.textContent?.toLowerCase().trim() || "";
+    if (text && text.length < 30 && (
+      text.includes("apply") || text.includes("candidat") || text.includes("inscrev")
+    )) {
+      console.log(`[Welcome] Found apply button via fallback: "${b.textContent?.trim()}"`);
+      await humanLikeClick(b);
+      await waitForNavigation(15000);
+      return;
+    }
   }
 
-  console.warn("[Welcome] No actionable button found");
+  console.warn("[Welcome] No actionable button found — page may need manual interaction");
 }

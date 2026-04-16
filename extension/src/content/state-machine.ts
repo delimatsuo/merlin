@@ -196,7 +196,13 @@ export class StateMachine {
             // Unknown state or IDLE — try to detect
             const detected = detectScreen();
             if (detected === AutoApplyStep.IDLE) {
-              // Nothing to do — maybe page hasn't loaded
+              // Nothing to do — maybe page hasn't loaded yet
+              // Give up after 30 seconds of no screen detected
+              const elapsed = Date.now() - this.startTime;
+              if (elapsed > 30000) {
+                this.transitionToError(ErrorType.TIMEOUT, "Nenhuma tela reconhecida após 30s.");
+                break;
+              }
               await randomDelay(2000, 3000);
             } else {
               this.transition(detected);
@@ -317,14 +323,7 @@ export class StateMachine {
       return false;
     }
 
-    // Check 2: User logged into Gupy
-    if (!isGupyLoggedIn()) {
-      this.transitionToError(ErrorType.GUPY_LOGIN_REQUIRED, "Faça login no Gupy primeiro.");
-      this.broadcastStatus();
-      return false;
-    }
-
-    // Check 3: Extension authenticated
+    // Check 2: Extension authenticated
     const authResponse = await chrome.runtime.sendMessage({ type: "GET_AUTH_STATE" });
     if (!authResponse?.isAuthenticated) {
       this.transitionToError(ErrorType.AUTH_REQUIRED, "Faça login na extensão primeiro.");
