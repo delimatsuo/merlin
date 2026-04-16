@@ -162,13 +162,15 @@ export function isGupyApplicationPage(): boolean {
   return hostname.endsWith("gupy.io");
 }
 
+const CLICKABLE = "button, a, div, span, [role='button'], [class*='btn'], [class*='Btn'], [class*='button'], [class*='Button']";
+
 /**
  * Find a clickable "next" or "continue" button on the current screen.
  */
 export function findNextButton(): HTMLElement | null {
   // Try each next/continue text pattern
   for (const text of SELECTORS.buttonText.next) {
-    const btn = findElementByText("button", text);
+    const btn = findElementByText(CLICKABLE, text);
     if (btn && !(btn as HTMLButtonElement).disabled) return btn;
   }
 
@@ -184,7 +186,7 @@ export function findNextButton(): HTMLElement | null {
  */
 export function findFinishButton(): HTMLElement | null {
   for (const text of SELECTORS.buttonText.finish) {
-    const btn = findElementByText("button", text);
+    const btn = findElementByText(CLICKABLE, text);
     if (btn && !(btn as HTMLButtonElement).disabled) return btn;
   }
   return null;
