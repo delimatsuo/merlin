@@ -148,8 +148,9 @@ export function isGupyLoggedIn(): boolean {
 export function isGupyApplicationPage(): boolean {
   const hostname = window.location.hostname;
   const pathname = window.location.pathname;
-  return hostname.endsWith("gupy.io") &&
-         (pathname.includes("/candidate/job/") || pathname.includes("/candidates/applications/") || pathname.includes("/apply") || pathname.includes("/jobs/"));
+  // Any page on *.gupy.io is a valid Gupy page for our purposes.
+  // The screen detector will determine which step we're on.
+  return hostname.endsWith("gupy.io");
 }
 
 /**
