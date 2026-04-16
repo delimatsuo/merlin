@@ -116,8 +116,8 @@ export class StateMachine {
         switch (this.currentStep) {
           case AutoApplyStep.WELCOME:
             await handleWelcome();
-            await randomDelay(1000, 2000);
-            await waitForNavigation(15000);
+            await randomDelay(300, 800);
+            await waitForNavigation(5000);
             this.transition(detectScreen()); // Re-detect after navigation
             break;
 

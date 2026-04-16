@@ -185,7 +185,7 @@ export function waitForElement(
  * Waits for the main content area to change, indicating a page
  * navigation within Gupy's SPA.
  */
-export function waitForNavigation(timeout = 15000): Promise<boolean> {
+export function waitForNavigation(timeout = 5000): Promise<boolean> {
   return new Promise((resolve) => {
     const container =
       document.querySelector<HTMLElement>("[role='main']") ??

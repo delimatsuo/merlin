@@ -64,8 +64,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 (async () => {
   if (isGupyApplicationPage() && await sm.hasActiveSession()) {
     console.log("[GuPy AutoApply] Resuming active session after navigation");
-    // Small delay to let the page settle
-    await new Promise((r) => setTimeout(r, 1500));
+    // Small delay to let the page DOM settle
+    await new Promise((r) => setTimeout(r, 500));
     sm.run(window.location.href);
   } else if (isGupyApplicationPage()) {
     console.log("[GuPy AutoApply] Content script ready on application page");

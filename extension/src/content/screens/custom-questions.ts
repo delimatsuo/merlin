@@ -8,6 +8,7 @@
 import {
   scrapeFormFields, humanLikeType, humanLikeClick, clickReactSelect,
   clickRadioOption, clickCheckbox, randomDelay, waitForNavigation,
+  findElementByText,
   type ScrapedField
 } from "../dom/helpers";
 import { findNextButton } from "./detector";
@@ -56,12 +57,26 @@ export async function handleCustomQuestions(): Promise<CustomQuestionsResult> {
 
     if (!clicked) {
       // Look for "Answer now" / "Responder agora" buttons
-      const { findElementByText: find } = await import("../dom/helpers");
       for (const text of ["answer now", "responder agora"]) {
-        const btn = find(clickable, text);
+        const btn = findElementByText(clickable, text);
         if (btn) {
-          console.log(`[CustomQuestions] Clicking gateway: "${text}"`);
+          console.log(`[CustomQuestions] Clicking gateway: "${btn.textContent?.trim()}" (${btn.tagName})`);
           await humanLikeClick(btn);
+          clicked = true;
+          break;
+        }
+      }
+    }
+
+    // Last resort: find ANY prominent button on the page and click it
+    if (!clicked) {
+      const allBtns = document.querySelectorAll<HTMLElement>("button, a[class*='btn'], a[class*='Btn']");
+      for (let i = 0; i < allBtns.length; i++) {
+        const b = allBtns[i];
+        const text = b.textContent?.trim().toLowerCase() || "";
+        if (text.length > 2 && text.length < 30 && !text.includes("go to") && !text.includes("voltar")) {
+          console.log(`[CustomQuestions] Last resort click: "${b.textContent?.trim()}" (${b.tagName})`);
+          b.click();
           clicked = true;
           break;
         }
