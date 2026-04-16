@@ -106,13 +106,16 @@ function isAdditionalInfoScreen(): boolean {
 }
 
 function isWelcomeScreen(): boolean {
+  // Broad selector — Gupy renders "buttons" as various element types
+  const clickable = "button, a, div, span, [role='button'], [class*='btn'], [class*='Btn'], [class*='button'], [class*='Button']";
+
   // Look for the apply/candidatar button
   for (const text of SELECTORS.buttonText.apply) {
-    if (findElementByText("button, a", text)) return true;
+    if (findElementByText(clickable, text)) return true;
   }
 
   // Look for "Continue" button (confirmation page)
-  if (findElementByText("button, a", "continue") || findElementByText("button, a", "continuar")) {
+  if (findElementByText(clickable, "continue") || findElementByText(clickable, "continuar")) {
     // Only if it's not a form page (avoid matching "Save and continue")
     const hasFormInputs = document.querySelectorAll("input[type='text'], textarea, input[type='radio']").length;
     if (hasFormInputs < 2) return true;
@@ -120,7 +123,7 @@ function isWelcomeScreen(): boolean {
 
   // Look for "Answer now" / "Responder agora" button (gateway before custom questions)
   for (const text of SELECTORS.buttonText.answerNow) {
-    if (findElementByText("button, a", text)) return true;
+    if (findElementByText(clickable, text)) return true;
   }
 
   // Or check URL for job listing page
