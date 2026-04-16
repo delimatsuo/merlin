@@ -122,6 +122,9 @@ export async function humanLikeClick(el: HTMLElement): Promise<void> {
   el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
   el.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
   el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  // Native click as fallback — needed for React Router links and
+  // elements that only respond to trusted events
+  el.click();
 }
 
 /* ------------------------------------------------------------------ */
