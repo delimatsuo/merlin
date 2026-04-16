@@ -93,7 +93,13 @@ function isAdditionalInfoScreen(): boolean {
   // Fallback: if we're on an application URL and there are visible input fields, it's likely additional info
   if (window.location.pathname.includes("/candidates/applications/")) {
     const inputs = document.querySelectorAll("input[type='text'], input:not([type]), textarea, select");
-    if (inputs.length >= 2) return true;
+    // Only count visible inputs (not hidden ones like CSRF tokens)
+    let visibleCount = 0;
+    inputs.forEach((el) => {
+      const htmlEl = el as HTMLElement;
+      if (htmlEl.offsetParent !== null && htmlEl.offsetHeight > 0) visibleCount++;
+    });
+    if (visibleCount >= 2) return true;
   }
 
   return false;
