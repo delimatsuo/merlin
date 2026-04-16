@@ -56,27 +56,28 @@ export async function handleCustomQuestions(): Promise<CustomQuestionsResult> {
     }
 
     if (!clicked) {
-      // Look for "Answer now" / "Responder agora" buttons
+      // Look for "Answer now" / "Responder agora" — try <a> first, then any element
       for (const text of ["answer now", "responder agora"]) {
-        const btn = findElementByText(clickable, text);
-        if (btn) {
-          console.log(`[CustomQuestions] Clicking gateway: "${btn.textContent?.trim()}" (${btn.tagName})`);
-          await humanLikeClick(btn);
+        // Prefer actual <a> links — their native .click() triggers navigation
+        const link = findElementByText("a", text);
+        if (link) {
+          const href = (link as HTMLAnchorElement).href;
+          console.log(`[CustomQuestions] Found gateway link: "${link.textContent?.trim()}" href=${href}`);
+          if (href && href !== "#" && !href.startsWith("javascript:")) {
+            // Direct navigation — most reliable for SPA links
+            window.location.href = href;
+          } else {
+            link.click();
+          }
           clicked = true;
           break;
         }
-      }
-    }
 
-    // Last resort: find ANY prominent button on the page and click it
-    if (!clicked) {
-      const allBtns = document.querySelectorAll<HTMLElement>("button, a[class*='btn'], a[class*='Btn']");
-      for (let i = 0; i < allBtns.length; i++) {
-        const b = allBtns[i];
-        const text = b.textContent?.trim().toLowerCase() || "";
-        if (text.length > 2 && text.length < 30 && !text.includes("go to") && !text.includes("voltar")) {
-          console.log(`[CustomQuestions] Last resort click: "${b.textContent?.trim()}" (${b.tagName})`);
-          b.click();
+        // Fallback: any clickable element
+        const btn = findElementByText(clickable, text);
+        if (btn) {
+          console.log(`[CustomQuestions] Found gateway button: "${btn.textContent?.trim()}" (${btn.tagName})`);
+          btn.click();
           clicked = true;
           break;
         }
