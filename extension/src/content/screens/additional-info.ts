@@ -40,6 +40,39 @@ export async function handleAdditionalInfo(): Promise<AdditionalInfoResult> {
     return { filled: 0, skipped: 0, llmCalls: 0, validationErrors: [] };
   }
 
+  // Quick check: if all fields are already pre-filled (e.g., radio buttons defaulting to "No"),
+  // skip the LLM entirely and just click next
+  const unfilled = fields.filter((f) => {
+    const el = f.element;
+    if (el instanceof HTMLInputElement && (el.type === "radio" || el.type === "checkbox")) {
+      // For radio buttons, check if any option in the group is checked
+      const name = el.name;
+      if (name) {
+        const checked = document.querySelector<HTMLInputElement>(`input[name="${name}"]:checked`);
+        return !checked; // unfilled if nothing checked
+      }
+      return !el.checked;
+    }
+    if (el instanceof HTMLSelectElement) return el.selectedIndex <= 0;
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return !el.value.trim();
+    return true;
+  });
+
+  console.log(`[AdditionalInfo] ${unfilled.length} of ${fields.length} fields need filling`);
+
+  // If all fields are already filled (common for Additional Info with pre-selected "No" radios),
+  // skip matching entirely
+  if (unfilled.length === 0) {
+    console.log("[AdditionalInfo] All fields pre-filled, clicking next");
+    await randomDelay(300, 600);
+    const nextBtn = findNextButton();
+    if (nextBtn) {
+      nextBtn.click();
+      await waitForNavigation(5000);
+    }
+    return { filled: fields.length, skipped: 0, llmCalls: 0, validationErrors: [] };
+  }
+
   // Run the 3-tier field matcher
   const jobUrl = window.location.href;
   const companyName = extractCompanyName();

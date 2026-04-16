@@ -50,7 +50,7 @@ async def get_profile(
 
 
 @router.post("/answer-fields")
-@limiter.limit("20/minute")
+@limiter.limit("60/minute")
 async def answer_fields(
     request: Request,
     body: AnswerFieldsRequest,
