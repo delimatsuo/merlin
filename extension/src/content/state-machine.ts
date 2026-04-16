@@ -310,8 +310,9 @@ export class StateMachine {
     // Check 5: Professional profile loaded
     try {
       await loadProfile();
-    } catch {
-      this.transitionToError(ErrorType.LLM_FAILED, "Não foi possível carregar o perfil profissional.");
+    } catch (err) {
+      console.error("[SM] loadProfile failed:", err);
+      this.transitionToError(ErrorType.LLM_FAILED, `Perfil: ${(err as Error).message}`);
       this.broadcastStatus();
       return false;
     }

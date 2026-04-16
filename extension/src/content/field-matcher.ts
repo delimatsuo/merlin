@@ -24,24 +24,32 @@ export interface FieldMatchResult {
 
 interface PiiPattern {
   patterns: string[]; // Substrings to match in the label (case-insensitive)
+  exclude?: string[]; // If any of these substrings are present, skip this matcher
   getValue: (pii: PiiProfile) => string;
 }
 
 const PII_MATCHERS: PiiPattern[] = [
   { patterns: ["cpf"], getValue: (pii) => pii.cpf },
-  { patterns: ["rg ", " rg", "identidade"], getValue: (pii) => pii.rg },
+  {
+    // Match "RG" only when it's the document number itself, not issuing authority
+    patterns: ["rg ", " rg", "identidade"],
+    exclude: ["órgão", "orgao", "emissão", "emissao", "estado de emissão"],
+    getValue: (pii) => pii.rg,
+  },
   {
     patterns: [
       "nome da mãe",
       "nome da mae",
       "nome materno",
-      "filiação",
-      "filiacao",
+      "filiação materna",
+      "filiacao materna",
     ],
     getValue: (pii) => pii.motherName,
   },
   {
-    patterns: ["data de nascimento", "nascimento", "birth"],
+    // Match birth DATE specifically, not "nascimento" in general (which could mean birthplace)
+    patterns: ["data de nascimento", "data nascimento", "date of birth"],
+    exclude: ["cidade", "naturalidade", "local de nascimento", "estado de nascimento"],
     getValue: (pii) => pii.birthDate,
   },
   {
@@ -65,8 +73,8 @@ const PII_MATCHERS: PiiPattern[] = [
     patterns: ["cep", "código postal", "codigo postal", "zip"],
     getValue: (pii) => pii.address.zip,
   },
-  { patterns: ["cidade", "city"], getValue: (pii) => pii.address.city },
-  { patterns: ["estado", "uf", "state"], getValue: (pii) => pii.address.state },
+  { patterns: ["cidade", "city"], exclude: ["nascimento", "naturalidade"], getValue: (pii) => pii.address.city },
+  { patterns: ["estado", "uf", "state"], exclude: ["nascimento", "civil", "emissão", "emissao"], getValue: (pii) => pii.address.state },
   {
     patterns: [
       "endereço",
@@ -115,6 +123,9 @@ const CONSERVATIVE_MATCHERS: ConservativePattern[] = [
 function matchPii(label: string, pii: PiiProfile): string | null {
   const lower = label.toLowerCase();
   for (const matcher of PII_MATCHERS) {
+    // Check exclusions first — if any exclude pattern matches, skip this matcher
+    if (matcher.exclude?.some((ex) => lower.includes(ex))) continue;
+
     for (const pattern of matcher.patterns) {
       if (lower.includes(pattern)) {
         const value = matcher.getValue(pii);

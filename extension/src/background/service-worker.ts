@@ -34,6 +34,8 @@ const SCOPES = "openid email profile";
  */
 async function signIn(): Promise<{ success: boolean; error?: string }> {
   try {
+    console.log("[Auth] Starting sign-in flow");
+
     // Step 1: Build Google OAuth URL
     const nonce = crypto.randomUUID();
     const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
@@ -45,6 +47,7 @@ async function signIn(): Promise<{ success: boolean; error?: string }> {
     authUrl.searchParams.set("prompt", "select_account");
 
     // Step 2: Launch auth flow — opens Google sign-in in a browser tab
+    console.log("[Auth] Launching web auth flow");
     const responseUrl = await chrome.identity.launchWebAuthFlow({
       url: authUrl.toString(),
       interactive: true,
@@ -53,6 +56,7 @@ async function signIn(): Promise<{ success: boolean; error?: string }> {
     if (!responseUrl) {
       throw new Error("Auth flow returned no URL");
     }
+    console.log("[Auth] Got response URL from auth flow");
 
     // Step 3: Extract tokens from the redirect URL fragment
     const hashParams = new URLSearchParams(responseUrl.split("#")[1] || "");
@@ -62,6 +66,7 @@ async function signIn(): Promise<{ success: boolean; error?: string }> {
     if (!googleIdToken) {
       throw new Error("No id_token in auth response");
     }
+    console.log("[Auth] Extracted Google tokens, exchanging for Firebase token");
 
     // Step 4: Exchange Google id_token for Firebase ID token
     const firebaseResponse = await fetch(
@@ -84,6 +89,7 @@ async function signIn(): Promise<{ success: boolean; error?: string }> {
     }
 
     const data = await firebaseResponse.json();
+    console.log("[Auth] Firebase exchange successful, uid:", data.localId);
 
     authState = {
       token: data.idToken,
@@ -94,23 +100,39 @@ async function signIn(): Promise<{ success: boolean; error?: string }> {
         displayName: data.displayName || null,
       },
     };
-    chrome.storage.session.set({ authState });
+
+    // CRITICAL: await storage write — without await, SW termination can race
+    // and kill the worker before the write completes (popup is already dead)
+    await chrome.storage.session.set({ authState });
+    console.log("[Auth] Auth state persisted to session storage");
 
     return { success: true };
   } catch (error) {
+    console.error("[Auth] Sign-in failed:", (error as Error).message);
     return { success: false, error: (error as Error).message };
   }
 }
 
 async function signOutUser(): Promise<void> {
   authState = { token: null, tokenExpiry: 0, user: null };
-  chrome.storage.session.set({ authState });
+  await chrome.storage.session.set({ authState });
 }
 
 async function getValidToken(): Promise<string | null> {
-  // Check if token is still valid
+  // Check if token is still valid (in-memory)
   if (authState.token && Date.now() < authState.tokenExpiry - TOKEN_REFRESH_BUFFER_MS) {
     return authState.token;
+  }
+
+  // In-memory state may be stale after SW restart — check session storage
+  if (!authState.token) {
+    const stored = await chrome.storage.session.get("authState");
+    if (stored.authState) {
+      authState = stored.authState as AuthState;
+      if (authState.token && Date.now() < authState.tokenExpiry - TOKEN_REFRESH_BUFFER_MS) {
+        return authState.token;
+      }
+    }
   }
 
   // Token expired — try silent re-auth via launchWebAuthFlow (non-interactive)
@@ -159,7 +181,7 @@ async function getValidToken(): Promise<string | null> {
       email: data.email || null,
       displayName: data.displayName || null,
     };
-    chrome.storage.session.set({ authState });
+    await chrome.storage.session.set({ authState });
     return data.idToken;
   } catch {
     return null;
@@ -274,9 +296,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
   };
 
-  handle().then(sendResponse).catch((err) => sendResponse({ error: err.message }));
+  handle().then((result) => {
+    try { sendResponse(result); } catch { /* popup closed — response port dead, auth still completed */ }
+  }).catch((err) => {
+    try { sendResponse({ error: err.message }); } catch { /* popup closed */ }
+  });
   return true; // Keep channel open for async
 });
+
+// Allow content scripts to access session storage (needed for state persistence)
+chrome.storage.session.setAccessLevel({ accessLevel: "TRUSTED_AND_UNTRUSTED_CONTEXTS" });
 
 // Restore auth state from session storage on startup
 chrome.storage.session.get("authState", (result) => {

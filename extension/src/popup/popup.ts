@@ -104,7 +104,7 @@ async function loadProfessionalProfile(): Promise<void> {
     const response = await chrome.runtime.sendMessage({
       type: "API_REQUEST",
       method: "GET",
-      path: "/api/autoapply/profile",
+      path: "/api/autoapply",
     });
 
     if (response?.error || response?.status === 401) {
@@ -121,12 +121,16 @@ async function loadProfessionalProfile(): Promise<void> {
       return;
     }
 
-    if (response?.data?.summary) {
+    // Update usage from the same response
+    updateUsageFromProfile(response.data?.daily_llm_calls, response.data?.daily_llm_limit);
+
+    const knowledge = response?.data?.knowledge;
+    if (knowledge && Object.keys(knowledge).length > 0) {
       if (statusEl) {
         statusEl.textContent = "OK";
         statusEl.className = "status-badge status-ok";
       }
-      const skills = response.data.skills?.length || 0;
+      const skills = knowledge.skills?.length || 0;
       if (detailEl) {
         detailEl.textContent = `${skills} competencias carregadas.`;
       }
@@ -153,27 +157,14 @@ async function loadProfessionalProfile(): Promise<void> {
   }
 }
 
-async function loadDailyUsage(): Promise<void> {
+function updateUsageFromProfile(count?: number, limit?: number): void {
   const countEl = document.getElementById("usage-count");
-  try {
-    const response = await chrome.runtime.sendMessage({
-      type: "API_REQUEST",
-      method: "GET",
-      path: "/api/autoapply/usage",
-    });
-
-    if (response?.data?.count !== undefined) {
-      const count = response.data.count as number;
-      const limit = response.data.limit || 50;
-      if (countEl) {
-        countEl.textContent = `${count}/${limit}`;
-        if (count >= limit) {
-          countEl.style.color = "#dc2626";
-        }
-      }
+  if (countEl && count !== undefined) {
+    const max = limit || 50;
+    countEl.textContent = `${count}/${max}`;
+    if (count >= max) {
+      countEl.style.color = "#dc2626";
     }
-  } catch {
-    // Silently fail — usage is informational
   }
 }
 
@@ -405,10 +396,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     updatePiiStatus(pii);
     if (pii) populatePiiForm(pii);
 
-    // 4. Load professional profile from backend + usage in parallel
+    // 4. Load professional profile from backend + history in parallel
     await Promise.all([
       loadProfessionalProfile(),
-      loadDailyUsage(),
       loadApplicationHistory(),
     ]);
 
@@ -670,10 +660,10 @@ function updateStatusDisplay(status: {
       statusEl.textContent = stepNames[status.step] || status.step;
       statusEl.style.color = status.step === "COMPLETE" ? "#16a34a" : "#4b5563";
 
-      // Refresh history and usage when complete
+      // Refresh history and profile (includes usage) when complete
       if (status.step === "COMPLETE") {
         loadApplicationHistory();
-        loadDailyUsage();
+        loadProfessionalProfile();
       }
     }
 

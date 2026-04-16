@@ -1,6 +1,8 @@
 /**
  * Handler for the "Custom Questions" screen.
- * Scrapes questions, calls LLM for answers, fills them in.
+ * Uses the 3-tier strategy: PII → conservative → LLM.
+ * PII and conservative matches are resolved client-side (no network).
+ * Only truly professional questions hit the backend LLM.
  */
 
 import {
@@ -9,7 +11,7 @@ import {
   type ScrapedField
 } from "../dom/helpers";
 import { findNextButton } from "./detector";
-import { findBestOption } from "../field-matcher";
+import { matchAndFillFields, findBestOption } from "../field-matcher";
 import { apiPost } from "../../lib/api-client";
 import { getCachedProfile } from "../../lib/profile";
 import { detectValidationErrors, type ValidationError } from "../dom/errors";
@@ -23,9 +25,10 @@ export interface CustomQuestionsResult {
 }
 
 /**
- * Handle a page of custom questions.
- * For each question, calls the backend /answer-question endpoint.
- * Returns results including any fields that need human intervention.
+ * Handle a page of custom questions using the 3-tier matching strategy.
+ * Tier 1 (PII) and Tier 2 (conservative) resolve client-side.
+ * Tier 3 sends remaining fields to the backend LLM in batch.
+ * Any remaining unmatched fields go to individual /answer-question calls.
  */
 export async function handleCustomQuestions(): Promise<CustomQuestionsResult> {
   console.log("[CustomQuestions] Scraping question fields...");
@@ -34,7 +37,6 @@ export async function handleCustomQuestions(): Promise<CustomQuestionsResult> {
   console.log(`[CustomQuestions] Found ${fields.length} question fields`);
 
   if (fields.length === 0) {
-    // No fields visible — try clicking next
     const nextBtn = findNextButton();
     if (nextBtn) {
       await humanLikeClick(nextBtn);
@@ -45,30 +47,62 @@ export async function handleCustomQuestions(): Promise<CustomQuestionsResult> {
 
   const jobUrl = window.location.href;
   const { companyName, jobTitle } = extractJobContext();
-  const _profile = getCachedProfile();
 
   let answered = 0;
   let skipped = 0;
   let llmCalls = 0;
   const needsHuman: string[] = [];
 
-  for (const field of fields) {
-    // Skip file inputs
-    if ((field.type as string) === "file") {
-      needsHuman.push(field.label);
+  // Filter to only fields that need filling
+  const fieldsToFill = fields.filter((f) => {
+    if ((f.type as string) === "file") {
+      needsHuman.push(f.label);
       skipped++;
-      continue;
+      return false;
     }
-
-    // Skip fields that already have values (Gupy pre-fills some)
-    if (fieldHasValue(field)) {
-      console.log(`[CustomQuestions] Skipping pre-filled: "${field.label}"`);
-      answered++; // Count as handled
-      continue;
+    if (fieldHasValue(f)) {
+      console.log(`[CustomQuestions] Skipping pre-filled: "${f.label}"`);
+      answered++;
+      return false;
     }
+    return true;
+  });
 
+  if (fieldsToFill.length === 0) {
+    return finishAndNavigate(answered, skipped, llmCalls, needsHuman);
+  }
+
+  // --- 3-tier matching (PII → conservative → batch LLM) ---
+  const matchResults = await matchAndFillFields(fieldsToFill, jobUrl, companyName);
+  // Count LLM calls from batch (1 call for all unmatched fields)
+  const batchUsedLlm = matchResults.some((r) => r.source === "llm");
+  if (batchUsedLlm) llmCalls++;
+
+  // Track fields that need individual LLM fallback
+  const needsIndividualLlm: ScrapedField[] = [];
+
+  for (const result of matchResults) {
+    if (result.value !== null) {
+      // Tier 1, 2, or 3 produced an answer — fill it
+      try {
+        await fillQuestionField(result.field, result.value);
+        answered++;
+        console.log(`[CustomQuestions] Filled "${result.field.label}" via ${result.source}`);
+        await randomDelay(300, 800);
+      } catch (err) {
+        console.error(`[CustomQuestions] Fill failed for "${result.field.label}":`, err);
+        needsHuman.push(result.field.label);
+        skipped++;
+      }
+    } else if (result.source === "needs_human") {
+      // Batch LLM said NEEDS_HUMAN — try individual call with richer context
+      needsIndividualLlm.push(result.field);
+    }
+  }
+
+  // --- Fallback: individual LLM calls for remaining fields ---
+  for (const field of needsIndividualLlm) {
     try {
-      // Call backend LLM for each question
       const response = await apiPost<{
         answer: string | null;
         needs_human: boolean;
@@ -85,48 +119,47 @@ export async function handleCustomQuestions(): Promise<CustomQuestionsResult> {
       llmCalls++;
 
       if (response.needs_human || !response.answer) {
-        console.log(`[CustomQuestions] NEEDS_HUMAN: "${field.label}" (model: ${response.model_used})`);
+        console.log(`[CustomQuestions] NEEDS_HUMAN: "${field.label}" (${response.model_used})`);
         needsHuman.push(field.label);
         skipped++;
         continue;
       }
 
-      // Fill the answer
       await fillQuestionField(field, response.answer);
       answered++;
-      console.log(`[CustomQuestions] Answered: "${field.label}" (model: ${response.model_used})`);
-
-      // Delay between questions (human-like pace)
+      console.log(`[CustomQuestions] Answered: "${field.label}" (${response.model_used})`);
       await randomDelay(500, 1500);
 
     } catch (error) {
       console.error(`[CustomQuestions] Failed for "${field.label}":`, error);
-
-      // Check if it's a budget error (429)
       const errMsg = (error as Error).message || "";
       if (errMsg.includes("429") || errMsg.includes("Limite")) {
-        // Budget exceeded — stop processing more questions
         needsHuman.push(field.label);
-        for (let i = fields.indexOf(field) + 1; i < fields.length; i++) {
-          needsHuman.push(fields[i].label);
+        for (let i = needsIndividualLlm.indexOf(field) + 1; i < needsIndividualLlm.length; i++) {
+          needsHuman.push(needsIndividualLlm[i].label);
         }
-        skipped += fields.length - fields.indexOf(field);
+        skipped += needsIndividualLlm.length - needsIndividualLlm.indexOf(field);
         break;
       }
-
       needsHuman.push(field.label);
       skipped++;
     }
   }
 
   console.log(`[CustomQuestions] Answered: ${answered}, Skipped: ${skipped}, LLM calls: ${llmCalls}`);
+  return finishAndNavigate(answered, skipped, llmCalls, needsHuman);
+}
 
-  // If there are needs_human fields, DON'T click next — let the state machine handle it
+async function finishAndNavigate(
+  answered: number,
+  skipped: number,
+  llmCalls: number,
+  needsHuman: string[],
+): Promise<CustomQuestionsResult> {
   if (needsHuman.length > 0) {
     return { answered, skipped, llmCalls, needsHuman, validationErrors: [] };
   }
 
-  // All answered — click next
   await randomDelay(1000, 2000);
   const nextBtn = findNextButton();
   if (nextBtn) {
@@ -134,7 +167,6 @@ export async function handleCustomQuestions(): Promise<CustomQuestionsResult> {
     await waitForNavigation(15000);
   }
 
-  // After clicking next, check for validation errors
   const validationErrors = await detectValidationErrors();
   if (validationErrors.length > 0) {
     console.warn("[CustomQuestions] Validation errors:", validationErrors);

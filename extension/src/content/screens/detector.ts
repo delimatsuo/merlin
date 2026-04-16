@@ -60,9 +60,15 @@ function isPersonalizationScreen(): boolean {
 }
 
 function isCustomQuestionsScreen(): boolean {
-  // Detect custom question containers
+  // Detect custom question containers by class
   const questions = document.querySelector(SELECTORS.gupy.questionContainer);
   if (questions) return true;
+
+  // Detect by heading text — Gupy shows "Questions created by" or "Perguntas criadas"
+  const headingTexts = ["questions created by", "perguntas criadas"];
+  for (const text of headingTexts) {
+    if (findElementByText("h1, h2, h3, h4, p, span, div", text)) return true;
+  }
 
   // Check for "responder agora" / "answer now" prompt
   for (const text of SELECTORS.buttonText.answerNow) {
@@ -75,15 +81,22 @@ function isCustomQuestionsScreen(): boolean {
 function isAdditionalInfoScreen(): boolean {
   // Detect standard application form with inputs
   const form = document.querySelector(SELECTORS.gupy.applicationForm);
-  if (!form) return false;
+  if (form) {
+    // Must have at least one input field
+    const hasInputs = form.querySelector(SELECTORS.form.textInput) ||
+                      form.querySelector(SELECTORS.form.select) ||
+                      form.querySelector(SELECTORS.form.textarea) ||
+                      form.querySelector(SELECTORS.form.radio);
+    if (hasInputs) return true;
+  }
 
-  // Must have at least one input field
-  const hasInputs = form.querySelector(SELECTORS.form.textInput) ||
-                    form.querySelector(SELECTORS.form.select) ||
-                    form.querySelector(SELECTORS.form.textarea) ||
-                    form.querySelector(SELECTORS.form.radio);
+  // Fallback: if we're on an application URL and there are visible input fields, it's likely additional info
+  if (window.location.pathname.includes("/candidates/applications/")) {
+    const inputs = document.querySelectorAll("input[type='text'], input:not([type]), textarea, select");
+    if (inputs.length >= 2) return true;
+  }
 
-  return !!hasInputs;
+  return false;
 }
 
 function isWelcomeScreen(): boolean {
@@ -104,6 +117,9 @@ function isWelcomeScreen(): boolean {
  * Returns true if a user avatar or menu is detected.
  */
 export function isGupyLoggedIn(): boolean {
+  // If we're on an application form page, we must be logged in
+  if (window.location.pathname.includes("/candidates/applications/")) return true;
+
   return !!(
     document.querySelector(SELECTORS.gupy.userAvatar) ||
     document.querySelector(SELECTORS.gupy.userMenu)
@@ -117,7 +133,7 @@ export function isGupyApplicationPage(): boolean {
   const hostname = window.location.hostname;
   const pathname = window.location.pathname;
   return hostname.endsWith("gupy.io") &&
-         (pathname.includes("/candidate/job/") || pathname.includes("/apply"));
+         (pathname.includes("/candidate/job/") || pathname.includes("/candidates/applications/") || pathname.includes("/apply"));
 }
 
 /**
