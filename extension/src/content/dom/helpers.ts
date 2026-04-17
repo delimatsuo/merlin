@@ -514,5 +514,106 @@ export function scrapeFormFields(
     });
   }
 
+  // --- Pass 2: Find radio/checkbox GROUPS not captured by label scan ---
+  // Gupy's eliminatory questions put the question text in a <p>/<div>/<span>,
+  // not in a <label>. The individual option labels ("Sim", "Não") don't
+  // carry the question context.
+  const allRadioNames = new Set<string>();
+  root.querySelectorAll<HTMLInputElement>('input[type="radio"]').forEach((r) => {
+    if (r.name && !seen.has(r)) allRadioNames.add(r.name);
+  });
+
+  for (const name of allRadioNames) {
+    const radios = root.querySelectorAll<HTMLInputElement>(
+      `input[type="radio"][name="${cssEscape(name)}"]`,
+    );
+    if (radios.length === 0) continue;
+
+    // Find the question text: look for the nearest preceding text element
+    const firstRadio = radios[0];
+    const container = firstRadio.closest(
+      "[class*='question'], [class*='Question'], [class*='field'], [class*='Field'], [class*='group'], [class*='Group']"
+    ) || firstRadio.parentElement?.parentElement;
+
+    let questionText = "";
+    if (container) {
+      // Look for a text element (p, span, div, h*) before the radio group
+      const textEls = container.querySelectorAll("p, span, div, h1, h2, h3, h4, h5, h6, legend");
+      for (let i = 0; i < textEls.length; i++) {
+        const t = textEls[i].textContent?.trim() || "";
+        // Must be substantial text (not just "Sim"/"Não") and appear before the radios
+        if (t.length > 10 && !t.startsWith("Required")) {
+          questionText = t;
+          break;
+        }
+      }
+    }
+
+    if (!questionText) continue;
+
+    const options = Array.from(radios).map((r) => {
+      const rLabel = r.id
+        ? root.querySelector<HTMLElement>(`label[for="${cssEscape(r.id)}"]`)
+        : r.closest("label");
+      return rLabel?.textContent?.trim() ?? r.value;
+    });
+
+    seen.add(firstRadio);
+    fields.push({
+      label: questionText.replace(/\s*\*\s*$/, "").trim(),
+      type: "radio",
+      options,
+      required: questionText.includes("*") || questionText.toLowerCase().includes("required"),
+      element: firstRadio,
+      elementId: name || slugify(questionText) || `radio-${fields.length}`,
+    });
+  }
+
+  // Same for uncaptured checkbox groups
+  const allCheckboxes = root.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
+  const checkboxGroups = new Map<HTMLElement, HTMLInputElement[]>();
+
+  allCheckboxes.forEach((cb) => {
+    if (seen.has(cb)) return;
+    const container = cb.closest(
+      "[class*='question'], [class*='Question'], [class*='field'], [class*='Field'], [class*='group'], [class*='Group']"
+    ) || cb.parentElement?.parentElement;
+    if (container) {
+      const existing = checkboxGroups.get(container as HTMLElement) || [];
+      existing.push(cb);
+      checkboxGroups.set(container as HTMLElement, existing);
+    }
+  });
+
+  for (const [container, checkboxes] of checkboxGroups) {
+    let questionText = "";
+    const textEls = container.querySelectorAll("p, span, div, h1, h2, h3, h4, h5, h6, legend");
+    for (let i = 0; i < textEls.length; i++) {
+      const t = textEls[i].textContent?.trim() || "";
+      if (t.length > 10 && !t.startsWith("Required")) {
+        questionText = t;
+        break;
+      }
+    }
+    if (!questionText) continue;
+
+    const options = checkboxes.map((cb) => {
+      const cbLabel = cb.id
+        ? root.querySelector<HTMLElement>(`label[for="${cssEscape(cb.id)}"]`)
+        : cb.closest("label");
+      return cbLabel?.textContent?.trim() ?? cb.value;
+    });
+
+    seen.add(checkboxes[0]);
+    fields.push({
+      label: questionText.replace(/\s*\*\s*$/, "").trim(),
+      type: "checkbox",
+      options,
+      required: questionText.includes("*") || questionText.toLowerCase().includes("required"),
+      element: checkboxes[0],
+      elementId: checkboxes[0].name || slugify(questionText) || `checkbox-${fields.length}`,
+    });
+  }
+
   return fields;
 }

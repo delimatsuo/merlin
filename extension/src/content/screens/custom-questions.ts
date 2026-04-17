@@ -286,12 +286,37 @@ async function fillQuestionField(field: ScrapedField, answer: string): Promise<v
     }
 
     case "checkbox": {
-      const shouldCheck = answer.toLowerCase() === "true" || answer.toLowerCase() === "sim";
-      const container = field.element.closest(
-        '[class*="Checkbox"], [class*="checkbox"]'
-      ) || field.element.parentElement;
-      if (container) {
-        await clickCheckbox(container as HTMLElement, shouldCheck);
+      if (field.options && field.options.length > 1) {
+        // Multi-select checkbox group — LLM returns comma-separated options to check
+        const selectedOptions = answer.split(",").map((s) => s.trim().toLowerCase());
+        const container = field.element.closest(
+          '[class*="question"], [class*="Question"], [class*="field"], [class*="Field"], [class*="group"], [class*="Group"]'
+        ) || field.element.parentElement?.parentElement || document.body;
+
+        const checkboxes = (container as HTMLElement).querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
+        for (let i = 0; i < checkboxes.length; i++) {
+          const cb = checkboxes[i];
+          const cbLabel = cb.id
+            ? document.querySelector<HTMLElement>(`label[for="${cb.id}"]`)
+            : cb.closest("label");
+          const cbText = cbLabel?.textContent?.trim().toLowerCase() || cb.value.toLowerCase();
+
+          if (selectedOptions.some((opt) => cbText.includes(opt) || opt.includes(cbText))) {
+            if (!cb.checked) {
+              cb.click();
+              await randomDelay(100, 300);
+            }
+          }
+        }
+      } else {
+        // Single checkbox — true/false
+        const shouldCheck = answer.toLowerCase() === "true" || answer.toLowerCase() === "sim";
+        const container = field.element.closest(
+          '[class*="Checkbox"], [class*="checkbox"]'
+        ) || field.element.parentElement;
+        if (container) {
+          await clickCheckbox(container as HTMLElement, shouldCheck);
+        }
       }
       break;
     }
