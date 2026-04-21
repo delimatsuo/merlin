@@ -1,3 +1,14 @@
+import {
+  enqueueJobs,
+  removeJob,
+  clearCompleted,
+  getQueue,
+  setConcurrency,
+  startQueue,
+  pauseQueue,
+  onTabStatusUpdate,
+} from "./queue";
+
 // Types
 interface AuthState {
   token: string | null;
@@ -290,6 +301,39 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       case "SESSION_LOCK_CHECK":
         return { locked: session.activeTabId !== null, activeTab: session.activeTabId };
+
+      // --- Batch queue ---
+      case "QUEUE_GET":
+        return getQueue();
+
+      case "QUEUE_ENQUEUE":
+        return enqueueJobs(message.jobs || []);
+
+      case "QUEUE_REMOVE":
+        return removeJob(message.id);
+
+      case "QUEUE_CLEAR_COMPLETED":
+        return clearCompleted();
+
+      case "QUEUE_SET_CONCURRENCY":
+        return setConcurrency(message.n);
+
+      case "QUEUE_START":
+        return startQueue();
+
+      case "QUEUE_PAUSE":
+        return pauseQueue();
+
+      case "QUEUE_OPEN_DASHBOARD":
+        await chrome.tabs.create({ url: chrome.runtime.getURL("dist/dashboard.html") });
+        return { opened: true };
+
+      // From content script state machines (tab-specific progress).
+      case "TAB_STATUS_UPDATE":
+        if (sender.tab?.id) {
+          await onTabStatusUpdate(sender.tab.id, message.update);
+        }
+        return { ok: true };
 
       default:
         return { error: "Unknown message type" };

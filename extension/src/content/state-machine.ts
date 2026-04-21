@@ -5,15 +5,39 @@
  */
 
 import { AutoApplyStep, ErrorType } from "../lib/types";
-import { detectScreen, isGupyLoggedIn, isGupyApplicationPage, findFinishButton } from "./screens/detector";
-import { handleWelcome } from "./screens/welcome";
-import { handleAdditionalInfo, type AdditionalInfoResult } from "./screens/additional-info";
-import { handleCustomQuestions, fillUserAnswers, type CustomQuestionsResult, type UnansweredField } from "./screens/custom-questions";
-import { handlePersonalization, type PersonalizationResult } from "./screens/personalization";
+import { getAdapter } from "./adapters/registry";
+import type { BoardAdapter } from "./adapters/adapter";
+import type { AdditionalInfoResult } from "./screens/additional-info";
+import type { CustomQuestionsResult, UnansweredField } from "./screens/custom-questions";
+import type { PersonalizationResult } from "./screens/personalization";
+import { showInPageHumanPrompt, removeInPagePrompt } from "./screens/in-page-prompt";
 import { randomDelay, waitForNavigation, humanLikeClick } from "./dom/helpers";
 import { getPiiProfile, isPiiComplete } from "../lib/pii-store";
 import { loadProfile } from "../lib/profile";
 import { getMode } from "../lib/settings";
+import { apiPost } from "../lib/api-client";
+
+function adapter(): BoardAdapter {
+  const a = getAdapter();
+  if (!a) {
+    throw new Error(`No adapter registered for ${window.location.hostname}`);
+  }
+  return a;
+}
+
+/** Notify the service-worker queue about this tab's progress. */
+function reportTabStatus(update: {
+  step?: string;
+  completed?: boolean;
+  failed?: boolean;
+  errorMessage?: string;
+  needsHuman?: boolean;
+  needsConfirmation?: boolean;
+}): void {
+  chrome.runtime
+    .sendMessage({ type: "TAB_STATUS_UPDATE", update })
+    .catch(() => {});
+}
 
 const ACTIVE_SESSION_KEY = "autoapply_active_session";
 
@@ -59,6 +83,7 @@ export class StateMachine {
     if (detail) {
       this.errors.push(`${errorType}: ${detail}`);
     }
+    reportTabStatus({ failed: true, errorMessage: detail });
   }
 
   reset(): void {
@@ -100,8 +125,46 @@ export class StateMachine {
         this.currentStep !== AutoApplyStep.ERROR &&
         this.currentStep !== AutoApplyStep.REVIEW
       ) {
+        // Handle board-specific blocking confirmation modals (e.g. Gupy's
+        // "Review of disqualifying questions"). In auto mode we click the
+        // confirm button; in dry-run we pause for the user.
+        const a = adapter();
+        const reviewModal = a.findBlockingModal?.() ?? null;
+        if (reviewModal) {
+          if (this.mode === "auto") {
+            const confirmBtn = a.findModalConfirmButton?.(reviewModal) ?? null;
+            if (confirmBtn) {
+              console.log(`[SM] Auto-confirming ${a.name} blocking modal`);
+              await humanLikeClick(confirmBtn);
+              await waitForNavigation(10000);
+              this.transition(a.detectScreen());
+              continue;
+            }
+          }
+          console.log(`[SM] ${a.name} blocking modal open — pausing for user confirmation`);
+          reportTabStatus({ needsConfirmation: true });
+          // Keep running=true in persisted state so the content script on the
+          // next page auto-resumes after the user clicks Confirm manually.
+          this.running = false;
+          await chrome.storage.session.set({
+            [ACTIVE_SESSION_KEY]: {
+              step: this.currentStep,
+              fieldsAnswered: this.fieldsAnswered,
+              questionsAnswered: this.questionsAnswered,
+              llmCalls: this.llmCalls,
+              startTime: this.startTime,
+              jobUrl: this.jobUrl,
+              mode: this.mode,
+              running: true,
+              pendingFields: this.pendingFields,
+            },
+          });
+          this.broadcastStatus();
+          return;
+        }
+
         // Detect current screen
-        const detectedScreen = detectScreen();
+        const detectedScreen = a.detectScreen();
 
         // If detection disagrees with our state, use detection (DOM is truth)
         if (detectedScreen !== AutoApplyStep.IDLE && detectedScreen !== this.currentStep) {
@@ -115,14 +178,14 @@ export class StateMachine {
         // Handle current state
         switch (this.currentStep) {
           case AutoApplyStep.WELCOME:
-            await handleWelcome();
+            await a.handleWelcome();
             await randomDelay(300, 800);
             await waitForNavigation(5000);
-            this.transition(detectScreen()); // Re-detect after navigation
+            this.transition(a.detectScreen()); // Re-detect after navigation
             break;
 
           case AutoApplyStep.ADDITIONAL_INFO: {
-            const infoResult: AdditionalInfoResult = await handleAdditionalInfo();
+            const infoResult: AdditionalInfoResult = await a.handleAdditionalInfo();
             this.fieldsAnswered += infoResult.filled;
             this.llmCalls += infoResult.llmCalls;
 
@@ -137,13 +200,13 @@ export class StateMachine {
 
             await randomDelay(1000, 2000);
             // Click next and wait for navigation is handled inside handleAdditionalInfo
-            this.transition(detectScreen());
+            this.transition(a.detectScreen());
             break;
           }
 
           case AutoApplyStep.CUSTOM_QUESTIONS_DETECT:
           case AutoApplyStep.CUSTOM_QUESTIONS_FILL: {
-            const qResult: CustomQuestionsResult = await handleCustomQuestions();
+            const qResult: CustomQuestionsResult = await a.handleCustomQuestions();
             this.questionsAnswered += qResult.answered;
             this.llmCalls += qResult.llmCalls;
 
@@ -162,22 +225,40 @@ export class StateMachine {
               this.transition(AutoApplyStep.CUSTOM_QUESTIONS_FILL);
               this.broadcastNeedsHuman(qResult.unansweredFields);
               await this.persistState();
+
+              // Inject in-page banner + highlights so the user sees the prompt
+              // even when the popup is closed, and auto-save typed answers to
+              // the knowledge file on "Save and continue" click. Mark the
+              // session as running again so the content script resumes after
+              // the page navigates.
+              showInPageHumanPrompt(qResult.unansweredFields, async (answers) => {
+                try {
+                  await apiPost("/api/autoapply/save-answers", { answers });
+                  console.log("[SM] Saved", Object.keys(answers).length, "user answers to knowledge file");
+                } catch (err) {
+                  console.error("[SM] save-answers POST failed:", err);
+                }
+                this.pendingFields = [];
+                this.running = true;
+                await this.persistState();
+              });
+
               this.running = false; // Pause — will resume when user provides answers
               return;
             }
 
             await randomDelay(1000, 2000);
-            this.transition(detectScreen());
+            this.transition(a.detectScreen());
             break;
           }
 
           case AutoApplyStep.PERSONALIZATION: {
-            const pResult: PersonalizationResult = await handlePersonalization();
+            const pResult: PersonalizationResult = await a.handlePersonalization();
             if (pResult.answered) this.questionsAnswered += 1;
             this.llmCalls += pResult.llmCalls;
             await randomDelay(1000, 2000);
             // After personalization, check if we're now on the review/finish screen
-            const nextScreen = detectScreen();
+            const nextScreen = a.detectScreen();
             if (nextScreen === AutoApplyStep.COMPLETE || nextScreen === AutoApplyStep.IDLE) {
               if (this.mode === "auto") {
                 // Auto mode: submit directly
@@ -194,7 +275,7 @@ export class StateMachine {
 
           default: {
             // Unknown state or IDLE — try to detect
-            const detected = detectScreen();
+            const detected = a.detectScreen();
             if (detected === AutoApplyStep.IDLE) {
               // Nothing to do — maybe page hasn't loaded yet
               // Give up after 30 seconds of no screen detected
@@ -227,6 +308,7 @@ export class StateMachine {
         await this.logApplication("dry-run");
         this.broadcastStatus();
         await this.clearState();
+        reportTabStatus({ completed: true });
       }
     } catch (error) {
       console.error("[SM] Unhandled error:", error);
@@ -247,7 +329,7 @@ export class StateMachine {
     console.log("[SM] User confirmed submission");
     this.running = true;
 
-    const finishBtn = findFinishButton();
+    const finishBtn = adapter().findFinishButton();
     if (finishBtn) {
       await humanLikeClick(finishBtn);
       await waitForNavigation(15000);
@@ -257,13 +339,14 @@ export class StateMachine {
     await this.logApplication("success");
     this.broadcastStatus();
     await this.clearState();
+    reportTabStatus({ completed: true });
     this.running = false;
   }
 
   private async autoSubmit(): Promise<void> {
     console.log("[SM] Auto mode: submitting directly");
 
-    const finishBtn = findFinishButton();
+    const finishBtn = adapter().findFinishButton();
     if (finishBtn) {
       await humanLikeClick(finishBtn);
       await waitForNavigation(15000);
@@ -273,6 +356,7 @@ export class StateMachine {
     await this.logApplication("success");
     this.broadcastStatus();
     await this.clearState();
+    reportTabStatus({ completed: true });
   }
 
   cancelSubmit(): void {
@@ -293,13 +377,15 @@ export class StateMachine {
     if (this.currentStep !== AutoApplyStep.CUSTOM_QUESTIONS_FILL) return;
 
     console.log("[SM] Filling user-provided answers:", Object.keys(answers));
-    const filled = await fillUserAnswers(answers);
+    const a = adapter();
+    const filled = await a.fillUserAnswers(answers);
     this.questionsAnswered += filled;
     this.pendingFields = [];
+    removeInPagePrompt();
 
     // Resume the state machine — re-detect screen and continue
     this.running = true;
-    this.transition(detectScreen());
+    this.transition(a.detectScreen());
     this.broadcastStatus();
 
     // Continue the main loop
@@ -313,12 +399,14 @@ export class StateMachine {
       fieldsAnswered: this.fieldsAnswered,
       questionsAnswered: this.questionsAnswered,
     }).catch(() => {});
+    reportTabStatus({ needsHuman: true });
   }
 
   private async runPreChecks(): Promise<boolean> {
-    // Check 1: On a Gupy application page
-    if (!isGupyApplicationPage()) {
-      this.transitionToError(ErrorType.GUPY_LOGIN_REQUIRED, "Navegue para uma vaga no Gupy primeiro.");
+    // Check 1: on a supported board's application page
+    const a = getAdapter();
+    if (!a || !a.isApplicationPage()) {
+      this.transitionToError(ErrorType.GUPY_LOGIN_REQUIRED, "Navegue para uma página de candidatura suportada.");
       this.broadcastStatus();
       return false;
     }
@@ -350,7 +438,7 @@ export class StateMachine {
     }
 
     // All checks passed — detect initial screen
-    const screen = detectScreen();
+    const screen = a.detectScreen();
     this.transition(screen !== AutoApplyStep.IDLE ? screen : AutoApplyStep.WELCOME);
     return true;
   }
@@ -377,6 +465,7 @@ export class StateMachine {
         jobUrl: this.jobUrl,
         mode: this.mode,
         running: this.running,
+        pendingFields: this.pendingFields,
       },
     });
   }
@@ -410,6 +499,31 @@ export class StateMachine {
     const result = await chrome.storage.session.get(ACTIVE_SESSION_KEY);
     const state = result[ACTIVE_SESSION_KEY] as { running?: boolean } | undefined;
     return !!state?.running;
+  }
+
+  /**
+   * If a previous run paused on NEEDS_HUMAN and the user reloaded the page,
+   * re-inject the in-page prompt so they can still answer and save.
+   */
+  async restorePendingPromptIfAny(): Promise<void> {
+    const result = await chrome.storage.session.get(ACTIVE_SESSION_KEY);
+    const state = result[ACTIVE_SESSION_KEY] as
+      | { pendingFields?: UnansweredField[]; running?: boolean }
+      | undefined;
+    if (!state?.pendingFields?.length || state.running) return;
+
+    showInPageHumanPrompt(state.pendingFields, async (answers) => {
+      try {
+        await apiPost("/api/autoapply/save-answers", { answers });
+        console.log("[SM] Saved", Object.keys(answers).length, "user answers to knowledge file");
+      } catch (err) {
+        console.error("[SM] save-answers POST failed:", err);
+      }
+      this.pendingFields = [];
+      this.running = true;
+      this.currentStep = state.running ? this.currentStep : AutoApplyStep.CUSTOM_QUESTIONS_FILL;
+      await this.persistState();
+    });
   }
 
   private async clearState(): Promise<void> {

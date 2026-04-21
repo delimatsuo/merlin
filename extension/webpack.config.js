@@ -9,6 +9,7 @@ module.exports = {
     "service-worker": "./src/background/service-worker.ts",
     popup: "./src/popup/popup.ts",
     offscreen: "./src/offscreen/offscreen.ts",
+    dashboard: "./src/dashboard/dashboard.ts",
   },
   output: {
     path: path.resolve(__dirname, "dist"),
@@ -33,6 +34,8 @@ module.exports = {
         { from: "src/popup/popup.html", to: "popup.html" },
         { from: "src/popup/popup.css", to: "popup.css" },
         { from: "src/offscreen/offscreen.html", to: "offscreen.html" },
+        { from: "src/dashboard/dashboard.html", to: "dashboard.html" },
+        { from: "src/dashboard/dashboard.css", to: "dashboard.css" },
       ],
     }),
   ],

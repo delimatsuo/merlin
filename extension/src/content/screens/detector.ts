@@ -164,6 +164,50 @@ export function isGupyApplicationPage(): boolean {
 const CLICKABLE = "button, a, div, span, [role='button'], [class*='btn'], [class*='Btn'], [class*='button'], [class*='Button']";
 
 /**
+ * Detect Gupy's "Review of disqualifying questions" confirmation modal that
+ * appears between the custom-questions form and the next step.
+ */
+export function findDisqualifyingReviewModal(): HTMLElement | null {
+  const headingTexts = [
+    "review of disqualifying",
+    "revisão das perguntas",
+    "revisao das perguntas",
+    "revisão de perguntas eliminatórias",
+    "revisao de perguntas eliminatorias",
+    "perguntas eliminatórias",
+    "perguntas eliminatorias",
+  ];
+  for (const text of headingTexts) {
+    const el = findElementByText("h1, h2, h3, [class*='title'], [class*='Title'], [class*='heading'], [class*='Heading']", text);
+    if (el) {
+      const modal = el.closest("[role='dialog'], [class*='modal'], [class*='Modal'], [class*='dialog'], [class*='Dialog']") as HTMLElement | null;
+      if (modal) return modal;
+      // Fallback: return the heading's containing card-ish ancestor
+      return (el.closest("section, div[class*='container']") as HTMLElement | null) ?? el;
+    }
+  }
+  return null;
+}
+
+/**
+ * Inside the review modal, find the "Confirm" button (not the "Review" button
+ * that dismisses back to the form).
+ */
+export function findConfirmButtonInModal(modal: HTMLElement): HTMLElement | null {
+  const confirmTexts = ["confirm", "confirmar"];
+  for (const text of confirmTexts) {
+    const buttons = modal.querySelectorAll<HTMLElement>(CLICKABLE);
+    for (let i = 0; i < buttons.length; i++) {
+      const btn = buttons[i];
+      if ((btn as HTMLButtonElement).disabled) continue;
+      const label = btn.textContent?.trim().toLowerCase() || "";
+      if (label === text || label.startsWith(text + " ")) return btn;
+    }
+  }
+  return null;
+}
+
+/**
  * Find a clickable "next" or "continue" button on the current screen.
  */
 export function findNextButton(): HTMLElement | null {

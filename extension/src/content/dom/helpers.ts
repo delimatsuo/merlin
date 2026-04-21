@@ -449,10 +449,28 @@ export function scrapeFormFields(
     }
 
     if (!input || seen.has(input)) continue;
-    seen.add(input);
 
     const tagName = input.tagName.toLowerCase();
     const inputType = (input as HTMLInputElement).type?.toLowerCase() ?? "";
+
+    // Skip radios in Pass 1 — individual option labels ("Sim", "Não") would
+    // otherwise become field labels. Pass 2 captures the group with its real
+    // question text.
+    if (inputType === "radio") continue;
+
+    // Same for checkbox GROUPS (multi-select with several option labels).
+    // A standalone checkbox (e.g. "I agree to terms") stays in Pass 1.
+    if (inputType === "checkbox") {
+      const name = (input as HTMLInputElement).name;
+      const sameNameCount = name
+        ? root.querySelectorAll(
+            `input[type="checkbox"][name="${cssEscape(name)}"]`,
+          ).length
+        : 0;
+      if (sameNameCount > 1) continue;
+    }
+
+    seen.add(input);
 
     let type: ScrapedField["type"];
     let options: string[] | undefined;
@@ -467,20 +485,6 @@ export function scrapeFormFields(
         .filter(Boolean);
     } else if (inputType === "checkbox") {
       type = "checkbox";
-    } else if (inputType === "radio") {
-      type = "radio";
-      // Gather all radios with the same name
-      const name = (input as HTMLInputElement).name;
-      if (name) {
-        const radios = root.querySelectorAll<HTMLInputElement>(
-          `input[type="radio"][name="${cssEscape(name)}"]`,
-        );
-        options = Array.from(radios).map((r) => {
-          const rLabel =
-            r.id ? root.querySelector<HTMLElement>(`label[for="${cssEscape(r.id)}"]`) : null;
-          return rLabel?.textContent?.trim() ?? r.value;
-        });
-      }
     } else {
       type = "text";
     }
@@ -529,33 +533,38 @@ export function scrapeFormFields(
     );
     if (radios.length === 0) continue;
 
-    // Find the question text: look for the nearest preceding text element
     const firstRadio = radios[0];
-    const container = firstRadio.closest(
-      "[class*='question'], [class*='Question'], [class*='field'], [class*='Field'], [class*='group'], [class*='Group']"
-    ) || firstRadio.parentElement?.parentElement;
 
+    // Walk up the DOM from the first radio. At each level, inspect only the
+    // preceding siblings (the question text usually sits immediately before
+    // the option group, not inside an ancestor that also wraps unrelated
+    // headings). Stop on the first sibling whose own text is substantial and
+    // contains no form control.
     let questionText = "";
-    if (container) {
-      // Look for a text element (p, span, div, h*) before the radio group
-      const textEls = container.querySelectorAll("p, span, div, h1, h2, h3, h4, h5, h6, legend");
-      for (let i = 0; i < textEls.length; i++) {
-        const t = textEls[i].textContent?.trim() || "";
-        // Must be substantial text (not just "Sim"/"Não") and appear before the radios
-        if (t.length > 10 && !t.startsWith("Required")) {
-          questionText = t;
-          break;
+    let node: HTMLElement | null = firstRadio;
+    while (node && node.tagName !== "BODY" && !questionText) {
+      let sib: Element | null = node.previousElementSibling;
+      while (sib && !questionText) {
+        if (!sib.querySelector("input, textarea, select")) {
+          const text = (sib.textContent || "").trim();
+          if (text.length >= 10 && !/^required/i.test(text)) {
+            questionText = text;
+          }
         }
+        sib = sib.previousElementSibling;
       }
+      node = node.parentElement;
     }
 
     if (!questionText) continue;
 
     const options = Array.from(radios).map((r) => {
-      const rLabel = r.id
-        ? root.querySelector<HTMLElement>(`label[for="${cssEscape(r.id)}"]`)
-        : r.closest("label");
-      return rLabel?.textContent?.trim() ?? r.value;
+      const rLabel =
+        (r.id
+          ? root.querySelector<HTMLElement>(`label[for="${cssEscape(r.id)}"]`)
+          : null) ?? r.closest("label");
+      const text = rLabel?.textContent?.trim();
+      return text || r.value;
     });
 
     seen.add(firstRadio);
@@ -569,49 +578,82 @@ export function scrapeFormFields(
     });
   }
 
-  // Same for uncaptured checkbox groups
-  const allCheckboxes = root.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
-  const checkboxGroups = new Map<HTMLElement, HTMLInputElement[]>();
+  // Same for uncaptured checkbox groups. Group by shared name first (most
+  // reliable), fall back to grouping by nearest form-field ancestor.
+  const allCheckboxes = Array.from(
+    root.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
+  ).filter((cb) => !seen.has(cb));
 
-  allCheckboxes.forEach((cb) => {
-    if (seen.has(cb)) return;
-    const container = cb.closest(
-      "[class*='question'], [class*='Question'], [class*='field'], [class*='Field'], [class*='group'], [class*='Group']"
-    ) || cb.parentElement?.parentElement;
-    if (container) {
-      const existing = checkboxGroups.get(container as HTMLElement) || [];
-      existing.push(cb);
-      checkboxGroups.set(container as HTMLElement, existing);
+  const checkboxGroups: HTMLInputElement[][] = [];
+  const byName = new Map<string, HTMLInputElement[]>();
+  const orphans: HTMLInputElement[] = [];
+  for (const cb of allCheckboxes) {
+    if (cb.name) {
+      const list = byName.get(cb.name) || [];
+      list.push(cb);
+      byName.set(cb.name, list);
+    } else {
+      orphans.push(cb);
     }
-  });
+  }
+  for (const list of byName.values()) {
+    if (list.length >= 2) checkboxGroups.push(list);
+    else orphans.push(...list);
+  }
+  // Orphans: group by nearest question-like ancestor
+  const orphansByContainer = new Map<HTMLElement, HTMLInputElement[]>();
+  for (const cb of orphans) {
+    const container = (cb.closest(
+      "[class*='question'], [class*='Question'], [class*='field'], [class*='Field'], [class*='group'], [class*='Group']",
+    ) || cb.parentElement?.parentElement) as HTMLElement | null;
+    if (!container) continue;
+    const list = orphansByContainer.get(container) || [];
+    list.push(cb);
+    orphansByContainer.set(container, list);
+  }
+  for (const list of orphansByContainer.values()) {
+    if (list.length >= 2) checkboxGroups.push(list);
+  }
 
-  for (const [container, checkboxes] of checkboxGroups) {
+  for (const checkboxes of checkboxGroups) {
+    const firstCheckbox = checkboxes[0];
+
+    // Walk up looking for the question text in a preceding sibling (same
+    // heuristic we use for radio groups to avoid picking page headings).
     let questionText = "";
-    const textEls = container.querySelectorAll("p, span, div, h1, h2, h3, h4, h5, h6, legend");
-    for (let i = 0; i < textEls.length; i++) {
-      const t = textEls[i].textContent?.trim() || "";
-      if (t.length > 10 && !t.startsWith("Required")) {
-        questionText = t;
-        break;
+    let node: HTMLElement | null = firstCheckbox;
+    while (node && node.tagName !== "BODY" && !questionText) {
+      let sib: Element | null = node.previousElementSibling;
+      while (sib && !questionText) {
+        if (!sib.querySelector("input, textarea, select")) {
+          const text = (sib.textContent || "").trim();
+          if (text.length >= 10 && !/^required/i.test(text)) {
+            questionText = text;
+          }
+        }
+        sib = sib.previousElementSibling;
       }
+      node = node.parentElement;
     }
     if (!questionText) continue;
 
     const options = checkboxes.map((cb) => {
-      const cbLabel = cb.id
-        ? root.querySelector<HTMLElement>(`label[for="${cssEscape(cb.id)}"]`)
-        : cb.closest("label");
-      return cbLabel?.textContent?.trim() ?? cb.value;
+      const cbLabel =
+        (cb.id
+          ? root.querySelector<HTMLElement>(`label[for="${cssEscape(cb.id)}"]`)
+          : null) ?? cb.closest("label");
+      const text = cbLabel?.textContent?.trim();
+      return text || cb.value;
     });
 
-    seen.add(checkboxes[0]);
+    for (const cb of checkboxes) seen.add(cb);
     fields.push({
       label: questionText.replace(/\s*\*\s*$/, "").trim(),
       type: "checkbox",
       options,
       required: questionText.includes("*") || questionText.toLowerCase().includes("required"),
-      element: checkboxes[0],
-      elementId: checkboxes[0].name || slugify(questionText) || `checkbox-${fields.length}`,
+      element: firstCheckbox,
+      elementId: firstCheckbox.name || slugify(questionText) || `checkbox-${fields.length}`,
     });
   }
 

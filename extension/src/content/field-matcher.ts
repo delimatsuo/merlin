@@ -166,6 +166,16 @@ const CONSERVATIVE_MATCHERS: ConservativePattern[] = [
 
 // --- Matching Logic ---
 
+function matchesPattern(haystack: string, pattern: string): boolean {
+  // Short patterns (<= 4 chars, no space) use word boundaries to avoid
+  // matching inside unrelated words, e.g. "cor" inside "controladora".
+  if (pattern.length <= 4 && !pattern.includes(" ")) {
+    const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`\\b${escaped}\\b`).test(haystack);
+  }
+  return haystack.includes(pattern);
+}
+
 function matchPii(label: string, pii: PiiProfile): string | null {
   const lower = label.toLowerCase();
   for (const matcher of PII_MATCHERS) {
@@ -173,7 +183,7 @@ function matchPii(label: string, pii: PiiProfile): string | null {
     if (matcher.exclude?.some((ex) => lower.includes(ex))) continue;
 
     for (const pattern of matcher.patterns) {
-      if (lower.includes(pattern)) {
+      if (matchesPattern(lower, pattern)) {
         const value = matcher.getValue(pii);
         return value || null; // Return null if PII field is empty
       }
@@ -217,10 +227,23 @@ export async function matchAndFillFields(
       continue;
     }
 
+    const acceptsValue = (value: string): boolean => {
+      // For constrained-option fields, only accept a match that maps to one
+      // of the available options. Prevents e.g. "Branco" (ethnicity) from
+      // being applied to a Sim/Não radio group because of a pattern collision.
+      if (
+        (field.type === "radio" || field.type === "select") &&
+        field.options?.length
+      ) {
+        return findBestOption(field.options, value) !== null;
+      }
+      return true;
+    };
+
     // Tier 1: PII matching
     if (pii) {
       const piiValue = matchPii(field.label, pii);
-      if (piiValue !== null) {
+      if (piiValue !== null && acceptsValue(piiValue)) {
         results.push({ field, value: piiValue, source: "pii" });
         continue;
       }
@@ -228,7 +251,7 @@ export async function matchAndFillFields(
 
     // Tier 2: Conservative hardcoded
     const conservativeValue = matchConservative(field.label);
-    if (conservativeValue !== null) {
+    if (conservativeValue !== null && acceptsValue(conservativeValue)) {
       results.push({ field, value: conservativeValue, source: "conservative" });
       continue;
     }

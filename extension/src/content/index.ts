@@ -5,14 +5,19 @@
  */
 
 import { StateMachine } from "./state-machine";
-import { isGupyApplicationPage } from "./screens/detector";
+import { getAdapter } from "./adapters/registry";
+
+function isSupportedApplicationPage(): boolean {
+  const a = getAdapter();
+  return !!a && a.isApplicationPage();
+}
 
 const sm = new StateMachine();
 
 // Listen for messages from popup/service worker
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === "START_AUTOAPPLY") {
-    if (!isGupyApplicationPage()) {
+    if (!isSupportedApplicationPage()) {
       sendResponse({ success: false, error: "Não estamos em uma página de candidatura do Gupy." });
       return true;
     }
@@ -51,7 +56,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     sendResponse({
       step: sm.getStep(),
       error: sm.getError(),
-      isOnGupyPage: isGupyApplicationPage(),
+      isOnGupyPage: isSupportedApplicationPage(),
     });
     return true;
   }
@@ -62,12 +67,17 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 // Auto-resume: if there's an active session from a previous page navigation,
 // continue the state machine on this new page
 (async () => {
-  if (isGupyApplicationPage() && await sm.hasActiveSession()) {
+  if (!isSupportedApplicationPage()) return;
+
+  if (await sm.hasActiveSession()) {
     console.log("[GuPy AutoApply] Resuming active session after navigation");
     // Small delay to let the page DOM settle
     await new Promise((r) => setTimeout(r, 500));
     sm.run(window.location.href);
-  } else if (isGupyApplicationPage()) {
+  } else {
     console.log("[GuPy AutoApply] Content script ready on application page");
+    // Page reload while paused on NEEDS_HUMAN — re-show the in-page prompt.
+    await new Promise((r) => setTimeout(r, 500));
+    await sm.restorePendingPromptIfAny();
   }
 })();

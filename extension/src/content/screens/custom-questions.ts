@@ -273,14 +273,30 @@ async function fillQuestionField(field: ScrapedField, answer: string): Promise<v
     }
 
     case "radio": {
-      const container = field.element.closest(
-        '[class*="RadioGroup"], [class*="radio"], [role="radiogroup"]'
-      ) || field.element.parentElement;
-      if (container) {
-        const bestOption = field.options ? findBestOption(field.options, answer) : answer;
-        if (bestOption) {
-          await clickRadioOption(container as HTMLElement, bestOption);
-        }
+      const radio = field.element as HTMLInputElement;
+      const name = radio.name;
+      const allRadios = name
+        ? Array.from(
+            document.querySelectorAll<HTMLInputElement>(
+              `input[type="radio"][name="${CSS.escape(name)}"]`,
+            ),
+          )
+        : [radio];
+
+      // Walk up to the smallest ancestor containing every same-name radio.
+      let container: HTMLElement | null = radio.parentElement;
+      while (container && !allRadios.every((r) => container!.contains(r))) {
+        container = container.parentElement;
+      }
+      if (!container) container = document.body;
+
+      const bestOption = field.options ? findBestOption(field.options, answer) : answer;
+      if (!bestOption) {
+        throw new Error(`No matching option for "${answer}" in ${JSON.stringify(field.options)}`);
+      }
+      const clicked = await clickRadioOption(container, bestOption);
+      if (!clicked || !allRadios.some((r) => r.checked)) {
+        throw new Error(`Radio click failed for option "${bestOption}"`);
       }
       break;
     }
@@ -289,24 +305,55 @@ async function fillQuestionField(field: ScrapedField, answer: string): Promise<v
       if (field.options && field.options.length > 1) {
         // Multi-select checkbox group — LLM returns comma-separated options to check
         const selectedOptions = answer.split(",").map((s) => s.trim().toLowerCase());
-        const container = field.element.closest(
-          '[class*="question"], [class*="Question"], [class*="field"], [class*="Field"], [class*="group"], [class*="Group"]'
-        ) || field.element.parentElement?.parentElement || document.body;
+        const firstCb = field.element as HTMLInputElement;
 
-        const checkboxes = (container as HTMLElement).querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
-        for (let i = 0; i < checkboxes.length; i++) {
-          const cb = checkboxes[i];
-          const cbLabel = cb.id
-            ? document.querySelector<HTMLElement>(`label[for="${cb.id}"]`)
-            : cb.closest("label");
-          const cbText = cbLabel?.textContent?.trim().toLowerCase() || cb.value.toLowerCase();
-
-          if (selectedOptions.some((opt) => cbText.includes(opt) || opt.includes(cbText))) {
-            if (!cb.checked) {
-              cb.click();
-              await randomDelay(100, 300);
-            }
+        // Prefer grouping by shared name; fall back to common ancestor.
+        let groupCheckboxes: HTMLInputElement[] = [];
+        if (firstCb.name) {
+          groupCheckboxes = Array.from(
+            document.querySelectorAll<HTMLInputElement>(
+              `input[type="checkbox"][name="${CSS.escape(firstCb.name)}"]`,
+            ),
+          );
+        }
+        if (groupCheckboxes.length < 2) {
+          let container: HTMLElement | null = firstCb.parentElement;
+          while (container && !container.querySelectorAll("input[type='checkbox']").length) {
+            container = container.parentElement;
           }
+          // Walk up until the ancestor contains at least field.options.length checkboxes.
+          while (
+            container &&
+            container.querySelectorAll("input[type='checkbox']").length < field.options.length
+          ) {
+            container = container.parentElement;
+          }
+          groupCheckboxes = Array.from(
+            (container ?? document.body).querySelectorAll<HTMLInputElement>(
+              'input[type="checkbox"]',
+            ),
+          );
+        }
+
+        let clickedAny = false;
+        for (const cb of groupCheckboxes) {
+          const cbLabel =
+            (cb.id
+              ? document.querySelector<HTMLElement>(`label[for="${CSS.escape(cb.id)}"]`)
+              : null) ?? cb.closest("label");
+          const cbText = (cbLabel?.textContent?.trim() || cb.value).toLowerCase();
+          if (!cbText) continue;
+          const shouldCheck = selectedOptions.some(
+            (opt) => cbText.includes(opt) || opt.includes(cbText),
+          );
+          if (shouldCheck && !cb.checked) {
+            (cbLabel ?? cb).click();
+            clickedAny = true;
+            await randomDelay(100, 300);
+          }
+        }
+        if (!clickedAny) {
+          throw new Error(`No checkbox option matched "${answer}" in ${JSON.stringify(field.options)}`);
         }
       } else {
         // Single checkbox — true/false

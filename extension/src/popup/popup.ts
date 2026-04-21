@@ -412,6 +412,19 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // 7. Load mode setting
     await loadModeSetting();
+
+    // 8. If a previous run paused waiting for user input, restore the panel.
+    try {
+      const stored = await chrome.storage.session.get("autoapply_active_session");
+      const session = stored.autoapply_active_session as
+        | { pendingFields?: HumanField[]; running?: boolean }
+        | undefined;
+      if (session?.pendingFields?.length) {
+        showHumanInputPanel(session.pendingFields);
+      }
+    } catch {
+      // Ignore — session storage may be unavailable.
+    }
   } catch {
     showSection("login-section");
   }
@@ -446,6 +459,12 @@ document.getElementById("sign-out-btn")?.addEventListener("click", async (e) => 
   e.preventDefault();
   await chrome.runtime.sendMessage({ type: "SIGN_OUT" });
   location.reload();
+});
+
+// Open batch dashboard in a new tab
+document.getElementById("open-dashboard")?.addEventListener("click", async () => {
+  await chrome.runtime.sendMessage({ type: "QUEUE_OPEN_DASHBOARD" });
+  window.close();
 });
 
 // Toggle PII form
@@ -836,6 +855,7 @@ document.getElementById("submit-human-answers")?.addEventListener("click", async
     const panel = document.getElementById("human-input-panel");
     if (panel) panel.style.display = "none";
 
+    await clearPendingFields();
     showSuccess("Respostas preenchidas!");
   } catch {
     showError("Erro ao preencher respostas.");
@@ -844,10 +864,24 @@ document.getElementById("submit-human-answers")?.addEventListener("click", async
   }
 });
 
+async function clearPendingFields(): Promise<void> {
+  try {
+    const stored = await chrome.storage.session.get("autoapply_active_session");
+    const session = stored.autoapply_active_session as Record<string, unknown> | undefined;
+    if (session) {
+      session.pendingFields = [];
+      await chrome.storage.session.set({ autoapply_active_session: session });
+    }
+  } catch {
+    // Ignore.
+  }
+}
+
 // Skip human answers
-document.getElementById("skip-human-answers")?.addEventListener("click", () => {
+document.getElementById("skip-human-answers")?.addEventListener("click", async () => {
   const panel = document.getElementById("human-input-panel");
   if (panel) panel.style.display = "none";
+  await clearPendingFields();
 
   const startBtn = document.getElementById("start-btn") as HTMLButtonElement | null;
   if (startBtn) {
