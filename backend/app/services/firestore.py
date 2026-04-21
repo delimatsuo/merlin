@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 import structlog
 from firebase_admin import auth as firebase_auth, firestore, storage, get_app
+from google.api_core.exceptions import AlreadyExists
 from google.cloud.firestore_v1 import async_transactional
 from google.cloud.firestore_v1.async_client import AsyncClient
 from google.cloud.firestore_v1.base_query import FieldFilter
@@ -2005,9 +2006,9 @@ class FirestoreService:
                 "batch_id": batch_id,
             })
             return True
-        except Exception as e:
-            # Firestore raises AlreadyExists (which google.api_core wraps as
-            # google.api_core.exceptions.AlreadyExists). Catch broadly — any
-            # create failure is a safe "don't send" signal.
-            logger.info("batch_notification_already_claimed", uid=uid, batch_id=batch_id, reason=str(e)[:80])
+        except AlreadyExists:
+            logger.info("batch_notification_already_claimed", uid=uid, batch_id=batch_id)
             return False
+        # Any other exception (network blip, permission issue) bubbles out so
+        # the caller returns a real error instead of silently dropping the
+        # email and logging it as a duplicate-claim.
