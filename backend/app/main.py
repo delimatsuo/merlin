@@ -23,11 +23,33 @@ settings = get_settings()
 # Initialize Sentry for error tracking (before app creation)
 if settings.sentry_dsn:
     import sentry_sdk
+    from fastapi import HTTPException as _HTTPException
+
+    # Transient user-facing errors — surfaced in UI with retry prompts;
+    # not actionable as backend bugs.
+    _SENTRY_IGNORED_DETAIL_PHRASES = (
+        "processar audio",
+        "Audio vazio",
+        "Audio muito grande",
+        "Erro na transcrição",
+    )
+
+    def _sentry_before_send(event, hint):
+        exc_info = hint.get("exc_info") if hint else None
+        if exc_info:
+            exc = exc_info[1]
+            if isinstance(exc, _HTTPException):
+                detail = str(exc.detail or "")
+                if any(p in detail for p in _SENTRY_IGNORED_DETAIL_PHRASES):
+                    return None
+        return event
+
     sentry_sdk.init(
         dsn=settings.sentry_dsn,
         environment="production" if os.getenv("K_SERVICE") else "development",
         traces_sample_rate=0.1,
         send_default_pii=False,
+        before_send=_sentry_before_send,
     )
 
 # Initialize Firebase Admin SDK

@@ -1,6 +1,7 @@
 """Company research and profile enrichment endpoints."""
 
 import json
+import re
 from datetime import datetime, timezone, timedelta
 
 import structlog
@@ -15,6 +16,19 @@ from app.services.firestore import FirestoreService
 logger = structlog.get_logger()
 router = APIRouter()
 settings = get_settings()
+
+
+def _company_cache_key(name: str) -> str | None:
+    """Build a Firestore-safe cache key, or None if the name is unusable.
+    Firestore doc IDs cannot be empty, contain "/", or consist solely of "."/"..".
+    """
+    if not name:
+        return None
+    # Lowercase, replace any non-alphanumeric run with "_"
+    slug = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+    if not slug or slug in {".", ".."}:
+        return None
+    return slug[:1500]
 
 
 async def _enrich_profile_background(uid: str, profile_id: str):
@@ -38,7 +52,9 @@ async def _enrich_profile_background(uid: str, profile_id: str):
     # Check cache first
     cached = {}
     for company in companies:
-        cache_key = company.lower().replace(" ", "_")
+        cache_key = _company_cache_key(company)
+        if not cache_key:
+            continue
         cache_doc = await fs.get_company_cache(cache_key)
         if cache_doc and not _is_expired(cache_doc):
             cached[company] = cache_doc.get("researchData", {})
@@ -48,11 +64,13 @@ async def _enrich_profile_background(uid: str, profile_id: str):
     if uncached:
         research_results = await research_companies(uncached)
         for result in research_results:
-            company_name = result.get("company_name", "")
+            company_name = (result.get("company_name") or "").strip()
+            if not company_name:
+                continue
             cached[company_name] = result
-            # Save to cache
-            cache_key = company_name.lower().replace(" ", "_")
-            await fs.save_company_cache(cache_key, result)
+            cache_key = _company_cache_key(company_name)
+            if cache_key:
+                await fs.save_company_cache(cache_key, result)
 
     # Use Gemini to infer skills from company research
     if cached:
