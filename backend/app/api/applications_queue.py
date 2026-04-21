@@ -147,14 +147,41 @@ async def list_queue(
     """
     fs = FirestoreService()
     since = datetime.now(timezone.utc) - timedelta(days=RECENT_WINDOW_DAYS)
-    entries = await fs.list_queue_entries(user.uid, since=since)
+
+    # Catch any unexpected failure in the Firestore read / response mapping
+    # and log + re-raise as a proper HTTPException so CORS middleware adds
+    # the right headers. Without this wrapping, a raw exception from the
+    # Firestore client can bubble past the middleware and leave the browser
+    # seeing net::ERR_FAILED 500 with no CORS headers.
+    try:
+        entries = await fs.list_queue_entries(user.uid, since=since)
+    except Exception as e:
+        logger.exception("queue_list_firestore_failed", uid=user.uid, error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Firestore read failed: {type(e).__name__}: {str(e)[:200]}",
+        )
 
     active: list[QueueEntryResponse] = []
     recent: list[QueueEntryResponse] = []
     active_batch_id: str | None = None
 
     for entry in entries:
-        resp = _to_response(entry)
+        try:
+            resp = _to_response(entry)
+        except Exception as e:
+            logger.exception(
+                "queue_list_entry_mapping_failed",
+                uid=user.uid,
+                entry_id=entry.get("id"),
+                entry_keys=list(entry.keys()),
+                entry_status=entry.get("status"),
+                error=str(e),
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Entry {entry.get('id')} failed to map: {type(e).__name__}: {str(e)[:200]}",
+            )
         if entry.get("status") in ACTIVE_STATUSES:
             active.append(resp)
             if active_batch_id is None:
