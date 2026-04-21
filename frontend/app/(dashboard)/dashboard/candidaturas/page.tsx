@@ -23,6 +23,7 @@ import { useTranslation } from "@/lib/hooks/useTranslation";
 import { cn } from "@/lib/utils";
 
 const POLL_INTERVAL_MS = 5_000;
+const IDLE_POLL_INTERVAL_MS = 60_000;
 
 interface QueueResponse {
   active: QueueEntry[];
@@ -139,7 +140,9 @@ function CandidaturasContent() {
   const { active, recent, loading, setQueue, setLoading } = useQueueStore();
   const [tab, setTab] = useState<"pipeline" | "history">("pipeline");
   const [controlBusy, setControlBusy] = useState(false);
+  const [extensionDetected, setExtensionDetected] = useState(false);
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const activeCount = active.length;
 
   const fetchQueue = async () => {
     try {
@@ -167,6 +170,10 @@ function CandidaturasContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Poll 5s while there's live work the user is watching, 60s while idle
+  // (just to notice a new batch from another device). Pause entirely when
+  // the tab is hidden so we don't burn quota in a background window, and
+  // refresh immediately when it becomes visible again.
   useEffect(() => {
     if (tab !== "pipeline") {
       if (pollTimer.current) {
@@ -175,12 +182,45 @@ function CandidaturasContent() {
       }
       return;
     }
-    pollTimer.current = setInterval(fetchQueue, POLL_INTERVAL_MS);
+
+    const schedule = () => {
+      if (pollTimer.current) clearInterval(pollTimer.current);
+      if (document.visibilityState !== "visible") {
+        pollTimer.current = null;
+        return;
+      }
+      const interval = activeCount > 0 ? POLL_INTERVAL_MS : IDLE_POLL_INTERVAL_MS;
+      pollTimer.current = setInterval(fetchQueue, interval);
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        fetchQueue();
+        schedule();
+      } else if (pollTimer.current) {
+        clearInterval(pollTimer.current);
+        pollTimer.current = null;
+      }
+    };
+
+    schedule();
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
       if (pollTimer.current) clearInterval(pollTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab]);
+  }, [tab, activeCount]);
+
+  // Detect the Merlin extension via its one-shot postMessage handshake.
+  useEffect(() => {
+    const onMsg = (e: MessageEvent) => {
+      if (e.source !== window) return;
+      if (e.data?.type === "MERLIN_EXTENSION_READY") setExtensionDetected(true);
+    };
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, []);
 
   // Default to Pipeline when there's active work; otherwise show whichever
   // tab the user picked.
@@ -191,21 +231,21 @@ function CandidaturasContent() {
 
   const handleReview = (entry: QueueEntry) => {
     // Ask the extension SW (via the merlincv.com content-script bridge) to
-    // focus the Gupy tab for this queue entry. If the tab was closed, fall
-    // back to opening the job URL in a new tab.
-    try {
-      window.postMessage(
-        { type: "MERLIN_QUEUE_FOCUS_TAB", queueId: entry.id },
-        window.location.origin,
-      );
-    } catch {
-      /* ignore */
+    // focus the Gupy tab for this queue entry. Only fall back to opening
+    // a fresh tab when the extension isn't installed — otherwise the
+    // user ends up with two tabs on the same Gupy page.
+    if (extensionDetected) {
+      try {
+        window.postMessage(
+          { type: "MERLIN_QUEUE_FOCUS_TAB", queueId: entry.id },
+          window.location.origin,
+        );
+      } catch {
+        /* ignore */
+      }
+      return;
     }
-    // Best-effort fallback: open the job URL if the user doesn't have the
-    // extension installed or the tab is already gone.
-    setTimeout(() => {
-      window.open(entry.job_url, "_blank", "noopener");
-    }, 300);
+    window.open(entry.job_url, "_blank", "noopener");
   };
 
   const handlePause = async () => {

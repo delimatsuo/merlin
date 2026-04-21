@@ -143,14 +143,23 @@ async def update_queue(
     body: QueueUpdateRequest,
     user: AuthenticatedUser = Depends(get_current_user),
 ):
-    """Update a queue entry's status. Called by the extension service worker."""
+    """Update a queue entry's status. Called by the extension service worker.
+
+    The backend validates state transitions — a buggy extension cannot jump
+    a 'pending' entry straight to 'applied' without going through 'running'.
+    """
     fs = FirestoreService()
     updates = body.model_dump(exclude_none=True)
-    updated = await fs.update_queue_entry(user.uid, queue_id, updates)
-    if not updated:
+    updated, error = await fs.update_queue_entry(user.uid, queue_id, updates)
+    if error == "not_found":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Entrada da fila não encontrada.",
+        )
+    if error and error.startswith("invalid_transition"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Transição de status inválida: {error}",
         )
     logger.info(
         "queue_entry_updated",
@@ -158,6 +167,7 @@ async def update_queue(
         queue_id=queue_id,
         status=body.status,
     )
+    assert updated is not None  # error guards above guarantee this
     return _to_response(updated)
 
 
@@ -165,19 +175,14 @@ async def update_queue(
 async def pause_queue(
     user: AuthenticatedUser = Depends(get_current_user),
 ):
-    """Pause the active batch: mark pending entries as paused.
+    """Cancel all pending entries in the active batch.
 
-    We encode "paused" as status=cancelled for pending entries, because
-    restart-from-pause isn't in v1 — the user can re-select jobs from
-    /dashboard/vagas if they want to resume later.
+    v1 is "pause = cancel pending" — running/needs_attention entries keep
+    going. Users who want to stop everything should use /cancel. We drop
+    the old 1-day window that used to strand long-paused batches.
     """
     fs = FirestoreService()
-    since = datetime.now(timezone.utc) - timedelta(days=1)
-    entries = await fs.list_queue_entries(user.uid, since=since)
-    active_batch = next(
-        (e.get("batch_id") for e in entries if e.get("status") in ACTIVE_STATUSES),
-        None,
-    )
+    active_batch = await fs.get_active_batch_id(user.uid)
     if not active_batch:
         return {"paused": 0, "batch_id": None}
 
@@ -191,14 +196,9 @@ async def pause_queue(
 async def cancel_queue(
     user: AuthenticatedUser = Depends(get_current_user),
 ):
-    """Cancel all remaining work in the active batch (pending + running)."""
+    """Cancel all remaining work in the active batch (pending + running + needs_attention)."""
     fs = FirestoreService()
-    since = datetime.now(timezone.utc) - timedelta(days=1)
-    entries = await fs.list_queue_entries(user.uid, since=since)
-    active_batch = next(
-        (e.get("batch_id") for e in entries if e.get("status") in ACTIVE_STATUSES),
-        None,
-    )
+    active_batch = await fs.get_active_batch_id(user.uid)
     if not active_batch:
         return {"cancelled": 0, "batch_id": None}
 
@@ -218,8 +218,11 @@ async def complete_batch(
 ):
     """Called by the extension service worker when a batch finishes draining.
 
-    Sends the batch-completion email digest. Idempotent — if no terminal
-    entries exist for the batch, no email is sent.
+    Idempotent via a Firestore notification flag — chrome.storage.session
+    is wiped on browser restart, so the SW can legitimately call this again
+    for a batch that already finished yesterday. We check/set notified_at
+    server-side so the user doesn't receive the same digest every time
+    they restart Chrome.
     """
     from app.services.email import send_batch_complete_email
 
@@ -236,7 +239,12 @@ async def complete_batch(
     if any(e.get("status") in ACTIVE_STATUSES for e in entries):
         return {"sent": False, "reason": "batch_still_active"}
 
+    if await fs.check_batch_notified(user.uid, body.batch_id):
+        return {"sent": False, "reason": "already_notified", "total": len(entries)}
+
     sent = await send_batch_complete_email(user.uid, body.batch_id, entries)
+    if sent:
+        await fs.mark_batch_notified(user.uid, body.batch_id)
     logger.info(
         "batch_complete_notified",
         uid=user.uid,

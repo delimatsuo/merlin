@@ -1870,39 +1870,59 @@ class FirestoreService:
         data["id"] = doc.id
         return data
 
+    # Allowed transitions, enforced server-side so a buggy extension version
+    # can't report "applied" on a job that never actually applied.
+    _QUEUE_ALLOWED_TRANSITIONS: dict[str, set[str]] = {
+        "pending": {"running", "cancelled", "skipped"},
+        "running": {"applied", "failed", "needs_attention", "skipped", "cancelled"},
+        "needs_attention": {"running", "applied", "skipped", "cancelled", "failed"},
+        "applied": set(),
+        "failed": set(),
+        "skipped": set(),
+        "cancelled": set(),
+    }
+
     async def update_queue_entry(
         self,
         uid: str,
         entry_id: str,
         updates: dict,
-    ) -> dict | None:
-        """Apply a partial update to a queue entry. Sets started_at/finished_at
-        automatically on status transitions. Returns the updated document."""
+    ) -> tuple[dict | None, str | None]:
+        """Apply a partial update to a queue entry. Returns (updated_doc, error).
+
+        Validates that the status transition is allowed — terminal statuses
+        (applied/failed/skipped/cancelled) can't be moved back, and the
+        state graph matches the extension's lifecycle. Returns (None, reason)
+        if the entry is missing or the transition is rejected.
+        """
         ref = (
             self.db.collection("users").document(uid)
             .collection("applicationQueue").document(entry_id)
         )
         snap = await ref.get()
         if not snap.exists:
-            return None
+            return None, "not_found"
 
         now_iso = datetime.now(timezone.utc).isoformat()
         current = snap.to_dict() or {}
         patch = dict(updates)
 
         new_status = patch.get("status")
-        if new_status == "running" and not current.get("started_at"):
-            patch["started_at"] = now_iso
-        if new_status in {"applied", "failed", "skipped", "cancelled", "needs_attention"}:
-            # needs_attention can resolve back to running, so don't lock finished_at
-            # unless terminal.
+        if new_status is not None:
+            current_status = current.get("status", "pending")
+            allowed = self._QUEUE_ALLOWED_TRANSITIONS.get(current_status, set())
+            if new_status != current_status and new_status not in allowed:
+                return None, f"invalid_transition_{current_status}_to_{new_status}"
+
+            if new_status == "running" and not current.get("started_at"):
+                patch["started_at"] = now_iso
             if new_status in {"applied", "failed", "skipped", "cancelled"} and not current.get("finished_at"):
                 patch["finished_at"] = now_iso
 
         await ref.update(patch)
         updated = current | patch
         updated["id"] = entry_id
-        return updated
+        return updated, None
 
     async def update_batch_status(
         self,
@@ -1946,3 +1966,47 @@ class FirestoreService:
             data["id"] = doc.id
             results.append(data)
         return results
+
+    async def get_active_batch_id(self, uid: str) -> str | None:
+        """Return the batch_id of the user's current active batch, or None.
+
+        An "active" batch has at least one entry in pending / running /
+        needs_attention status. We scan the most recent 500 entries (same
+        bound as list_queue_entries) to pick the active batch — multiple
+        active batches aren't supported in v1, so the first hit wins.
+        """
+        query = (
+            self.db.collection("users").document(uid)
+            .collection("applicationQueue")
+            .order_by("created_at", direction=firestore.Query.DESCENDING)
+            .limit(500)
+        )
+        async for doc in query.stream():
+            data = doc.to_dict() or {}
+            if data.get("status") in {"pending", "running", "needs_attention"}:
+                return data.get("batch_id") or None
+        return None
+
+    async def check_batch_notified(self, uid: str, batch_id: str) -> bool:
+        """Whether the batch-completion email has already been sent for this batch."""
+        ref = (
+            self.db.collection("users").document(uid)
+            .collection("batchNotifications").document(batch_id)
+        )
+        doc = await ref.get()
+        return doc.exists
+
+    async def mark_batch_notified(self, uid: str, batch_id: str) -> None:
+        """Record that the batch-completion email was sent for this batch.
+
+        Used by POST /api/applications/queue/complete-batch to guard against
+        the SW re-sending after a browser restart wipes its local flag.
+        """
+        ref = (
+            self.db.collection("users").document(uid)
+            .collection("batchNotifications").document(batch_id)
+        )
+        await ref.set({
+            "notified_at": datetime.now(timezone.utc).isoformat(),
+            "batch_id": batch_id,
+        })
