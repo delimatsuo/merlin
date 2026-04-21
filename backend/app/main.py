@@ -116,10 +116,45 @@ app.add_middleware(
 )
 
 
+def _cors_error_response(request: Request, status_code: int, payload: dict) -> JSONResponse:
+    """Build a JSONResponse that includes the right CORS headers even when
+    an exception escapes the inner CORSMiddleware. Without this, a handler
+    exception bubbles past `@app.middleware("http")` layers (known Starlette
+    BaseHTTPMiddleware quirk) and leaves the browser seeing net::ERR_FAILED
+    with no Access-Control-Allow-Origin — which looks like CORS but is
+    really an unhandled server exception."""
+    origin = request.headers.get("origin", "")
+    allow_origin = origin if origin in origins else ""
+    headers: dict[str, str] = {}
+    if allow_origin:
+        headers["Access-Control-Allow-Origin"] = allow_origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+        headers["Vary"] = "Origin"
+    return JSONResponse(status_code=status_code, content=payload, headers=headers)
+
+
 @app.middleware("http")
 async def security_headers_middleware(request: Request, call_next):
-    """Add security headers to all responses."""
-    response: Response = await call_next(request)
+    """Add security headers to all responses. Catch unhandled exceptions
+    so they return a CORS-compliant JSON body instead of a naked 500."""
+    try:
+        response: Response = await call_next(request)
+    except Exception as exc:
+        import traceback
+        logger.exception(
+            "unhandled_security_middleware",
+            path=str(request.url.path),
+            method=request.method,
+            error=str(exc),
+        )
+        return _cors_error_response(
+            request,
+            500,
+            {
+                "detail": f"Unhandled: {type(exc).__name__}: {str(exc)[:500]}",
+                "traceback": traceback.format_exc()[:3000],
+            },
+        )
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
@@ -130,11 +165,33 @@ async def security_headers_middleware(request: Request, call_next):
 
 @app.middleware("http")
 async def correlation_id_middleware(request: Request, call_next):
-    """Add correlation ID to all requests for tracing."""
+    """Add correlation ID to all requests for tracing. Same exception shield
+    as security_headers_middleware — any exception that escapes the inner
+    chain produces a CORS-compliant 500 body."""
     correlation_id = request.headers.get("X-Correlation-ID", str(uuid.uuid4()))
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(correlation_id=correlation_id)
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        import traceback
+        logger.exception(
+            "unhandled_correlation_middleware",
+            path=str(request.url.path),
+            method=request.method,
+            correlation_id=correlation_id,
+            error=str(exc),
+        )
+        resp = _cors_error_response(
+            request,
+            500,
+            {
+                "detail": f"Unhandled: {type(exc).__name__}: {str(exc)[:500]}",
+                "traceback": traceback.format_exc()[:3000],
+            },
+        )
+        resp.headers["X-Correlation-ID"] = correlation_id
+        return resp
     response.headers["X-Correlation-ID"] = correlation_id
     return response
 
