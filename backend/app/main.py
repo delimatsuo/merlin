@@ -23,11 +23,33 @@ settings = get_settings()
 # Initialize Sentry for error tracking (before app creation)
 if settings.sentry_dsn:
     import sentry_sdk
+    from fastapi import HTTPException as _HTTPException
+
+    # Transient user-facing errors — surfaced in UI with retry prompts;
+    # not actionable as backend bugs.
+    _SENTRY_IGNORED_DETAIL_PHRASES = (
+        "processar audio",
+        "Audio vazio",
+        "Audio muito grande",
+        "Erro na transcrição",
+    )
+
+    def _sentry_before_send(event, hint):
+        exc_info = hint.get("exc_info") if hint else None
+        if exc_info:
+            exc = exc_info[1]
+            if isinstance(exc, _HTTPException):
+                detail = str(exc.detail or "")
+                if any(p in detail for p in _SENTRY_IGNORED_DETAIL_PHRASES):
+                    return None
+        return event
+
     sentry_sdk.init(
         dsn=settings.sentry_dsn,
         environment="production" if os.getenv("K_SERVICE") else "development",
         traces_sample_rate=0.1,
         send_default_pii=False,
+        before_send=_sentry_before_send,
     )
 
 # Initialize Firebase Admin SDK
@@ -82,12 +104,14 @@ async def ai_overloaded_handler(request: Request, exc: AIProviderOverloadedError
 
 # CORS — explicit methods and headers
 origins = settings.allowed_origins.split(",")
+if settings.chrome_extension_origin:
+    origins.append(settings.chrome_extension_origin)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "Accept", "X-Correlation-ID"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "X-Correlation-ID", "X-Client-Type"],
     expose_headers=["Content-Disposition", "X-Correlation-ID"],
 )
 
@@ -136,6 +160,7 @@ from app.api.admin import router as admin_router
 from app.api.linkedin import router as linkedin_router
 from app.api.feedback import router as feedback_router
 from app.api.jobs import router as jobs_router
+from app.api.autoapply import router as autoapply_router
 
 app.include_router(resume_router, prefix="/api/resume", tags=["resume"])
 app.include_router(voice_router, prefix="/api/voice", tags=["voice"])
@@ -149,6 +174,7 @@ app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
 app.include_router(linkedin_router, prefix="/api/linkedin", tags=["linkedin"])
 app.include_router(feedback_router, prefix="/api/feedback", tags=["feedback"])
 app.include_router(jobs_router, prefix="/api/jobs", tags=["jobs"])
+app.include_router(autoapply_router, prefix="/api/autoapply", tags=["autoapply"])
 
 
 @app.on_event("startup")

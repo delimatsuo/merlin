@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     # CORS
     allowed_origins: str = "http://localhost:3000,https://merlincv.com,https://www.merlincv.com,https://staging.merlincv.com,https://merlin-489714.web.app,https://merlin-489714.firebaseapp.com,https://merlin-489714-staging.web.app"
 
+    # Chrome Extension
+    chrome_extension_origin: str = ""  # Set via CHROME_EXTENSION_ORIGIN env var
+
     # API Keys (loaded from Secret Manager in production, env vars locally)
     anthropic_api_key: str = ""
     brave_search_api_key: str = ""

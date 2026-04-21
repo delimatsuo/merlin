@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Gupy AutoApply",
+  "version": "0.1.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA9/e25mv+xYQmgNZC1yQgWmX/JgMvvxakdutp7SESJRqE2AMdFnv63eUcSbWvOQo4jekZaHGevlXqOMMuxrLL4vZuOR7Jf6HFD8r1l5h72vIvQDR5+ZcaBkx6FfPMYRKK9syhgeng6Sypuf2fs6W+Cjg22RZQZ+N96dawIkbcvna70aonkR/ux2lev5tbx4gRfhKEhxsgM4glBLWrq4FkC+004NsrM80e9/r1Zzv3fkPgJuaLdielvpT/VRs8h77Sq6zWj00J26e7jogenAksHCnPbjoEUS+axMU5SEo3dyolkwMKoKigITHYpPh3b03ObnsYlCBVLRVRL7wHA2TDwQIDAQAB",
+  "permissions": ["activeTab", "tabs", "storage", "identity", "scripting"],
+  "host_permissions": ["*://*.gupy.io/*"],
+  "background": { "service_worker": "dist/service-worker.js" },
+  "content_scripts": [{
+    "matches": ["*://*.gupy.io/*"],
+    "js": ["dist/content.js"],
+    "run_at": "document_idle"
+  }],
+  "action": {
+    "default_popup": "dist/popup.html",
+    "default_icon": {
+      "16": "assets/icon-16.png",
+      "48": "assets/icon-48.png",
+      "128": "assets/icon-128.png"
+    }
+  },
+  "web_accessible_resources": [{
+    "resources": ["dist/dashboard.html", "dist/dashboard.css"],
+    "matches": ["<all_urls>"]
+  }],
+  "icons": {
+    "16": "assets/icon-16.png",
+    "48": "assets/icon-48.png",
+    "128": "assets/icon-128.png"
+  }
+}

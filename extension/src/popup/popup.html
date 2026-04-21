@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gupy AutoApply</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div id="app">
+    <header class="app-header">
+      <img src="../assets/icon-48.png" alt="" class="logo" width="24" height="24">
+      <span class="app-title">Gupy AutoApply</span>
+    </header>
+
+    <!-- Loading state -->
+    <div id="loading" class="section">
+      <div class="loading-spinner"></div>
+      <p class="loading-text">Carregando...</p>
+    </div>
+
+    <!-- Login section -->
+    <div id="login-section" class="section" style="display:none">
+      <div class="card">
+        <p class="card-text">Entre com sua conta Merlin para continuar.</p>
+        <button id="sign-in-btn" class="btn btn-primary btn-block">Entrar com Google</button>
+      </div>
+    </div>
+
+    <!-- Main section (authenticated) -->
+    <div id="main-section" class="section" style="display:none">
+
+      <!-- User info bar -->
+      <div class="user-bar">
+        <span id="user-email" class="user-email"></span>
+        <a href="#" id="sign-out-btn" class="sign-out-link">Sair</a>
+      </div>
+
+      <!-- PII profile status -->
+      <div class="card" id="pii-card">
+        <div class="card-header">
+          <span class="card-label">Dados pessoais (PII)</span>
+          <span id="pii-status" class="status-badge status-pending">Incompleto</span>
+        </div>
+        <p id="pii-detail" class="card-detail">Preencha seus dados para candidaturas automaticas.</p>
+        <button id="toggle-pii-form" class="btn btn-secondary btn-sm">Configurar perfil</button>
+
+        <!-- PII form (collapsible) -->
+        <div id="pii-form-container" style="display:none">
+          <form id="pii-form" class="pii-form">
+            <div class="form-group">
+              <label for="cpf">CPF *</label>
+              <input type="text" name="cpf" id="cpf" placeholder="000.000.000-00" maxlength="14" required>
+            </div>
+            <div class="form-group">
+              <label for="rg">RG</label>
+              <input type="text" name="rg" id="rg" placeholder="00.000.000-0">
+            </div>
+            <div class="form-group">
+              <label for="motherName">Nome da mae</label>
+              <input type="text" name="motherName" id="motherName" placeholder="Nome completo">
+            </div>
+            <div class="form-group">
+              <label for="birthDate">Data de nascimento</label>
+              <input type="date" name="birthDate" id="birthDate">
+            </div>
+            <div class="form-group">
+              <label for="gender">Genero</label>
+              <select name="gender" id="gender">
+                <option value="">Selecione...</option>
+                <option value="masculino">Masculino</option>
+                <option value="feminino">Feminino</option>
+                <option value="outro">Outro</option>
+                <option value="prefiro_nao_informar">Prefiro nao informar</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="ethnicity">Etnia/Raca</label>
+              <select name="ethnicity" id="ethnicity">
+                <option value="">Selecione...</option>
+                <option value="branco">Branco</option>
+                <option value="preto">Preto</option>
+                <option value="pardo">Pardo</option>
+                <option value="amarelo">Amarelo</option>
+                <option value="indigena">Indigena</option>
+                <option value="prefiro_nao_informar">Prefiro nao informar</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="disability">Deficiencia</label>
+              <select name="disability" id="disability">
+                <option value="">Selecione...</option>
+                <option value="nao">Nao</option>
+                <option value="visual">Sim - Visual</option>
+                <option value="auditiva">Sim - Auditiva</option>
+                <option value="fisica">Sim - Fisica</option>
+                <option value="intelectual">Sim - Intelectual</option>
+                <option value="multipla">Sim - Multipla</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="maritalStatus">Estado civil</label>
+              <select name="maritalStatus" id="maritalStatus">
+                <option value="">Selecione...</option>
+                <option value="solteiro">Solteiro(a)</option>
+                <option value="casado">Casado(a)</option>
+                <option value="divorciado">Divorciado(a)</option>
+                <option value="viuvo">Viuvo(a)</option>
+                <option value="uniao_estavel">Uniao estavel</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="phone">Telefone *</label>
+              <input type="tel" name="phone" id="phone" placeholder="(11) 99999-0000" required>
+            </div>
+
+            <fieldset class="form-fieldset">
+              <legend>Endereco</legend>
+              <div class="form-group">
+                <label for="street">Rua</label>
+                <input type="text" name="street" id="street" placeholder="Rua, numero, complemento">
+              </div>
+              <div class="form-row">
+                <div class="form-group form-group-half">
+                  <label for="city">Cidade</label>
+                  <input type="text" name="city" id="city">
+                </div>
+                <div class="form-group form-group-half">
+                  <label for="state">Estado</label>
+                  <select name="state" id="state">
+                    <option value="">UF</option>
+                    <option value="AC">AC</option>
+                    <option value="AL">AL</option>
+                    <option value="AP">AP</option>
+                    <option value="AM">AM</option>
+                    <option value="BA">BA</option>
+                    <option value="CE">CE</option>
+                    <option value="DF">DF</option>
+                    <option value="ES">ES</option>
+                    <option value="GO">GO</option>
+                    <option value="MA">MA</option>
+                    <option value="MT">MT</option>
+                    <option value="MS">MS</option>
+                    <option value="MG">MG</option>
+                    <option value="PA">PA</option>
+                    <option value="PB">PB</option>
+                    <option value="PR">PR</option>
+                    <option value="PE">PE</option>
+                    <option value="PI">PI</option>
+                    <option value="RJ">RJ</option>
+                    <option value="RN">RN</option>
+                    <option value="RS">RS</option>
+                    <option value="RO">RO</option>
+                    <option value="RR">RR</option>
+                    <option value="SC">SC</option>
+                    <option value="SP">SP</option>
+                    <option value="SE">SE</option>
+                    <option value="TO">TO</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="zip">CEP</label>
+                <input type="text" name="zip" id="zip" placeholder="00000-000" maxlength="9">
+              </div>
+            </fieldset>
+
+            <button type="submit" class="btn btn-primary btn-block">Salvar</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Professional profile status -->
+      <div class="card" id="profile-card">
+        <div class="card-header">
+          <span class="card-label">Perfil profissional</span>
+          <span id="profile-status" class="status-badge status-pending">Verificando...</span>
+        </div>
+        <p id="profile-detail" class="card-detail">Carregando perfil do Merlin...</p>
+      </div>
+
+      <!-- Mode toggle -->
+      <div class="mode-bar" id="mode-bar">
+        <div class="mode-toggle">
+          <span class="mode-label" id="mode-label">Modo: Dry-run</span>
+          <label class="switch">
+            <input type="checkbox" id="mode-toggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <span class="mode-desc" id="mode-desc">Pausa antes de enviar para revisão</span>
+      </div>
+
+      <!-- Start button -->
+      <button id="start-btn" class="btn btn-primary btn-block btn-start" disabled>
+        Iniciar candidatura
+      </button>
+
+      <!-- Automation Status -->
+      <div class="card" id="automation-card" style="display: none;">
+        <div class="card-header">
+          <span class="card-label">Status da candidatura</span>
+        </div>
+        <div id="automation-status" class="status-text"></div>
+      </div>
+
+      <!-- Review Panel (shown during dry-run pause) -->
+      <div id="review-panel" class="card" style="display: none;">
+        <div class="card-header">
+          <span class="card-label">Revisar e enviar</span>
+        </div>
+        <p class="review-text">A candidatura esta pronta para envio. Revise as respostas na pagina e confirme.</p>
+        <div class="review-actions">
+          <button id="confirm-submit" class="btn btn-primary">Enviar candidatura</button>
+          <button id="cancel-submit" class="btn btn-secondary">Cancelar</button>
+        </div>
+      </div>
+
+      <!-- User Input Panel (shown when fields need manual answers) -->
+      <div id="human-input-panel" class="card" style="display: none;">
+        <div class="card-header">
+          <span class="card-label">Respostas necessarias</span>
+        </div>
+        <p class="card-detail">Preencha os campos que a IA nao conseguiu responder:</p>
+        <div id="human-input-fields"></div>
+        <div class="form-group" style="margin-top: 8px;">
+          <label class="checkbox-label">
+            <input type="checkbox" id="save-answers-check" checked>
+            Salvar para futuras candidaturas
+          </label>
+        </div>
+        <div class="review-actions">
+          <button id="submit-human-answers" class="btn btn-primary">Preencher</button>
+          <button id="skip-human-answers" class="btn btn-secondary">Pular</button>
+        </div>
+      </div>
+
+      <!-- Dashboard shortcut -->
+      <div class="card" id="dashboard-card">
+        <button id="open-dashboard" class="primary-button" style="width:100%">
+          Abrir painel de candidaturas em lote
+        </button>
+      </div>
+
+      <!-- Application History -->
+      <div class="card" id="history-card">
+        <div class="card-header">
+          <span class="card-label">Candidaturas recentes</span>
+          <button id="refresh-history" class="btn-icon" title="Atualizar">&#8635;</button>
+        </div>
+        <div id="history-list" class="history-list">
+          <p class="card-detail">Carregando...</p>
+        </div>
+      </div>
+
+      <!-- Daily usage -->
+      <div class="usage-bar">
+        <span class="usage-label">Uso diario LLM:</span>
+        <span id="usage-count" class="usage-count">--/50</span>
+      </div>
+
+      <!-- Toast messages -->
+      <div id="toast" class="toast" style="display:none"></div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

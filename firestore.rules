@@ -49,6 +49,18 @@ service cloud.firestore {
           allow read, write: if request.auth != null && request.auth.uid == uid;
         }
       }
+
+      // AutoApply logs — user can read, backend writes via Admin SDK
+      match /autoapplyLogs/{logId} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow write: if false;
+      }
+
+      // AutoApply daily usage — backend-only via Admin SDK
+      match /autoapplyUsage/{date} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow write: if false;
+      }
     }
 
     // Voice sessions — user can only access their own sessions
