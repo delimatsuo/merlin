@@ -29,7 +29,10 @@ const IS_DEV = !("update_url" in chrome.runtime.getManifest());
 const API_BASE = IS_DEV
   ? "http://localhost:8000"
   : "https://merlin-backend-531233742939.southamerica-east1.run.app";
-const FIREBASE_API_KEY = "AIzaSyAPhPf4qzo94WplQwQl9gbjauBbFOi7J3w";
+// Injected at build time by webpack DefinePlugin (webpack.config.js).
+// Override with FIREBASE_API_KEY env var at build time to rotate.
+declare const process: { env: { FIREBASE_API_KEY: string } };
+const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY;
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000; // Refresh 5 min before expiry
 const TOKEN_LIFETIME_MS = 60 * 60 * 1000; // Firebase tokens last 1 hour
 
@@ -348,8 +351,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true; // Keep channel open for async
 });
 
-// Allow content scripts to access session storage (needed for state persistence)
-chrome.storage.session.setAccessLevel({ accessLevel: "TRUSTED_AND_UNTRUSTED_CONTEXTS" });
+// Content scripts already run in a TRUSTED context and can read/write
+// session storage under the default setAccessLevel. We intentionally do NOT
+// relax access to UNTRUSTED contexts — the Firebase ID token lives in
+// `authState` here, and widening access exposes it to any future
+// world:"MAIN" script injections on host pages.
 
 // Restore auth state from session storage on startup
 chrome.storage.session.get("authState", (result) => {

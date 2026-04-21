@@ -1,5 +1,14 @@
 const path = require("path");
+const webpack = require("webpack");
 const CopyWebpackPlugin = require("copy-webpack-plugin");
+
+// Firebase browser API key — identifies the GCP project, NOT a secret in the
+// OAuth sense (it's gated by Identity Platform authorized domains + Firebase
+// security rules), but we still inject it at build time so it isn't hardcoded
+// in source and can be rotated without touching TypeScript. Falls back to the
+// known production value so local dev builds work without extra setup.
+const FIREBASE_API_KEY =
+  process.env.FIREBASE_API_KEY || "AIzaSyAPhPf4qzo94WplQwQl9gbjauBbFOi7J3w";
 
 module.exports = {
   mode: "development",
@@ -29,6 +38,9 @@ module.exports = {
     ],
   },
   plugins: [
+    new webpack.DefinePlugin({
+      "process.env.FIREBASE_API_KEY": JSON.stringify(FIREBASE_API_KEY),
+    }),
     new CopyWebpackPlugin({
       patterns: [
         { from: "src/popup/popup.html", to: "popup.html" },

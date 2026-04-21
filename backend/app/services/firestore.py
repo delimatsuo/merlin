@@ -40,6 +40,35 @@ def _get_async_db() -> AsyncClient:
     return _async_db
 
 
+# In-process TTL cache for query_jobs_by_tags. Absorbs feed-refresh bursts
+# so a single user reloading /dashboard/vagas doesn't re-read 1000 docs
+# on every request. 5-minute TTL matches the nightly-scrape cadence well
+# enough that new jobs aren't hidden for more than a fresh cache window.
+import time as _time
+_QUERY_JOBS_CACHE: dict = {}
+_QUERY_JOBS_CACHE_TTL_S = 300
+_QUERY_JOBS_CACHE_MAX_ENTRIES = 64
+
+
+def _query_jobs_cache_get(key):
+    entry = _QUERY_JOBS_CACHE.get(key)
+    if not entry:
+        return None
+    expires_at, value = entry
+    if _time.monotonic() > expires_at:
+        _QUERY_JOBS_CACHE.pop(key, None)
+        return None
+    return value
+
+
+def _query_jobs_cache_put(key, value):
+    # Simple size cap — drop the oldest entry when full.
+    if len(_QUERY_JOBS_CACHE) >= _QUERY_JOBS_CACHE_MAX_ENTRIES:
+        oldest = min(_QUERY_JOBS_CACHE.items(), key=lambda kv: kv[1][0])
+        _QUERY_JOBS_CACHE.pop(oldest[0], None)
+    _QUERY_JOBS_CACHE[key] = (_time.monotonic() + _QUERY_JOBS_CACHE_TTL_S, value)
+
+
 class FirestoreService:
     """Handles all Firestore and Cloud Storage operations."""
 
@@ -1483,17 +1512,33 @@ class FirestoreService:
     ) -> list[dict]:
         """Query jobs by category tags using Firestore native filtering.
 
-        Uses array_contains_any for efficient tag matching.
-        Work mode filter applied in-memory (can't combine with array query).
+        Uses array_contains_any for efficient tag matching. Work mode filter
+        is applied in-memory (can't combine with array query).
 
         When `order_by_recent` is True (default), results are sorted by
         `extracted_at` descending client-side so callers that slice the
         head of the list (e.g. top 50) get the freshest jobs. Firestore
         can't combine `array_contains_any` with a server-side order_by on
         a different field without a composite index, so we sort in-memory.
+        Complexity: O(n log n) where n is the number of returned docs —
+        set `order_by_recent=False` if you need raw Firestore order.
+
+        Results are cached in-process for 5 minutes keyed by
+        `(tags tuple, work_modes tuple)` to absorb feed-refresh bursts.
         """
         if not tags:
             return []
+
+        # Cache lookup — absorb rapid feed refreshes without re-reading 1000+ docs.
+        cache_key = (
+            tuple(sorted(tags[:30])),
+            tuple(sorted(work_modes or [])),
+            order_by_recent,
+        )
+        cached = _query_jobs_cache_get(cache_key)
+        if cached is not None:
+            # Slice to the caller's limit — cache entry may be bigger.
+            return cached[:limit] if limit else cached
 
         # Firestore array_contains_any supports up to 30 values
         query = (
@@ -1519,6 +1564,8 @@ class FirestoreService:
                 key=lambda j: j.get("extracted_at") or j.get("posted_date") or "",
                 reverse=True,
             )
+
+        _query_jobs_cache_put(cache_key, results)
         return results
 
     async def get_all_users_with_preferences(self) -> list[dict]:

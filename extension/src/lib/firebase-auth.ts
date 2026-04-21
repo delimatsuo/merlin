@@ -1,9 +1,13 @@
 import { initializeApp, getApps } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, type User } from "firebase/auth";
 
-// Same Firebase project as the main Merlin app
+// Firebase project config. `apiKey` is injected at build time by webpack
+// DefinePlugin (see webpack.config.js). It's a browser-side identifier, not
+// an OAuth secret, but we still keep it out of source so it can be rotated
+// without a git commit.
+declare const process: { env: { FIREBASE_API_KEY: string } };
 const firebaseConfig = {
-  apiKey: "AIzaSyAPhPf4qzo94WplQwQl9gbjauBbFOi7J3w",
+  apiKey: process.env.FIREBASE_API_KEY,
   authDomain: "merlin-489714.firebaseapp.com",
   projectId: "merlin-489714",
   storageBucket: "merlin-489714.firebasestorage.app",

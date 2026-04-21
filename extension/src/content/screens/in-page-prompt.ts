@@ -38,10 +38,31 @@ export function showInPageHumanPrompt(
 
   if (targets.size === 0) return;
 
-  const submitBtn = getAdapter()?.findNextButton() ?? null;
-  if (!submitBtn) return;
+  // Delegated capture on the document so React rerenders that swap the
+  // submit button DOM node don't orphan our listener. We identify the
+  // click target at fire time by re-resolving via the adapter, and de-dup
+  // with a closure flag instead of `{ once: true }`.
+  let fired = false;
+  const handler = (event: Event) => {
+    if (fired) return;
+    const clicked = event.target;
+    if (!(clicked instanceof Element)) return;
 
-  const handler = async (_event: Event) => {
+    const currentSubmit = getAdapter()?.findNextButton() ?? null;
+    const inSubmit =
+      currentSubmit && (currentSubmit === clicked || currentSubmit.contains(clicked));
+    // Fallback: match any "Save/Continue/Salvar" button up the ancestor chain.
+    const ancestorBtn = clicked.closest("button, [role='button'], a");
+    const looksLikeSubmit =
+      !!ancestorBtn &&
+      /salvar|continuar|save|continue|enviar|submit|finalizar/i.test(
+        (ancestorBtn.textContent || "").trim(),
+      );
+    if (!inSubmit && !looksLikeSubmit) return;
+
+    fired = true;
+    _activeSubmitListener = null;
+
     const answers: Record<string, string> = {};
     for (const [label, el] of targets) {
       const field = scraped.find((f) => f.label === label);
@@ -50,24 +71,39 @@ export function showInPageHumanPrompt(
     }
 
     if (Object.keys(answers).length > 0) {
-      try {
-        await onBeforeSubmit(answers);
-      } catch (err) {
+      // Fire-and-forget: content script may be torn down by the navigation
+      // that the click is about to trigger. The save-answers POST goes to
+      // the service worker via chrome.runtime.sendMessage, which is NOT
+      // dependent on the content script surviving.
+      onBeforeSubmit(answers).catch((err) => {
         console.error("[Merlin] save-answers failed:", err);
-      }
+      });
     }
 
     removeInPagePrompt();
   };
 
-  submitBtn.addEventListener("click", handler, { capture: true, once: true });
+  // Drop any previous listener before adding a new one, so repeated
+  // showInPageHumanPrompt calls don't stack handlers.
+  if (_activeSubmitListener) {
+    document.removeEventListener("click", _activeSubmitListener, true);
+  }
+  _activeSubmitListener = handler;
+  document.addEventListener("click", handler, { capture: true });
 }
+
+// Module-level so removeInPagePrompt can also detach the listener.
+let _activeSubmitListener: ((e: Event) => void) | null = null;
 
 export function removeInPagePrompt(): void {
   document.getElementById(BANNER_ID)?.remove();
   document
     .querySelectorAll(`.${HIGHLIGHT_CLASS}`)
     .forEach((el) => el.classList.remove(HIGHLIGHT_CLASS));
+  if (_activeSubmitListener) {
+    document.removeEventListener("click", _activeSubmitListener, true);
+    _activeSubmitListener = null;
+  }
 }
 
 function injectStyles(): void {

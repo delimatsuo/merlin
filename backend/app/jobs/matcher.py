@@ -431,7 +431,7 @@ async def match_user_jobs_fast(
     raw_jobs = await fs.query_jobs_by_tags(
         tags=list(user_tags),
         work_modes=pref_work_modes if pref_work_modes else None,
-        limit=2000,
+        limit=1000,
     )
 
     title_filtered = filter_by_preferences(raw_jobs, preferences)
@@ -514,7 +514,7 @@ async def match_user_jobs(
         raw_jobs = await fs.query_jobs_by_tags(
             tags=list(user_tags),
             work_modes=pref_work_modes if pref_work_modes else None,
-            limit=2000,
+            limit=1000,
         )
         logger.info(
             "match_query_firestore",
