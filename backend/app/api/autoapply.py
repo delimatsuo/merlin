@@ -24,7 +24,7 @@ from app.services.gemini_ai import (
 logger = structlog.get_logger()
 router = APIRouter()
 
-DAILY_LLM_LIMIT = 50
+DAILY_LLM_LIMIT = 500
 
 
 @router.get("")
