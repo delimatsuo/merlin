@@ -1,12 +1,11 @@
 import {
-  enqueueJobs,
-  removeJob,
-  clearCompleted,
-  getQueue,
-  setConcurrency,
-  startQueue,
-  pauseQueue,
+  driveQueue,
+  queueKick,
+  focusQueueTab,
+  getTabOwnership,
+  installQueueAlarm,
   onTabStatusUpdate,
+  configureQueue,
 } from "./queue";
 
 // Types
@@ -305,31 +304,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case "SESSION_LOCK_CHECK":
         return { locked: session.activeTabId !== null, activeTab: session.activeTabId };
 
-      // --- Batch queue ---
-      case "QUEUE_GET":
-        return getQueue();
+      // --- Batch queue (backend-sourced) ---
+      case "QUEUE_KICK":
+        // Triggered by popup open, merlincv.com bridge, or tab events.
+        await queueKick();
+        return { ok: true };
 
-      case "QUEUE_ENQUEUE":
-        return enqueueJobs(message.jobs || []);
-
-      case "QUEUE_REMOVE":
-        return removeJob(message.id);
-
-      case "QUEUE_CLEAR_COMPLETED":
-        return clearCompleted();
-
-      case "QUEUE_SET_CONCURRENCY":
-        return setConcurrency(message.n);
-
-      case "QUEUE_START":
-        return startQueue();
-
-      case "QUEUE_PAUSE":
-        return pauseQueue();
+      case "QUEUE_FOCUS_TAB":
+        return { focused: await focusQueueTab(message.queueId) };
 
       case "QUEUE_OPEN_DASHBOARD":
-        await chrome.tabs.create({ url: chrome.runtime.getURL("dist/dashboard.html") });
+        // Dashboard now lives in Merlin frontend, not the extension.
+        await chrome.tabs.create({ url: "https://merlincv.com/dashboard/candidaturas" });
         return { opened: true };
+
+      case "GET_QUEUE_OWNERSHIP": {
+        const tabId = sender.tab?.id;
+        if (!tabId) return { ownership: null, tabId: null };
+        const ownership = await getTabOwnership(tabId);
+        return { ownership, tabId };
+      }
 
       // From content script state machines (tab-specific progress).
       case "TAB_STATUS_UPDATE":
@@ -363,5 +357,14 @@ chrome.storage.session.get("authState", (result) => {
     authState = result.authState as AuthState;
   }
 });
+
+// Wire the backend-sourced queue with the SW's authenticated API client and
+// install the polling alarm (idempotent across SW restarts).
+configureQueue(apiRequest);
+installQueueAlarm().catch((err) =>
+  console.error("[Queue] installQueueAlarm failed:", err),
+);
+// Kick once on startup in case there was a batch in flight when the SW died.
+driveQueue().catch(() => { /* no-op — unauthenticated is common on cold start */ });
 
 console.log("Gupy AutoApply service worker loaded");

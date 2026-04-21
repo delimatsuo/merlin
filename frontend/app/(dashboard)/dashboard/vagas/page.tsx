@@ -1,11 +1,19 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
-import { SlidersHorizontal, Search } from "lucide-react";
+import { useEffect, useMemo, useState, Suspense } from "react";
+import { useRouter } from "next/navigation";
+import { SlidersHorizontal, Search, Zap, X } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { JobCard } from "@/components/job-card";
 import { JobPreferencesForm } from "@/components/job-preferences-form";
-import { useJobFeedStore, type JobPreferences, type MatchedJobItem } from "@/lib/store";
+import { BatchPreflightSheet } from "@/components/batch-preflight-sheet";
+import {
+  useBatchSelectionStore,
+  useJobFeedStore,
+  type JobPreferences,
+  type MatchedJobItem,
+} from "@/lib/store";
 import { api } from "@/lib/api";
 import { useTranslation } from "@/lib/hooks/useTranslation";
 import { cn } from "@/lib/utils";
@@ -21,12 +29,66 @@ const TIME_RANGE_VALUES = [1, 3, 7, 14] as const;
 
 function VagasContent() {
   const { t } = useTranslation();
+  const router = useRouter();
   const {
     preferences, matches, days, loading, prefsLoading,
     setPreferences, setMatches, setDays, setLoading, setPrefsLoading,
   } = useJobFeedStore();
+  const { selectedIds, toggle, clear } = useBatchSelectionStore();
 
   const [showPrefsEditor, setShowPrefsEditor] = useState(false);
+  const [preflightOpen, setPreflightOpen] = useState(false);
+  const [submittingBatch, setSubmittingBatch] = useState(false);
+
+  const gupyMatches = useMemo(
+    () => matches.filter((m) => (m.source || "").toLowerCase() === "gupy"),
+    [matches],
+  );
+  const selectedJobs = useMemo(
+    () => gupyMatches.filter((m) => selectedIds.has(m.job_id)),
+    [gupyMatches, selectedIds],
+  );
+
+  // Clear selection when the underlying matches change so we don't carry
+  // stale IDs across preference edits or time-range changes.
+  useEffect(() => {
+    clear();
+  }, [days, preferences, clear]);
+
+  const handleOpenPreflight = () => {
+    if (selectedJobs.length === 0) return;
+    setPreflightOpen(true);
+  };
+
+  const handleSubmitBatch = async () => {
+    if (selectedJobs.length === 0 || submittingBatch) return;
+    setSubmittingBatch(true);
+    try {
+      const jobIds = selectedJobs.map((j) => j.job_id);
+      const resp = await api.post<{ batch_id: string; count: number; rejected: unknown[] }>(
+        "/api/applications/queue",
+        { job_ids: jobIds },
+      );
+      // Nudge the extension service worker to start driving immediately
+      // (instead of waiting for the 90s alarm). Bridge content script on
+      // this domain forwards this postMessage to the SW as QUEUE_KICK.
+      try {
+        window.postMessage({ type: "MERLIN_QUEUE_KICK" }, window.location.origin);
+      } catch {
+        /* extension not installed — backend-only fallback still works */
+      }
+      clear();
+      setPreflightOpen(false);
+      toast.success(`Lote iniciado: ${resp.count} vagas`);
+      router.push("/dashboard/candidaturas");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : t("vagas.batch.startError"),
+      );
+    } finally {
+      setSubmittingBatch(false);
+    }
+  };
 
   // Load preferences on mount
   useEffect(() => {
@@ -158,6 +220,20 @@ function VagasContent() {
         </p>
       </div>
 
+      {/* Auto-apply eligibility banner */}
+      {gupyMatches.length > 0 && (
+        <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-3 flex items-center gap-2.5">
+          <div className="shrink-0 h-7 w-7 rounded-full bg-amber-500/20 flex items-center justify-center">
+            <Zap className="h-3.5 w-3.5 text-amber-700" />
+          </div>
+          <p className="text-xs text-amber-900 font-medium leading-relaxed flex-1">
+            {gupyMatches.length === 1
+              ? t("vagas.batch.eligibleBannerOne")
+              : t("vagas.batch.eligibleBanner", { count: String(gupyMatches.length) })}
+          </p>
+        </div>
+      )}
+
       {/* Time range selector */}
       <div className="flex items-center justify-center gap-1.5">
         {TIME_RANGE_VALUES.map((value) => (
@@ -190,10 +266,45 @@ function VagasContent() {
 
       {/* Matches */}
       {!loading && matches.length > 0 && (
-        <div className="space-y-3">
+        <div className={cn("space-y-3", selectedIds.size > 0 && "pb-24")}>
           {matches.map((job) => (
-            <JobCard key={job.job_id} job={job} />
+            <JobCard
+              key={job.job_id}
+              job={job}
+              selected={selectedIds.has(job.job_id)}
+              onToggleSelect={toggle}
+            />
           ))}
+        </div>
+      )}
+
+      {/* Floating batch action footer */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-0 inset-x-0 z-40 pointer-events-none px-4 pb-4">
+          <div className="max-w-2xl mx-auto pointer-events-auto">
+            <div className="rounded-2xl bg-foreground text-background apple-shadow-lg p-3 flex items-center gap-3">
+              <span className="text-sm font-semibold pl-2">
+                {selectedIds.size === 1
+                  ? t("vagas.batch.footerCountOne")
+                  : t("vagas.batch.footerCount", { count: String(selectedIds.size) })}
+              </span>
+              <button
+                type="button"
+                onClick={clear}
+                aria-label={t("vagas.batch.clearSelection")}
+                className="h-7 w-7 rounded-full hover:bg-background/10 flex items-center justify-center"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+              <div className="flex-1" />
+              <Button
+                onClick={handleOpenPreflight}
+                className="h-9 rounded-full bg-background text-foreground hover:bg-background/90 text-xs font-semibold px-4"
+              >
+                {t("vagas.batch.footerAction")}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -211,6 +322,14 @@ function VagasContent() {
           </p>
         </div>
       )}
+
+      <BatchPreflightSheet
+        open={preflightOpen}
+        jobs={selectedJobs}
+        submitting={submittingBatch}
+        onCancel={() => setPreflightOpen(false)}
+        onConfirm={handleSubmitBatch}
+      />
     </div>
   );
 }

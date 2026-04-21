@@ -1,7 +1,15 @@
 /**
  * Content script entry point.
- * Injected into all gupy.io pages.
- * Listens for START_AUTOAPPLY message and auto-resumes if a session is active.
+ * Injected into all gupy.io pages. Does NOT auto-start on every Gupy page —
+ * only runs when:
+ *   1. A popup or SW message explicitly requests it (manual mode), OR
+ *   2. The tab was opened by the batch queue (per-tab ownership flag set
+ *      by the SW — keyed by chrome.tabs.id, queried via GET_QUEUE_OWNERSHIP).
+ *
+ * The old "applying immediately on every Gupy page" bug happened because
+ * hasActiveSession() read a global session flag shared across tabs. The
+ * state machine now keys its session by tab id, so a second Gupy tab with
+ * no queue ownership sees no active session for itself and stays idle.
  */
 
 import { StateMachine } from "./state-machine";
@@ -14,6 +22,20 @@ function isSupportedApplicationPage(): boolean {
 
 const sm = new StateMachine();
 
+async function initializeTabId(): Promise<number | null> {
+  try {
+    const resp = await chrome.runtime.sendMessage({ type: "GET_QUEUE_OWNERSHIP" });
+    const tabId = resp?.tabId ?? null;
+    if (typeof tabId === "number") {
+      sm.setTabId(tabId);
+      return tabId;
+    }
+  } catch {
+    /* SW not ready */
+  }
+  return null;
+}
+
 // Listen for messages from popup/service worker
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === "START_AUTOAPPLY") {
@@ -23,7 +45,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     }
 
     const jobUrl = window.location.href;
-    sm.run(jobUrl);
+    (async () => {
+      await initializeTabId();
+      sm.markManualOrigin();
+      sm.run(jobUrl);
+    })();
     sendResponse({ success: true });
     return true;
   }
@@ -64,20 +90,42 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return false;
 });
 
-// Auto-resume: if there's an active session from a previous page navigation,
-// continue the state machine on this new page
+// Gated auto-run on page load.
 (async () => {
   if (!isSupportedApplicationPage()) return;
 
-  if (await sm.hasActiveSession()) {
-    console.log("[GuPy AutoApply] Resuming active session after navigation");
-    // Small delay to let the page DOM settle
+  const tabId = await initializeTabId();
+  if (tabId === null) {
+    console.log("[GuPy AutoApply] Tab id unknown — skipping auto-run");
+    return;
+  }
+
+  // Path 1: queue-owned tab (opened by SW for batch).
+  const ownership = await chrome.runtime
+    .sendMessage({ type: "GET_QUEUE_OWNERSHIP" })
+    .catch(() => null);
+  if (ownership?.ownership?.queueId) {
+    console.log(
+      "[GuPy AutoApply] Queue-owned tab — auto-running. queueId:",
+      ownership.ownership.queueId,
+    );
     await new Promise((r) => setTimeout(r, 500));
     sm.run(window.location.href);
-  } else {
-    console.log("[GuPy AutoApply] Content script ready on application page");
-    // Page reload while paused on NEEDS_HUMAN — re-show the in-page prompt.
-    await new Promise((r) => setTimeout(r, 500));
-    await sm.restorePendingPromptIfAny();
+    return;
   }
+
+  // Path 2: in-tab navigation during a manual-mode run.
+  // Only resumes if this specific tab previously started a run.
+  if (await sm.hasActiveSessionForTab()) {
+    console.log("[GuPy AutoApply] Resuming manual-mode session for this tab");
+    await new Promise((r) => setTimeout(r, 500));
+    sm.run(window.location.href);
+    return;
+  }
+
+  // Path 3: page reload while paused on NEEDS_HUMAN — restore the prompt but
+  // don't re-run the machine. User must click "Save and continue" to resume.
+  console.log("[GuPy AutoApply] Content script ready on application page");
+  await new Promise((r) => setTimeout(r, 500));
+  await sm.restorePendingPromptIfAny();
 })();

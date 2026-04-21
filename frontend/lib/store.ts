@@ -518,6 +518,71 @@ interface JobFeedState {
   setPrefsLoading: (loading: boolean) => void;
 }
 
+// --- Batch Selection Store ---
+
+interface BatchSelectionState {
+  selectedIds: Set<string>;
+  toggle: (jobId: string) => void;
+  clear: () => void;
+  isSelected: (jobId: string) => boolean;
+}
+
+export const useBatchSelectionStore = create<BatchSelectionState>((set, get) => ({
+  selectedIds: new Set<string>(),
+  toggle: (jobId) =>
+    set((state) => {
+      const next = new Set(state.selectedIds);
+      if (next.has(jobId)) next.delete(jobId);
+      else next.add(jobId);
+      return { selectedIds: next };
+    }),
+  clear: () => set({ selectedIds: new Set<string>() }),
+  isSelected: (jobId) => get().selectedIds.has(jobId),
+}));
+
+// --- Application Queue (Pipeline + History) Store ---
+
+export interface QueueEntry {
+  id: string;
+  job_id: string;
+  job_url: string;
+  title: string;
+  company: string;
+  status:
+    | "pending"
+    | "running"
+    | "applied"
+    | "needs_attention"
+    | "failed"
+    | "skipped"
+    | "cancelled";
+  attention_reason: "confirmation" | "unknown_answer" | null;
+  error_message: string | null;
+  tab_id: number | null;
+  batch_id: string;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+interface QueueStoreState {
+  active: QueueEntry[];
+  recent: QueueEntry[];
+  activeBatchId: string | null;
+  loading: boolean;
+  setQueue: (payload: { active: QueueEntry[]; recent: QueueEntry[]; activeBatchId: string | null }) => void;
+  setLoading: (loading: boolean) => void;
+}
+
+export const useQueueStore = create<QueueStoreState>((set) => ({
+  active: [],
+  recent: [],
+  activeBatchId: null,
+  loading: false,
+  setQueue: ({ active, recent, activeBatchId }) => set({ active, recent, activeBatchId }),
+  setLoading: (loading) => set({ loading }),
+}));
+
 export const useJobFeedStore = create<JobFeedState>((set) => ({
   preferences: null,
   matches: [],

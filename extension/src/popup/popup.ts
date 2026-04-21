@@ -413,14 +413,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     // 7. Load mode setting
     await loadModeSetting();
 
-    // 8. If a previous run paused waiting for user input, restore the panel.
+    // 8. If a previous run paused waiting for user input in the active tab,
+    //    restore the panel. Session state is per-tab (autoapply_active_session_<tabId>)
+    //    so this popup only sees its own tab's paused state.
     try {
-      const stored = await chrome.storage.session.get("autoapply_active_session");
-      const session = stored.autoapply_active_session as
-        | { pendingFields?: HumanField[]; running?: boolean }
-        | undefined;
-      if (session?.pendingFields?.length) {
-        showHumanInputPanel(session.pendingFields);
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (activeTab?.id) {
+        const key = `autoapply_active_session_${activeTab.id}`;
+        const stored = await chrome.storage.session.get(key);
+        const session = stored[key] as
+          | { pendingFields?: HumanField[]; running?: boolean }
+          | undefined;
+        if (session?.pendingFields?.length) {
+          showHumanInputPanel(session.pendingFields);
+        }
       }
     } catch {
       // Ignore — session storage may be unavailable.
@@ -866,11 +872,14 @@ document.getElementById("submit-human-answers")?.addEventListener("click", async
 
 async function clearPendingFields(): Promise<void> {
   try {
-    const stored = await chrome.storage.session.get("autoapply_active_session");
-    const session = stored.autoapply_active_session as Record<string, unknown> | undefined;
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!activeTab?.id) return;
+    const key = `autoapply_active_session_${activeTab.id}`;
+    const stored = await chrome.storage.session.get(key);
+    const session = stored[key] as Record<string, unknown> | undefined;
     if (session) {
       session.pendingFields = [];
-      await chrome.storage.session.set({ autoapply_active_session: session });
+      await chrome.storage.session.set({ [key]: session });
     }
   } catch {
     // Ignore.

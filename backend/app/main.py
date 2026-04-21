@@ -156,6 +156,7 @@ from app.api.export import router as export_router
 from app.api.profile import router as profile_router
 from app.api.research import router as research_router
 from app.api.applications import router as applications_router
+from app.api.applications_queue import router as applications_queue_router
 from app.api.admin import router as admin_router
 from app.api.linkedin import router as linkedin_router
 from app.api.feedback import router as feedback_router
@@ -169,6 +170,9 @@ app.include_router(tailor_router, prefix="/api/tailor", tags=["tailor"])
 app.include_router(export_router, prefix="/api/export", tags=["export"])
 app.include_router(profile_router, prefix="/api/profile", tags=["profile"])
 app.include_router(research_router, prefix="/api/research", tags=["research"])
+# NOTE: Queue router mounted BEFORE the applications router so that
+# /api/applications/queue routes match before the dynamic /{application_id}.
+app.include_router(applications_queue_router, prefix="/api/applications/queue", tags=["applications-queue"])
 app.include_router(applications_router, prefix="/api/applications", tags=["applications"])
 app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
 app.include_router(linkedin_router, prefix="/api/linkedin", tags=["linkedin"])

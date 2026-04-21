@@ -56,6 +56,19 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      // Batch application queue — user reads via backend API, writes via Admin SDK
+      match /applicationQueue/{queueId} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow write: if false;
+      }
+
+      // Per-batch notification flags (prevents duplicate batch-complete emails
+      // after SW restart). Backend-only via Admin SDK.
+      match /batchNotifications/{batchId} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow write: if false;
+      }
+
       // AutoApply daily usage — backend-only via Admin SDK
       match /autoapplyUsage/{date} {
         allow read: if request.auth != null && request.auth.uid == uid;

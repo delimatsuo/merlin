@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 import structlog
 from firebase_admin import auth as firebase_auth, firestore, storage, get_app
+from google.api_core.exceptions import AlreadyExists
 from google.cloud.firestore_v1 import async_transactional
 from google.cloud.firestore_v1.async_client import AsyncClient
 from google.cloud.firestore_v1.base_query import FieldFilter
@@ -1790,3 +1791,224 @@ class FirestoreService:
 
         new_count = await update_in_transaction(transaction, doc_ref)
         return new_count
+
+    # --- Batch Application Queue ---
+
+    async def create_queue_entries(
+        self,
+        uid: str,
+        entries: list[dict],
+        batch_id: str,
+    ) -> list[dict]:
+        """Write a set of queue entries under users/{uid}/applicationQueue.
+
+        Each entry dict must contain job_id, job_url, title, company. The
+        batch_id and server-side fields (status=pending, created_at, id) are
+        set here so callers can't forge them.
+        """
+        created_at = datetime.now(timezone.utc).isoformat()
+        stored: list[dict] = []
+        for entry in entries:
+            entry_id = str(uuid.uuid4())
+            doc = {
+                "job_id": entry["job_id"],
+                "job_url": entry["job_url"],
+                "title": entry.get("title", ""),
+                "company": entry.get("company", ""),
+                "status": "pending",
+                "attention_reason": None,
+                "error_message": None,
+                "tab_id": None,
+                "batch_id": batch_id,
+                "created_at": created_at,
+                "started_at": None,
+                "finished_at": None,
+            }
+            ref = (
+                self.db.collection("users").document(uid)
+                .collection("applicationQueue").document(entry_id)
+            )
+            await ref.set(doc)
+            stored.append({"id": entry_id, **doc})
+        logger.info("queue_entries_created", uid=uid, batch_id=batch_id, count=len(stored))
+        return stored
+
+    async def list_queue_entries(
+        self,
+        uid: str,
+        since: datetime | None = None,
+    ) -> list[dict]:
+        """Return queue entries for a user, newest first.
+
+        If `since` is provided, returns only entries created at or after that
+        timestamp. Capped at 500 entries to keep responses bounded.
+        """
+        query = (
+            self.db.collection("users").document(uid)
+            .collection("applicationQueue")
+            .order_by("created_at", direction=firestore.Query.DESCENDING)
+            .limit(500)
+        )
+        results: list[dict] = []
+        since_iso = since.isoformat() if since else None
+        async for doc in query.stream():
+            data = doc.to_dict() or {}
+            if since_iso and (data.get("created_at") or "") < since_iso:
+                continue
+            data["id"] = doc.id
+            results.append(data)
+        return results
+
+    async def get_queue_entry(self, uid: str, entry_id: str) -> dict | None:
+        ref = (
+            self.db.collection("users").document(uid)
+            .collection("applicationQueue").document(entry_id)
+        )
+        doc = await ref.get()
+        if not doc.exists:
+            return None
+        data = doc.to_dict() or {}
+        data["id"] = doc.id
+        return data
+
+    # Allowed transitions, enforced server-side so a buggy extension version
+    # can't report "applied" on a job that never actually applied.
+    _QUEUE_ALLOWED_TRANSITIONS: dict[str, set[str]] = {
+        "pending": {"running", "cancelled", "skipped"},
+        "running": {"applied", "failed", "needs_attention", "skipped", "cancelled"},
+        "needs_attention": {"running", "applied", "skipped", "cancelled", "failed"},
+        "applied": set(),
+        "failed": set(),
+        "skipped": set(),
+        "cancelled": set(),
+    }
+
+    async def update_queue_entry(
+        self,
+        uid: str,
+        entry_id: str,
+        updates: dict,
+    ) -> tuple[dict | None, str | None]:
+        """Apply a partial update to a queue entry. Returns (updated_doc, error).
+
+        Validates that the status transition is allowed — terminal statuses
+        (applied/failed/skipped/cancelled) can't be moved back, and the
+        state graph matches the extension's lifecycle. Returns (None, reason)
+        if the entry is missing or the transition is rejected.
+        """
+        ref = (
+            self.db.collection("users").document(uid)
+            .collection("applicationQueue").document(entry_id)
+        )
+        snap = await ref.get()
+        if not snap.exists:
+            return None, "not_found"
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        current = snap.to_dict() or {}
+        patch = dict(updates)
+
+        new_status = patch.get("status")
+        if new_status is not None:
+            current_status = current.get("status", "pending")
+            allowed = self._QUEUE_ALLOWED_TRANSITIONS.get(current_status, set())
+            if new_status != current_status and new_status not in allowed:
+                return None, f"invalid_transition_{current_status}_to_{new_status}"
+
+            if new_status == "running" and not current.get("started_at"):
+                patch["started_at"] = now_iso
+            if new_status in {"applied", "failed", "skipped", "cancelled"} and not current.get("finished_at"):
+                patch["finished_at"] = now_iso
+
+        await ref.update(patch)
+        updated = current | patch
+        updated["id"] = entry_id
+        return updated, None
+
+    async def update_batch_status(
+        self,
+        uid: str,
+        batch_id: str,
+        new_status: str,
+        only_from: list[str],
+    ) -> int:
+        """Bulk update all entries in a batch whose current status is in `only_from`.
+
+        Returns the number of entries updated. Used for pause/cancel.
+        """
+        query = (
+            self.db.collection("users").document(uid)
+            .collection("applicationQueue")
+            .where(filter=FieldFilter("batch_id", "==", batch_id))
+        )
+        count = 0
+        now_iso = datetime.now(timezone.utc).isoformat()
+        async for doc in query.stream():
+            data = doc.to_dict() or {}
+            if data.get("status") not in only_from:
+                continue
+            patch = {"status": new_status}
+            if new_status in {"cancelled", "failed"}:
+                patch["finished_at"] = now_iso
+            await doc.reference.update(patch)
+            count += 1
+        logger.info("queue_batch_updated", uid=uid, batch_id=batch_id, status=new_status, count=count)
+        return count
+
+    async def get_batch_entries(self, uid: str, batch_id: str) -> list[dict]:
+        query = (
+            self.db.collection("users").document(uid)
+            .collection("applicationQueue")
+            .where(filter=FieldFilter("batch_id", "==", batch_id))
+        )
+        results: list[dict] = []
+        async for doc in query.stream():
+            data = doc.to_dict() or {}
+            data["id"] = doc.id
+            results.append(data)
+        return results
+
+    async def get_active_batch_id(self, uid: str) -> str | None:
+        """Return the batch_id of the user's current active batch, or None.
+
+        An "active" batch has at least one entry in pending / running /
+        needs_attention status. We scan the most recent 500 entries (same
+        bound as list_queue_entries) to pick the active batch — multiple
+        active batches aren't supported in v1, so the first hit wins.
+        """
+        query = (
+            self.db.collection("users").document(uid)
+            .collection("applicationQueue")
+            .order_by("created_at", direction=firestore.Query.DESCENDING)
+            .limit(500)
+        )
+        async for doc in query.stream():
+            data = doc.to_dict() or {}
+            if data.get("status") in {"pending", "running", "needs_attention"}:
+                return data.get("batch_id") or None
+        return None
+
+    async def claim_batch_notification(self, uid: str, batch_id: str) -> bool:
+        """Atomically claim the right to send the batch-complete email.
+
+        Uses Firestore's `create()` which fails with AlreadyExists if the
+        document is already present — so two concurrent complete-batch
+        calls can't both send the email. Returns True if we claimed the
+        send (caller should proceed), False if another process already did.
+        """
+        ref = (
+            self.db.collection("users").document(uid)
+            .collection("batchNotifications").document(batch_id)
+        )
+        try:
+            await ref.create({
+                "notified_at": datetime.now(timezone.utc).isoformat(),
+                "batch_id": batch_id,
+            })
+            return True
+        except AlreadyExists:
+            logger.info("batch_notification_already_claimed", uid=uid, batch_id=batch_id)
+            return False
+        # Any other exception (network blip, permission issue) bubbles out so
+        # the caller returns a real error instead of silently dropping the
+        # email and logging it as a duplicate-claim.
