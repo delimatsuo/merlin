@@ -1,180 +1,210 @@
 /**
- * Batch application queue — runs in the service worker. Given a list of job
- * URLs, opens tabs (up to MAX_CONCURRENT at a time) and drives each through
- * the per-tab state machine. Tracks status per job and surfaces jobs that
- * need the user's attention (disqualifying modal, unknown-info prompts).
+ * Batch application queue driver — runs in the service worker.
  *
- * Persisted in chrome.storage.local so the dashboard can render the full
- * queue and survive service-worker restarts.
+ * Source of truth is the backend at /api/applications/queue. The SW polls
+ * periodically and drives one tab at a time (sequential). When a tab
+ * finishes (completed / failed / needs_attention) it PATCHes the backend
+ * and opens the next pending entry. When the queue drains, it POSTs
+ * /complete-batch so the backend can send the email digest.
+ *
+ * Per-tab ownership is tracked in chrome.storage.session under keys like
+ * `queue_tab_<tabId>`. The content script consults this to decide whether
+ * to auto-run on page load (fixing the old "applying immediately on every
+ * Gupy page" bug, which read a global session flag).
  */
 
-const QUEUE_KEY = "autoapply_batch_queue";
-const MAX_CONCURRENT_DEFAULT = 3;
+const POLL_ALARM = "merlin_queue_poll";
+const POLL_INTERVAL_MIN = 1.5; // 90 seconds per spec
+const ACTIVE_STATUSES = new Set(["pending", "running", "needs_attention"]);
 
-export type QueueJobStatus =
-  | "pending" // not started
-  | "running" // tab open, automation driving
-  | "needs_attention" // paused — user input or confirmation required
-  | "completed" // applied successfully
-  | "skipped" // user skipped
-  | "failed"; // automation error
+type ApiFn = (
+  method: string,
+  path: string,
+  body?: unknown,
+) => Promise<{ data?: any; error?: string; status?: number }>;
 
-export interface QueueJob {
+export interface QueueEntry {
   id: string;
-  url: string;
-  title?: string;
-  company?: string;
-  score?: number;
-  status: QueueJobStatus;
-  tabId?: number;
-  attentionReason?: "confirmation" | "unknown_answer" | "error";
-  errorMessage?: string;
-  startedAt?: number;
-  finishedAt?: number;
+  job_id: string;
+  job_url: string;
+  title: string;
+  company: string;
+  status:
+    | "pending"
+    | "running"
+    | "applied"
+    | "needs_attention"
+    | "failed"
+    | "skipped"
+    | "cancelled";
+  attention_reason: "confirmation" | "unknown_answer" | null;
+  error_message: string | null;
+  tab_id: number | null;
+  batch_id: string;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
 }
 
-interface QueueState {
-  jobs: QueueJob[];
-  maxConcurrent: number;
-  active: boolean; // user pressed "start"
+export interface QueueOwnership {
+  queueId: string;
+  batchId: string;
 }
 
-const DEFAULT_STATE: QueueState = {
-  jobs: [],
-  maxConcurrent: MAX_CONCURRENT_DEFAULT,
-  active: false,
-};
+let apiRequest: ApiFn | null = null;
+let driving = false;
 
-async function loadState(): Promise<QueueState> {
-  const result = await chrome.storage.local.get(QUEUE_KEY);
-  return (result[QUEUE_KEY] as QueueState | undefined) ?? { ...DEFAULT_STATE };
+/** Wire the API client from the service worker so we don't duplicate auth. */
+export function configureQueue(api: ApiFn): void {
+  apiRequest = api;
 }
 
-async function saveState(state: QueueState): Promise<void> {
-  await chrome.storage.local.set({ [QUEUE_KEY]: state });
-  // Notify any open dashboards
-  chrome.runtime.sendMessage({ type: "QUEUE_UPDATED" }).catch(() => {});
+function ownershipKey(tabId: number): string {
+  return `queue_tab_${tabId}`;
 }
 
-function newJobId(): string {
-  return (
-    Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8)
-  );
+async function setTabOwnership(tabId: number, ownership: QueueOwnership): Promise<void> {
+  await chrome.storage.session.set({ [ownershipKey(tabId)]: ownership });
 }
 
-// --- Public API (called via message handler) ---
+async function clearTabOwnership(tabId: number): Promise<void> {
+  await chrome.storage.session.remove(ownershipKey(tabId));
+}
 
-export async function enqueueJobs(
-  items: Array<{ url: string; title?: string; company?: string; score?: number }>,
-): Promise<QueueState> {
-  const state = await loadState();
-  for (const item of items) {
-    if (state.jobs.some((j) => j.url === item.url)) continue; // dedupe
-    state.jobs.push({
-      id: newJobId(),
-      url: item.url,
-      title: item.title,
-      company: item.company,
-      score: item.score,
-      status: "pending",
+export async function getTabOwnership(tabId: number): Promise<QueueOwnership | null> {
+  const result = await chrome.storage.session.get(ownershipKey(tabId));
+  return (result[ownershipKey(tabId)] as QueueOwnership | undefined) ?? null;
+}
+
+async function fetchQueue(): Promise<{ active: QueueEntry[]; recent: QueueEntry[] } | null> {
+  if (!apiRequest) return null;
+  const resp = await apiRequest("GET", "/api/applications/queue");
+  if (resp.error || !resp.data) return null;
+  return resp.data;
+}
+
+async function patchQueueEntry(
+  id: string,
+  body: {
+    status: string;
+    attention_reason?: string;
+    error_message?: string;
+    tab_id?: number | null;
+  },
+): Promise<void> {
+  if (!apiRequest) return;
+  await apiRequest("PATCH", `/api/applications/queue/${id}`, body);
+}
+
+async function completeBatch(batchId: string): Promise<void> {
+  if (!apiRequest) return;
+  await apiRequest("POST", "/api/applications/queue/complete-batch", {
+    batch_id: batchId,
+  });
+}
+
+async function updateBadge(attentionCount: number): Promise<void> {
+  try {
+    await chrome.action.setBadgeText({
+      text: attentionCount > 0 ? String(attentionCount) : "",
     });
+    await chrome.action.setBadgeBackgroundColor({ color: "#dc2626" });
+  } catch {
+    /* action not available */
   }
-  await saveState(state);
-  return state;
 }
 
-export async function removeJob(id: string): Promise<QueueState> {
-  const state = await loadState();
-  const job = state.jobs.find((j) => j.id === id);
-  if (job?.tabId) {
-    try {
-      await chrome.tabs.remove(job.tabId);
-    } catch {
-      // Tab already closed.
-    }
-  }
-  state.jobs = state.jobs.filter((j) => j.id !== id);
-  await saveState(state);
-  return state;
-}
-
-export async function clearCompleted(): Promise<QueueState> {
-  const state = await loadState();
-  state.jobs = state.jobs.filter(
-    (j) => j.status !== "completed" && j.status !== "skipped",
-  );
-  await saveState(state);
-  return state;
-}
-
-export async function getQueue(): Promise<QueueState> {
-  return loadState();
-}
-
-export async function setConcurrency(n: number): Promise<QueueState> {
-  const state = await loadState();
-  state.maxConcurrent = Math.max(1, Math.min(10, n | 0));
-  await saveState(state);
-  return state;
+/** Look up the queue entry id owning a tab via the stored per-tab flag. */
+async function findQueueIdForTab(tabId: number): Promise<string | null> {
+  const ownership = await getTabOwnership(tabId);
+  return ownership?.queueId ?? null;
 }
 
 /**
- * Start processing the queue. Opens tabs up to maxConcurrent. The queue
- * progresses on its own via tab events from there.
+ * Main drive step. Idempotent — safe to call from any trigger (alarm,
+ * popup open, tab status update, batch kick).
+ *
+ * Rules:
+ *   - At most one tab in status "running" at a time (sequential).
+ *   - "needs_attention" tabs stay open but do NOT block the next pending.
+ *   - When no active entries remain, call complete-batch (once per batch).
  */
-export async function startQueue(): Promise<QueueState> {
-  const state = await loadState();
-  state.active = true;
-  await saveState(state);
-  await scheduleNext();
-  return loadState();
-}
+export async function driveQueue(): Promise<void> {
+  if (driving) return;
+  driving = true;
+  try {
+    const queue = await fetchQueue();
+    if (!queue) return;
 
-export async function pauseQueue(): Promise<QueueState> {
-  const state = await loadState();
-  state.active = false;
-  await saveState(state);
-  return state;
-}
+    const active = queue.active;
+    const attentionCount = active.filter((e) => e.status === "needs_attention").length;
+    await updateBadge(attentionCount);
 
-/** Open tabs for pending jobs up to the concurrency cap. */
-async function scheduleNext(): Promise<void> {
-  const state = await loadState();
-  if (!state.active) return;
+    const running = active.filter((e) => e.status === "running");
+    const pending = active.filter((e) => e.status === "pending");
 
-  const running = state.jobs.filter(
-    (j) => j.status === "running" || j.status === "needs_attention",
-  ).length;
-  const slots = state.maxConcurrent - running;
-  if (slots <= 0) return;
-
-  const pending = state.jobs.filter((j) => j.status === "pending").slice(0, slots);
-  for (const job of pending) {
-    try {
-      const tab = await chrome.tabs.create({ url: job.url, active: false });
-      job.tabId = tab.id;
-      job.status = "running";
-      job.startedAt = Date.now();
-    } catch (err) {
-      job.status = "failed";
-      job.errorMessage = (err as Error).message;
+    // Prune ownership for tabs that have been closed externally.
+    for (const entry of active) {
+      if (entry.tab_id !== null && entry.tab_id !== undefined) {
+        try {
+          await chrome.tabs.get(entry.tab_id);
+        } catch {
+          // Tab gone — mark entry as skipped (user closed mid-run).
+          if (entry.status === "running") {
+            await patchQueueEntry(entry.id, {
+              status: "skipped",
+              error_message: "Aba fechada pelo usuário",
+            });
+          }
+          await clearTabOwnership(entry.tab_id);
+        }
+      }
     }
+
+    // Only open a new tab if nothing is actively running.
+    if (running.length === 0 && pending.length > 0) {
+      const next = pending[0];
+      try {
+        const tab = await chrome.tabs.create({ url: next.job_url, active: false });
+        if (tab.id) {
+          await setTabOwnership(tab.id, { queueId: next.id, batchId: next.batch_id });
+          await patchQueueEntry(next.id, {
+            status: "running",
+            tab_id: tab.id,
+          });
+        }
+      } catch (err) {
+        await patchQueueEntry(next.id, {
+          status: "failed",
+          error_message: (err as Error).message,
+        });
+      }
+    }
+
+    // Batch complete? Re-fetch and check for zero active.
+    const refreshed = await fetchQueue();
+    if (!refreshed) return;
+    if (refreshed.active.length === 0 && refreshed.recent.length > 0) {
+      // Find the most recent batch id that hasn't been notified yet.
+      const latestBatch = refreshed.recent[0].batch_id;
+      const notifiedKey = `batch_notified_${latestBatch}`;
+      const stored = await chrome.storage.session.get(notifiedKey);
+      if (!stored[notifiedKey]) {
+        await completeBatch(latestBatch);
+        await chrome.storage.session.set({ [notifiedKey]: true });
+      }
+    }
+  } catch (err) {
+    console.error("[Queue] driveQueue failed:", err);
+  } finally {
+    driving = false;
   }
-  await saveState(state);
 }
 
-// --- Tab event handlers ---
-
-async function findJobByTabId(tabId: number): Promise<{ state: QueueState; job?: QueueJob }> {
-  const state = await loadState();
-  return { state, job: state.jobs.find((j) => j.tabId === tabId) };
-}
-
-/** Called from content-script → SW messages about per-tab progress. */
+/** Called by the content-script state machine as the tab makes progress. */
 export async function onTabStatusUpdate(
   tabId: number,
   update: {
-    step?: string;
     completed?: boolean;
     failed?: boolean;
     errorMessage?: string;
@@ -182,70 +212,115 @@ export async function onTabStatusUpdate(
     needsConfirmation?: boolean;
   },
 ): Promise<void> {
-  const { state, job } = await findJobByTabId(tabId);
-  if (!job) return;
+  const queueId = await findQueueIdForTab(tabId);
+  if (!queueId) return; // Not a queue-owned tab — ignore.
 
-  let changed = false;
   if (update.completed) {
-    job.status = "completed";
-    job.finishedAt = Date.now();
-    changed = true;
+    await patchQueueEntry(queueId, { status: "applied" });
+    await clearTabOwnership(tabId);
     try {
       await chrome.tabs.remove(tabId);
     } catch {
-      // Tab may have already closed.
+      /* already closed */
     }
-    job.tabId = undefined;
-  } else if (update.failed) {
-    job.status = "failed";
-    job.errorMessage = update.errorMessage;
-    job.finishedAt = Date.now();
-    changed = true;
-  } else if (update.needsHuman) {
-    job.status = "needs_attention";
-    job.attentionReason = "unknown_answer";
-    changed = true;
-  } else if (update.needsConfirmation) {
-    job.status = "needs_attention";
-    job.attentionReason = "confirmation";
-    changed = true;
+    await driveQueue();
+    return;
   }
 
-  if (changed) {
-    await saveState(state);
-    await updateBadge();
-    await scheduleNext();
+  if (update.failed) {
+    await patchQueueEntry(queueId, {
+      status: "failed",
+      error_message: update.errorMessage ?? "Erro desconhecido",
+    });
+    await clearTabOwnership(tabId);
+    try {
+      await chrome.tabs.remove(tabId);
+    } catch {
+      /* already closed */
+    }
+    await driveQueue();
+    return;
+  }
+
+  if (update.needsHuman || update.needsConfirmation) {
+    const reason = update.needsConfirmation ? "confirmation" : "unknown_answer";
+    await patchQueueEntry(queueId, {
+      status: "needs_attention",
+      attention_reason: reason,
+    });
+    // Skip-and-continue: tab stays open for user, but queue advances.
+    await driveQueue();
+    return;
   }
 }
 
-/** Handle user-initiated tab close mid-run. */
+/** Called when a tab closes (external event). Differs from status updates:
+ *  closure can mean success-already-reported, user cancelled, or crash. */
 export async function onTabRemoved(tabId: number): Promise<void> {
-  const { state, job } = await findJobByTabId(tabId);
-  if (!job) return;
-  if (job.status === "completed" || job.status === "skipped") return;
-  // User closed tab before automation finished — treat as skipped.
-  job.status = "skipped";
-  job.tabId = undefined;
-  job.finishedAt = Date.now();
-  await saveState(state);
-  await updateBadge();
-  await scheduleNext();
+  const queueId = await findQueueIdForTab(tabId);
+  if (!queueId) return;
+  await clearTabOwnership(tabId);
+  // If the entry is still running / needs_attention, mark it skipped.
+  if (!apiRequest) return;
+  const resp = await apiRequest("GET", "/api/applications/queue");
+  const entry = (resp.data?.active as QueueEntry[] | undefined)?.find((e) => e.id === queueId);
+  if (entry && (entry.status === "running" || entry.status === "needs_attention")) {
+    await patchQueueEntry(queueId, {
+      status: "skipped",
+      error_message: "Aba fechada antes de concluir",
+    });
+  }
+  await driveQueue();
 }
 
-async function updateBadge(): Promise<void> {
-  const state = await loadState();
-  const attention = state.jobs.filter((j) => j.status === "needs_attention").length;
-  const text = attention > 0 ? String(attention) : "";
-  const color = attention > 0 ? "#dc2626" : "#000000";
-  try {
-    await chrome.action.setBadgeText({ text });
-    await chrome.action.setBadgeBackgroundColor({ color });
-  } catch {
-    // Action API not available on this surface.
+/** Called from the frontend (via merlincv.com content-script bridge) or popup. */
+export async function queueKick(): Promise<void> {
+  await driveQueue();
+}
+
+/** Focus the tab for a given queue entry, if it's still open. */
+export async function focusQueueTab(queueId: string): Promise<boolean> {
+  const keys = await chrome.storage.session.get();
+  for (const [k, v] of Object.entries(keys)) {
+    if (!k.startsWith("queue_tab_")) continue;
+    const ownership = v as QueueOwnership;
+    if (ownership?.queueId === queueId) {
+      const tabId = Number(k.slice("queue_tab_".length));
+      try {
+        await chrome.tabs.update(tabId, { active: true });
+        const tab = await chrome.tabs.get(tabId);
+        if (tab.windowId) {
+          await chrome.windows.update(tab.windowId, { focused: true });
+        }
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  }
+  return false;
+}
+
+/** Install the polling alarm. Idempotent across SW restarts. */
+export async function installQueueAlarm(): Promise<void> {
+  const existing = await chrome.alarms.get(POLL_ALARM);
+  if (!existing) {
+    await chrome.alarms.create(POLL_ALARM, {
+      periodInMinutes: POLL_INTERVAL_MIN,
+    });
   }
 }
 
-// Wire tab-removed listener (idempotent — service worker may restart).
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === POLL_ALARM) {
+    driveQueue().catch((err) =>
+      console.error("[Queue] alarm driveQueue failed:", err),
+    );
+  }
+});
+
 chrome.tabs.onRemoved.addListener((tabId) => {
-  onTabRemoved(tabId).catch((err) => console.error("[Queue] onTabRemoved failed:", err));
+  onTabRemoved(tabId).catch((err) =>
+    console.error("[Queue] onTabRemoved failed:", err),
+  );
 });

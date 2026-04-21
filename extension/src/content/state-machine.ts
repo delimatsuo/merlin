@@ -39,7 +39,14 @@ function reportTabStatus(update: {
     .catch(() => {});
 }
 
-const ACTIVE_SESSION_KEY = "autoapply_active_session";
+/**
+ * Per-tab session storage. Scoped by tab id to prevent cross-tab auto-resume
+ * — the old single-key "autoapply_active_session" was read by content scripts
+ * on any Gupy tab, which caused the "starts applying the moment you open a
+ * Gupy page" bug when multiple tabs shared a single session state.
+ */
+const ACTIVE_SESSION_KEY_PREFIX = "autoapply_active_session_";
+const GLOBAL_SESSION_KEY = "autoapply_active_session"; // legacy, still cleared
 
 export class StateMachine {
   private currentStep: AutoApplyStep = AutoApplyStep.IDLE;
@@ -54,6 +61,24 @@ export class StateMachine {
   private startTime: number = 0;
   private errors: string[] = [];
   private pendingFields: UnansweredField[] = [];
+  private tabId: number | null = null;
+  private manualOrigin: boolean = false;
+
+  setTabId(tabId: number): void {
+    this.tabId = tabId;
+  }
+
+  markManualOrigin(): void {
+    this.manualOrigin = true;
+  }
+
+  private sessionKey(): string {
+    // Falls back to a stable per-hostname key if we somehow don't have a tab id.
+    // The risk this mitigates (cross-tab auto-resume) only applies at content-
+    // script load time, where we always fetch tab id before reading state.
+    if (this.tabId !== null) return `${ACTIVE_SESSION_KEY_PREFIX}${this.tabId}`;
+    return GLOBAL_SESSION_KEY;
+  }
 
   getStep(): AutoApplyStep {
     return this.currentStep;
@@ -147,7 +172,7 @@ export class StateMachine {
           // next page auto-resumes after the user clicks Confirm manually.
           this.running = false;
           await chrome.storage.session.set({
-            [ACTIVE_SESSION_KEY]: {
+            [this.sessionKey()]: {
               step: this.currentStep,
               fieldsAnswered: this.fieldsAnswered,
               questionsAnswered: this.questionsAnswered,
@@ -157,6 +182,7 @@ export class StateMachine {
               mode: this.mode,
               running: true,
               pendingFields: this.pendingFields,
+              manualOrigin: this.manualOrigin,
             },
           });
           this.broadcastStatus();
@@ -456,7 +482,7 @@ export class StateMachine {
 
   private async persistState(): Promise<void> {
     await chrome.storage.session.set({
-      [ACTIVE_SESSION_KEY]: {
+      [this.sessionKey()]: {
         step: this.currentStep,
         fieldsAnswered: this.fieldsAnswered,
         questionsAnswered: this.questionsAnswered,
@@ -466,13 +492,15 @@ export class StateMachine {
         mode: this.mode,
         running: this.running,
         pendingFields: this.pendingFields,
+        manualOrigin: this.manualOrigin,
       },
     });
   }
 
   private async restoreState(): Promise<void> {
-    const result = await chrome.storage.session.get(ACTIVE_SESSION_KEY);
-    const state = result[ACTIVE_SESSION_KEY] as {
+    const key = this.sessionKey();
+    const result = await chrome.storage.session.get(key);
+    const state = result[key] as {
       step?: AutoApplyStep;
       fieldsAnswered?: number;
       questionsAnswered?: number;
@@ -481,6 +509,7 @@ export class StateMachine {
       jobUrl?: string;
       mode?: "dry-run" | "auto";
       running?: boolean;
+      manualOrigin?: boolean;
     } | undefined;
     if (state) {
       this.currentStep = state.step ?? AutoApplyStep.IDLE;
@@ -490,14 +519,18 @@ export class StateMachine {
       this.startTime = state.startTime ?? Date.now();
       if (state.jobUrl) this.jobUrl = state.jobUrl;
       if (state.mode) this.mode = state.mode;
+      if (state.manualOrigin) this.manualOrigin = true;
       console.log(`[SM] Restored state: ${this.currentStep}`);
     }
   }
 
-  /** Check if there's an active session to resume (called on content script load). */
-  async hasActiveSession(): Promise<boolean> {
-    const result = await chrome.storage.session.get(ACTIVE_SESSION_KEY);
-    const state = result[ACTIVE_SESSION_KEY] as { running?: boolean } | undefined;
+  /** Check if THIS tab has an active session to resume. Per-tab keying
+   *  prevents a new Gupy tab from auto-starting based on another tab's run. */
+  async hasActiveSessionForTab(): Promise<boolean> {
+    if (this.tabId === null) return false;
+    const key = this.sessionKey();
+    const result = await chrome.storage.session.get(key);
+    const state = result[key] as { running?: boolean } | undefined;
     return !!state?.running;
   }
 
@@ -506,8 +539,9 @@ export class StateMachine {
    * re-inject the in-page prompt so they can still answer and save.
    */
   async restorePendingPromptIfAny(): Promise<void> {
-    const result = await chrome.storage.session.get(ACTIVE_SESSION_KEY);
-    const state = result[ACTIVE_SESSION_KEY] as
+    const key = this.sessionKey();
+    const result = await chrome.storage.session.get(key);
+    const state = result[key] as
       | { pendingFields?: UnansweredField[]; running?: boolean }
       | undefined;
     if (!state?.pendingFields?.length || state.running) return;
@@ -527,7 +561,9 @@ export class StateMachine {
   }
 
   private async clearState(): Promise<void> {
-    await chrome.storage.session.remove(ACTIVE_SESSION_KEY);
+    await chrome.storage.session.remove(this.sessionKey());
+    // Also clear the legacy global key if any process wrote to it.
+    await chrome.storage.session.remove(GLOBAL_SESSION_KEY);
   }
 
   private extractPageContext(): { company: string; jobTitle: string } {
