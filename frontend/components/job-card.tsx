@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { ExternalLink, Sparkles } from "lucide-react";
+import { ExternalLink, Sparkles, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/hooks/useTranslation";
@@ -59,21 +59,60 @@ const WORK_MODE_LABELS: Record<string, string> = {
 
 interface Props {
   job: MatchedJobItem;
+  selected?: boolean;
+  onToggleSelect?: (jobId: string) => void;
 }
 
-export function JobCard({ job }: Props) {
+function isGupy(source: string): boolean {
+  return (source || "").toLowerCase() === "gupy";
+}
+
+export function JobCard({ job, selected = false, onToggleSelect }: Props) {
   const router = useRouter();
   const { t } = useTranslation();
   const relTime = getRelativeTime(job.posted_date, t);
   const fresh = isNew(job.posted_date);
+  const automatable = isGupy(job.source);
+  const selectable = onToggleSelect !== undefined;
 
   const handleApply = () => {
     router.push(`/dashboard/job?prefill=${encodeURIComponent(job.job_id)}`);
   };
 
+  const handleToggle = () => {
+    if (!automatable || !onToggleSelect) return;
+    onToggleSelect(job.job_id);
+  };
+
   return (
-    <div className="group apple-shadow-sm rounded-2xl bg-card p-5 transition-all duration-300 hover:apple-shadow hover:scale-[1.005]">
+    <div
+      className={cn(
+        "group apple-shadow-sm rounded-2xl bg-card p-5 transition-all duration-300 hover:apple-shadow hover:scale-[1.005]",
+        selected && "ring-2 ring-foreground/80",
+      )}
+    >
       <div className="flex items-start justify-between gap-3">
+        {/* Selection checkbox */}
+        {selectable && (
+          <button
+            type="button"
+            onClick={handleToggle}
+            disabled={!automatable}
+            aria-label={automatable ? "Selecionar vaga" : t("vagas.batch.unsupportedTag")}
+            title={!automatable ? t("vagas.batch.unsupportedTag") : undefined}
+            className={cn(
+              "mt-0.5 shrink-0 h-5 w-5 rounded-md border flex items-center justify-center transition-colors",
+              !automatable
+                ? "border-muted-foreground/20 bg-muted/40 cursor-not-allowed"
+                : selected
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-muted-foreground/40 bg-background hover:border-foreground",
+            )}
+          >
+            {selected && automatable && <Check className="h-3 w-3" strokeWidth={3} />}
+          </button>
+        )}
+
         {/* Left: Title + Company + Meta */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
@@ -122,6 +161,12 @@ export function JobCard({ job }: Props) {
             <span className="text-[10px] text-muted-foreground/50">
               {SOURCE_LABELS[job.source] || job.source}
             </span>
+
+            {selectable && !automatable && (
+              <span className="px-1.5 py-0.5 rounded-md bg-muted text-[10px] text-muted-foreground/70 font-medium">
+                {t("vagas.batch.unsupportedTag")}
+              </span>
+            )}
 
             {relTime && (
               <>
