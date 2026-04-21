@@ -241,6 +241,177 @@ Para cancelar: {unsubscribe_url}
         return False
 
 
+async def send_batch_complete_email(
+    uid: str,
+    batch_id: str,
+    entries: list[dict],
+) -> bool:
+    """Send batch-completion email after a Gupy AutoApply batch finishes.
+
+    Groups entries by outcome (applied / needs attention / failed / skipped)
+    and sends a digest. Returns True if sent, False on any failure.
+    """
+    settings = get_settings()
+    if not settings.sendgrid_api_key:
+        logger.warning("sendgrid_key_missing", batch_id=batch_id)
+        return False
+
+    try:
+        # Resolve user email from Firestore (same pattern as other mailers).
+        from app.services.firestore import FirestoreService
+
+        fs = FirestoreService()
+        user_doc = await fs.db.collection("users").document(uid).get()
+        if not user_doc.exists:
+            logger.warning("batch_complete_user_missing", uid_hash=uid[:8])
+            return False
+        user_data = user_doc.to_dict() or {}
+        email = user_data.get("email")
+        name = user_data.get("name", "")
+        if not email:
+            logger.warning("batch_complete_no_email", uid_hash=uid[:8])
+            return False
+
+        import sendgrid
+        from sendgrid.helpers.mail import Mail
+
+        sg = sendgrid.SendGridAPIClient(api_key=settings.sendgrid_api_key)
+
+        applied = [e for e in entries if e.get("status") == "applied"]
+        needs_attention = [e for e in entries if e.get("status") == "needs_attention"]
+        failed = [e for e in entries if e.get("status") == "failed"]
+        skipped = [e for e in entries if e.get("status") in ("skipped", "cancelled")]
+
+        n_applied = len(applied)
+        n_attention = len(needs_attention)
+        dashboard_url = "https://merlincv.com/dashboard/candidaturas"
+        first_name = _esc(name.split()[0]) if name else ""
+        greeting = f"Olá {first_name}," if first_name else "Olá Usuário,"
+
+        subject = f"Lote de candidaturas concluído: {n_applied} aplicadas, {n_attention} precisam de você"
+
+        def _entry_line(i: int, e: dict) -> str:
+            title = e.get("title") or "Vaga sem título"
+            company = e.get("company") or ""
+            company_str = f" — {company}" if company else ""
+            return f"{i}. {title}{company_str}"
+
+        text_sections: list[str] = []
+        if applied:
+            text_sections.append("Aplicadas:\n" + "\n".join(
+                _entry_line(i, e) for i, e in enumerate(applied, 1)
+            ))
+        if needs_attention:
+            text_sections.append("Precisam de você:\n" + "\n".join(
+                _entry_line(i, e) for i, e in enumerate(needs_attention, 1)
+            ))
+        if failed:
+            text_sections.append("Falharam:\n" + "\n".join(
+                _entry_line(i, e) for i, e in enumerate(failed, 1)
+            ))
+        if skipped:
+            text_sections.append("Ignoradas:\n" + "\n".join(
+                _entry_line(i, e) for i, e in enumerate(skipped, 1)
+            ))
+
+        text_body = f"""{greeting}
+
+O Merlin concluiu um lote de candidaturas no Gupy.
+
+{chr(10).join(text_sections)}
+
+Ver detalhes: {dashboard_url}
+"""
+
+        def _section_html(title: str, items: list[dict], color: str, bg: str) -> str:
+            if not items:
+                return ""
+            rows = ""
+            for e in items:
+                rows += f"""
+                <tr><td style="padding:8px 0;border-bottom:1px solid #f3f4f6">
+                    <div style="font-size:14px;color:#111827;font-weight:500">{_esc(e.get('title') or 'Vaga sem título')}</div>
+                    <div style="font-size:12px;color:#6b7280">{_esc(e.get('company') or '')}</div>
+                </td></tr>"""
+            return f"""
+            <div style="margin-bottom:20px">
+                <div style="display:inline-block;background:{bg};color:{color};padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;margin-bottom:8px">
+                    {_esc(title)} · {len(items)}
+                </div>
+                <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;padding:4px 16px">
+                    {rows}
+                </table>
+            </div>"""
+
+        html_body = f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background-color:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif">
+<div style="max-width:600px;margin:0 auto;padding:24px 16px">
+    <div style="text-align:center;padding:16px 0 24px">
+        <span style="font-size:22px;font-weight:700;color:#111827;letter-spacing:-0.5px">Merlin</span>
+    </div>
+    <div style="background:#111827;border-radius:16px;padding:32px 24px;text-align:center;margin-bottom:20px">
+        <h1 style="margin:0;font-size:22px;font-weight:700;color:#ffffff;line-height:1.3">
+            Lote de candidaturas concluído
+        </h1>
+        <p style="margin:10px 0 0;font-size:14px;color:#9ca3af">
+            {n_applied} aplicada{"" if n_applied == 1 else "s"} · {n_attention} precisa{"" if n_attention == 1 else "m"} de você
+        </p>
+    </div>
+    {_section_html("Aplicadas", applied, "#16a34a", "#f0fdf4")}
+    {_section_html("Precisam de você", needs_attention, "#ca8a04", "#fefce8")}
+    {_section_html("Falharam", failed, "#dc2626", "#fef2f2")}
+    {_section_html("Ignoradas", skipped, "#6b7280", "#f3f4f6")}
+    <div style="text-align:center;padding:16px 0 24px">
+        <a href="{dashboard_url}" style="display:inline-block;background:#111827;color:#ffffff;padding:14px 36px;border-radius:28px;text-decoration:none;font-weight:600;font-size:14px">
+            Abrir candidaturas
+        </a>
+    </div>
+    <div style="text-align:center;padding:20px 0;border-top:1px solid #e5e7eb">
+        <p style="margin:0;font-size:11px;color:#d1d5db">
+            Ella Executive Search Ltda · merlincv.com
+        </p>
+    </div>
+</div>
+</body>
+</html>"""
+
+        message = Mail(
+            from_email=settings.sendgrid_from_email,
+            to_emails=email,
+            subject=subject,
+            plain_text_content=text_body,
+            html_content=html_body,
+        )
+
+        response = sg.send(message)
+
+        if response.status_code in (200, 201, 202):
+            logger.info(
+                "batch_complete_email_sent",
+                uid_hash=uid[:8],
+                batch_id=batch_id,
+                applied=n_applied,
+                needs_attention=n_attention,
+            )
+            return True
+        logger.error(
+            "batch_complete_email_failed",
+            uid_hash=uid[:8],
+            batch_id=batch_id,
+            status=response.status_code,
+        )
+        return False
+
+    except ImportError:
+        logger.error("sendgrid_not_installed")
+        return False
+    except Exception as e:
+        logger.error("batch_complete_email_error", batch_id=batch_id, error=str(e))
+        return False
+
+
 async def send_feature_announcement(
     email: str,
     name: str,
