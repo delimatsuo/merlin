@@ -5,8 +5,9 @@ from datetime import datetime, timedelta, timezone
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 
-from app.auth import AuthenticatedUser, get_current_user
+from app.auth import AuthenticatedUser, get_admin_user, get_current_user
 from app.schemas.applications_queue import (
     QueueCreateRequest,
     QueueCreateResponse,
@@ -16,6 +17,16 @@ from app.schemas.applications_queue import (
     QueueCompleteBatchRequest,
 )
 from app.services.firestore import FirestoreService
+
+
+class _DevSeedJob(BaseModel):
+    title: str = Field(max_length=300)
+    company: str = Field(max_length=200)
+    job_url: str = Field(max_length=500)
+
+
+class DevSeedRequest(BaseModel):
+    jobs: list[_DevSeedJob] = Field(min_length=1, max_length=20)
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -215,6 +226,46 @@ async def cancel_queue(
         only_from=["pending", "running", "needs_attention"],
     )
     return {"cancelled": count, "batch_id": active_batch}
+
+
+@router.post("/dev-seed", response_model=QueueCreateResponse)
+async def dev_seed_queue(
+    body: DevSeedRequest,
+    admin: AuthenticatedUser = Depends(get_admin_user),
+):
+    """Admin-only: seed a fake batch for UI smoke testing on staging.
+
+    Bypasses the `jobs` collection lookup so we don't need real matched
+    Gupy jobs to test the Pipeline dashboard. The extension will NOT be
+    able to drive these entries (the URLs aren't real Gupy pages) —
+    they'll sit in `pending` until manually marked via PATCH. That's
+    sufficient to verify the frontend pipeline rendering, pause/cancel,
+    and the needs_attention flow.
+    """
+    fs = FirestoreService()
+    batch_id = f"devseed-{uuid.uuid4().hex[:8]}"
+    entries = [
+        {
+            "job_id": f"devseed-{uuid.uuid4().hex[:10]}",
+            "job_url": job.job_url,
+            "title": job.title,
+            "company": job.company,
+        }
+        for job in body.jobs
+    ]
+    await fs.create_queue_entries(admin.uid, entries, batch_id)
+
+    logger.info(
+        "queue_dev_seed",
+        uid=admin.uid,
+        batch_id=batch_id,
+        count=len(entries),
+    )
+    return QueueCreateResponse(
+        batch_id=batch_id,
+        count=len(entries),
+        rejected=[],
+    )
 
 
 @router.post("/complete-batch")

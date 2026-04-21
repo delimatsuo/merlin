@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
-import { useQueueStore, type QueueEntry } from "@/lib/store";
+import { useQueueStore, useAdminStore, type QueueEntry } from "@/lib/store";
 import { useTranslation } from "@/lib/hooks/useTranslation";
 import { cn } from "@/lib/utils";
 
@@ -138,9 +138,11 @@ function QueueRow({
 function CandidaturasContent() {
   const { t } = useTranslation();
   const { active, recent, loading, setQueue, setLoading } = useQueueStore();
+  const { isAdmin } = useAdminStore();
   const [tab, setTab] = useState<"pipeline" | "history">("pipeline");
   const [controlBusy, setControlBusy] = useState(false);
   const [extensionDetected, setExtensionDetected] = useState(false);
+  const [seedBusy, setSeedBusy] = useState(false);
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const activeCount = active.length;
 
@@ -273,6 +275,29 @@ function CandidaturasContent() {
     }
   };
 
+  const handleDevSeed = async () => {
+    if (seedBusy) return;
+    setSeedBusy(true);
+    try {
+      const sample = [
+        { title: "Analista de RH Pleno", company: "Cohros", job_url: "https://cohros.gupy.io/jobs/111111" },
+        { title: "Assistente Comercial", company: "Vital C", job_url: "https://vitalc.gupy.io/jobs/222222" },
+        { title: "Coordenador de Vendas", company: "9net IT Security", job_url: "https://9net.gupy.io/jobs/333333" },
+        { title: "Gerente de Atendimento", company: "Quatro Recursos Humanos", job_url: "https://quatrorh.gupy.io/jobs/444444" },
+      ];
+      const resp = await api.post<{ batch_id: string; count: number }>(
+        "/api/applications/queue/dev-seed",
+        { jobs: sample },
+      );
+      toast.success(`Seeded ${resp.count} fake entries`);
+      await fetchQueue();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Seed failed");
+    } finally {
+      setSeedBusy(false);
+    }
+  };
+
   const handleCancel = async () => {
     if (controlBusy) return;
     if (!confirm("Cancelar todas as candidaturas restantes deste lote?")) return;
@@ -348,28 +373,42 @@ function CandidaturasContent() {
           })}
         </div>
 
-        {tab === "pipeline" && active.length > 0 && (
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              onClick={handlePause}
-              disabled={controlBusy}
-              className="h-8 rounded-full text-xs font-medium gap-1.5"
-            >
-              <Pause className="h-3.5 w-3.5" />
-              {t("candidaturas.pause")}
-            </Button>
+        <div className="flex items-center gap-2">
+          {isAdmin && tab === "pipeline" && (
             <Button
               variant="outline"
-              onClick={handleCancel}
-              disabled={controlBusy}
-              className="h-8 rounded-full text-xs font-medium gap-1.5"
+              onClick={handleDevSeed}
+              disabled={seedBusy}
+              className="h-8 rounded-full text-xs font-medium gap-1.5 border-dashed"
+              title="Admin-only: seed a fake batch for UI smoke testing"
             >
-              <Ban className="h-3.5 w-3.5" />
-              {t("candidaturas.cancel")}
+              <PlayCircle className="h-3.5 w-3.5" />
+              Seed test batch
             </Button>
-          </div>
-        )}
+          )}
+          {tab === "pipeline" && active.length > 0 && (
+            <>
+              <Button
+                variant="ghost"
+                onClick={handlePause}
+                disabled={controlBusy}
+                className="h-8 rounded-full text-xs font-medium gap-1.5"
+              >
+                <Pause className="h-3.5 w-3.5" />
+                {t("candidaturas.pause")}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleCancel}
+                disabled={controlBusy}
+                className="h-8 rounded-full text-xs font-medium gap-1.5"
+              >
+                <Ban className="h-3.5 w-3.5" />
+                {t("candidaturas.cancel")}
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Pipeline tab */}
