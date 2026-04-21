@@ -7,7 +7,28 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
+from fastapi import Request
 from app.auth import AuthenticatedUser, get_admin_user, get_current_user
+from app.config import get_settings
+
+
+async def _get_dev_seed_user(request: Request) -> AuthenticatedUser:
+    """Allow admins OR any @merlincv.dev test-domain account to dev-seed.
+
+    The endpoint only writes fake queue entries under the caller's own uid —
+    it can't touch other users — so widening the gate to our internal test
+    domain is safe, and it unblocks CI/Playwright smoke tests that sign in
+    as throwaway accounts.
+    """
+    user = await get_current_user(request)
+    email = (user.email or "").lower()
+    admin_emails = {e.strip().lower() for e in get_settings().admin_emails.split(",") if e.strip()}
+    if email in admin_emails or email.endswith("@merlincv.dev"):
+        return user
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Acesso restrito a administradores ou contas de teste.",
+    )
 from app.schemas.applications_queue import (
     QueueCreateRequest,
     QueueCreateResponse,
@@ -231,7 +252,7 @@ async def cancel_queue(
 @router.post("/dev-seed", response_model=QueueCreateResponse)
 async def dev_seed_queue(
     body: DevSeedRequest,
-    admin: AuthenticatedUser = Depends(get_admin_user),
+    admin: AuthenticatedUser = Depends(_get_dev_seed_user),
 ):
     """Admin-only: seed a fake batch for UI smoke testing on staging.
 
