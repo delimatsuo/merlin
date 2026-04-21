@@ -1987,26 +1987,27 @@ class FirestoreService:
                 return data.get("batch_id") or None
         return None
 
-    async def check_batch_notified(self, uid: str, batch_id: str) -> bool:
-        """Whether the batch-completion email has already been sent for this batch."""
-        ref = (
-            self.db.collection("users").document(uid)
-            .collection("batchNotifications").document(batch_id)
-        )
-        doc = await ref.get()
-        return doc.exists
+    async def claim_batch_notification(self, uid: str, batch_id: str) -> bool:
+        """Atomically claim the right to send the batch-complete email.
 
-    async def mark_batch_notified(self, uid: str, batch_id: str) -> None:
-        """Record that the batch-completion email was sent for this batch.
-
-        Used by POST /api/applications/queue/complete-batch to guard against
-        the SW re-sending after a browser restart wipes its local flag.
+        Uses Firestore's `create()` which fails with AlreadyExists if the
+        document is already present — so two concurrent complete-batch
+        calls can't both send the email. Returns True if we claimed the
+        send (caller should proceed), False if another process already did.
         """
         ref = (
             self.db.collection("users").document(uid)
             .collection("batchNotifications").document(batch_id)
         )
-        await ref.set({
-            "notified_at": datetime.now(timezone.utc).isoformat(),
-            "batch_id": batch_id,
-        })
+        try:
+            await ref.create({
+                "notified_at": datetime.now(timezone.utc).isoformat(),
+                "batch_id": batch_id,
+            })
+            return True
+        except Exception as e:
+            # Firestore raises AlreadyExists (which google.api_core wraps as
+            # google.api_core.exceptions.AlreadyExists). Catch broadly — any
+            # create failure is a safe "don't send" signal.
+            logger.info("batch_notification_already_claimed", uid=uid, batch_id=batch_id, reason=str(e)[:80])
+            return False

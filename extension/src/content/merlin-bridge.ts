@@ -13,12 +13,18 @@
 
 type BridgedMessage =
   | { type: "MERLIN_QUEUE_KICK" }
-  | { type: "MERLIN_QUEUE_FOCUS_TAB"; queueId: string };
+  | { type: "MERLIN_QUEUE_FOCUS_TAB"; queueId: string }
+  | { type: "MERLIN_EXTENSION_PING" };
 
 const ALLOWED_TYPES = new Set<BridgedMessage["type"]>([
   "MERLIN_QUEUE_KICK",
   "MERLIN_QUEUE_FOCUS_TAB",
+  "MERLIN_EXTENSION_PING",
 ]);
+
+function announceReady(): void {
+  window.postMessage({ type: "MERLIN_EXTENSION_READY" }, window.location.origin);
+}
 
 window.addEventListener("message", (event) => {
   // Only accept messages from this exact window (same origin and source).
@@ -33,8 +39,12 @@ window.addEventListener("message", (event) => {
     chrome.runtime
       .sendMessage({ type: "QUEUE_FOCUS_TAB", queueId: data.queueId })
       .catch(() => {});
+  } else if (data.type === "MERLIN_EXTENSION_PING") {
+    // Frontend component mounted after the bridge loaded — answer its ping
+    // so pages that client-side-navigate in can still detect us.
+    announceReady();
   }
 });
 
-// Announce our presence so the Merlin frontend can detect the extension.
-window.postMessage({ type: "MERLIN_EXTENSION_READY" }, window.location.origin);
+// Announce our presence on initial load so pages already listening hear us.
+announceReady();

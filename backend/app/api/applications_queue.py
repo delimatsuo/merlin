@@ -161,13 +161,19 @@ async def update_queue(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Transição de status inválida: {error}",
         )
+    if updated is None:
+        # Should be unreachable given the error branches above, but guard
+        # explicitly so production with python -O behaves safely.
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro desconhecido ao atualizar fila.",
+        )
     logger.info(
         "queue_entry_updated",
         uid=user.uid,
         queue_id=queue_id,
         status=body.status,
     )
-    assert updated is not None  # error guards above guarantee this
     return _to_response(updated)
 
 
@@ -239,12 +245,12 @@ async def complete_batch(
     if any(e.get("status") in ACTIVE_STATUSES for e in entries):
         return {"sent": False, "reason": "batch_still_active"}
 
-    if await fs.check_batch_notified(user.uid, body.batch_id):
+    # Atomic claim-then-send — if two SWs race this endpoint only one wins
+    # the create() and actually sends the email.
+    if not await fs.claim_batch_notification(user.uid, body.batch_id):
         return {"sent": False, "reason": "already_notified", "total": len(entries)}
 
     sent = await send_batch_complete_email(user.uid, body.batch_id, entries)
-    if sent:
-        await fs.mark_batch_notified(user.uid, body.batch_id)
     logger.info(
         "batch_complete_notified",
         uid=user.uid,

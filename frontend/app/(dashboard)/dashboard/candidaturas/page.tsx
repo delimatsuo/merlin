@@ -212,13 +212,24 @@ function CandidaturasContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, activeCount]);
 
-  // Detect the Merlin extension via its one-shot postMessage handshake.
+  // Detect the Merlin extension via postMessage handshake. The bridge
+  // content script fires MERLIN_EXTENSION_READY once on initial page load,
+  // but we may have been client-side-navigated in after that — so we also
+  // PING on mount and the bridge replies with a second READY.
   useEffect(() => {
     const onMsg = (e: MessageEvent) => {
       if (e.source !== window) return;
       if (e.data?.type === "MERLIN_EXTENSION_READY") setExtensionDetected(true);
     };
     window.addEventListener("message", onMsg);
+    try {
+      window.postMessage(
+        { type: "MERLIN_EXTENSION_PING" },
+        window.location.origin,
+      );
+    } catch {
+      /* ignore */
+    }
     return () => window.removeEventListener("message", onMsg);
   }, []);
 
