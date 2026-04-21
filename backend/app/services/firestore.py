@@ -1479,11 +1479,18 @@ class FirestoreService:
         tags: list[str],
         work_modes: list[str] | None = None,
         limit: int = 100,
+        order_by_recent: bool = True,
     ) -> list[dict]:
         """Query jobs by category tags using Firestore native filtering.
 
         Uses array_contains_any for efficient tag matching.
         Work mode filter applied in-memory (can't combine with array query).
+
+        When `order_by_recent` is True (default), results are sorted by
+        `extracted_at` descending client-side so callers that slice the
+        head of the list (e.g. top 50) get the freshest jobs. Firestore
+        can't combine `array_contains_any` with a server-side order_by on
+        a different field without a composite index, so we sort in-memory.
         """
         if not tags:
             return []
@@ -1506,6 +1513,12 @@ class FirestoreService:
                     continue
 
             results.append(data)
+
+        if order_by_recent:
+            results.sort(
+                key=lambda j: j.get("extracted_at") or j.get("posted_date") or "",
+                reverse=True,
+            )
         return results
 
     async def get_all_users_with_preferences(self) -> list[dict]:

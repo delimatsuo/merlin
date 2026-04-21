@@ -423,10 +423,15 @@ async def match_user_jobs_fast(
         return []
 
     fs = FirestoreService()
+    # Pull a much larger pool (was max_jobs_per_digest*3 = 150) so the
+    # client-side sort inside query_jobs_by_tags has the full HR/tag catalog
+    # to rank by freshness. Without this, Firestore returns 150 in doc-ID
+    # order and the 50 we keep are effectively random-age, which previously
+    # starved the 24h view even when fresh jobs existed.
     raw_jobs = await fs.query_jobs_by_tags(
         tags=list(user_tags),
         work_modes=pref_work_modes if pref_work_modes else None,
-        limit=settings.max_jobs_per_digest * 3,
+        limit=2000,
     )
 
     title_filtered = filter_by_preferences(raw_jobs, preferences)
@@ -503,12 +508,13 @@ async def match_user_jobs(
     pref_seniority = set(preferences.get("seniority", []))
 
     if all_jobs is None:
-        # On-demand: query Firestore with all tags (broad pool), filter post-query
+        # On-demand: query Firestore with all tags (broad pool), filter post-query.
+        # Larger pool + client-side sort by extracted_at keeps the freshest jobs.
         fs = FirestoreService()
         raw_jobs = await fs.query_jobs_by_tags(
             tags=list(user_tags),
             work_modes=pref_work_modes if pref_work_modes else None,
-            limit=settings.max_jobs_per_digest * 3,
+            limit=2000,
         )
         logger.info(
             "match_query_firestore",

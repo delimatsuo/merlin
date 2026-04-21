@@ -10,7 +10,8 @@ import structlog
 from firebase_admin import firestore as fb_firestore
 
 from app.config import get_settings
-from app.jobs.apify_client import scrape_gupy, scrape_brazil_jobs
+from app.jobs.apify_client import scrape_gupy as scrape_gupy_apify, scrape_brazil_jobs
+from app.jobs.gupy_direct import scrape_gupy_direct
 from app.jobs.adzuna_client import scrape_adzuna
 from app.services.gemini_ai import extract_job_data_batch
 
@@ -144,10 +145,15 @@ async def run_scraping_pipeline() -> dict:
     sources_ok = 0
     sources_failed = 0
 
+    # Gupy: switched from Apify actor (paid, ignored search terms, ~200 random
+    # jobs/day) to Gupy's public candidate-portal API (free, supports keyword
+    # search, returns thousands of relevant jobs). scrape_gupy_apify is kept
+    # available for emergencies — wire it back if the direct API breaks.
     for scraper_fn, source_name in [
         (scrape_adzuna, "adzuna"),
-        (scrape_gupy, "gupy"),
+        (scrape_gupy_direct, "gupy"),
         # (scrape_brazil_jobs, "brazil_jobs"),  # Suspended — $0.005/job too expensive
+        # (scrape_gupy_apify, "gupy_apify"),    # Fallback — paid, disabled by default
     ]:
         try:
             jobs = await scraper_fn(search_terms)
