@@ -57,18 +57,23 @@ ACTIVE_STATUSES = {"pending", "running", "needs_attention"}
 
 
 def _to_response(entry: dict) -> QueueEntryResponse:
+    # Use `or ""` for every required string — dict.get(key, default) only
+    # returns the default when the key is MISSING, not when the stored value
+    # is None. Real Gupy jobs sometimes have title/company/location as null,
+    # which used to leak into the queue and crash Pydantic validation (see
+    # Sentry MERLIN-BACKEND-M / MERLIN-BACKEND-K).
     return QueueEntryResponse(
         id=entry["id"],
-        job_id=entry.get("job_id", ""),
-        job_url=entry.get("job_url", ""),
-        title=entry.get("title", ""),
-        company=entry.get("company", ""),
-        status=entry.get("status", "pending"),
+        job_id=entry.get("job_id") or "",
+        job_url=entry.get("job_url") or "",
+        title=entry.get("title") or "",
+        company=entry.get("company") or "",
+        status=entry.get("status") or "pending",
         attention_reason=entry.get("attention_reason"),
         error_message=entry.get("error_message"),
         tab_id=entry.get("tab_id"),
-        batch_id=entry.get("batch_id", ""),
-        created_at=entry.get("created_at", ""),
+        batch_id=entry.get("batch_id") or "",
+        created_at=entry.get("created_at") or "",
         started_at=entry.get("started_at"),
         finished_at=entry.get("finished_at"),
     )
@@ -108,8 +113,10 @@ async def create_queue(
         accepted.append({
             "job_id": job_id,
             "job_url": job_url,
-            "title": job.get("title", ""),
-            "company": job.get("company", ""),
+            # Coerce null/None from scraped Gupy data to empty string so
+            # stored entries always satisfy the QueueEntryResponse contract.
+            "title": job.get("title") or "",
+            "company": job.get("company") or "",
         })
 
     if not accepted:
