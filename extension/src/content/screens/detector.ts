@@ -90,6 +90,26 @@ function isCompletionScreen(): boolean {
     return true;
   }
 
+  // Last resort: scan the whole visible body text for the known success
+  // phrases. Catches skinned-tenant variants whose DOM structure doesn't
+  // match any of the selectors above. Constrained to phrases that only
+  // appear on the post-submit screen so we don't false-positive on the
+  // application form itself.
+  const bodyText = (document.body?.innerText || "").toLowerCase();
+  const postSubmitPhrases = [
+    "application completed",
+    "candidatura concluída",
+    "candidatura concluida",
+    "will now analyze your compatibility",
+    "vai analisar sua compatibilidade",
+    "keep an eye on your email",
+    "fique de olho no seu e-mail",
+    "fique de olho no seu email",
+  ];
+  for (const phrase of postSubmitPhrases) {
+    if (bodyText.includes(phrase)) return true;
+  }
+
   return false;
 }
 

@@ -331,7 +331,7 @@ export class StateMachine {
 
       // Reached COMPLETE
       if (this.currentStep === AutoApplyStep.COMPLETE) {
-        await this.logApplication("dry-run");
+        await this.logApplication(this.mode === "dry-run" ? "dry-run" : "success");
         this.broadcastStatus();
         await this.clearState();
         reportTabStatus({ completed: true });
@@ -349,6 +349,40 @@ export class StateMachine {
     this.running = false;
   }
 
+  /**
+   * Poll the screen detector until it reports COMPLETE, or give up.
+   * Gupy sometimes re-renders the submit confirmation in place (no full
+   * navigation), so waitForNavigation alone is insufficient — we must
+   * see the success screen before declaring the application applied.
+   */
+  private async awaitSubmissionLanded(timeoutMs: number = 30000): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    const a = adapter();
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 500));
+      if (a.detectScreen() === AutoApplyStep.COMPLETE) return true;
+    }
+    return false;
+  }
+
+  /** Dump the current page state to help iterate on detector when it misses. */
+  private logPostSubmitFailure(label: string): void {
+    const h1 = document.querySelector("h1")?.textContent?.slice(0, 120) ?? "(none)";
+    const buttons = Array.from(document.querySelectorAll("button, a, [role='button']"))
+      .slice(0, 20)
+      .map((b) => (b.textContent || "").trim().replace(/\s+/g, " ").slice(0, 60))
+      .filter((t) => t.length > 0);
+    console.error(
+      `[SM] ${label}: success screen not detected within 30s.`,
+      "\n  URL:",
+      window.location.href,
+      "\n  H1:",
+      h1,
+      "\n  First buttons:",
+      buttons,
+    );
+  }
+
   async confirmSubmit(): Promise<void> {
     if (this.currentStep !== AutoApplyStep.REVIEW) return;
 
@@ -356,9 +390,31 @@ export class StateMachine {
     this.running = true;
 
     const finishBtn = adapter().findFinishButton();
-    if (finishBtn) {
-      await humanLikeClick(finishBtn);
-      await waitForNavigation(15000);
+    if (!finishBtn) {
+      this.transitionToError(
+        ErrorType.VALIDATION_ERROR,
+        "Botão de envio não encontrado. A Gupy pode ter mudado a interface.",
+      );
+      this.broadcastStatus();
+      this.running = false;
+      return;
+    }
+
+    await humanLikeClick(finishBtn);
+    // waitForNavigation is a best-effort hint; the real proof is the
+    // detector seeing COMPLETE.
+    await waitForNavigation(15000).catch(() => {});
+
+    const landed = await this.awaitSubmissionLanded(30000);
+    if (!landed) {
+      this.logPostSubmitFailure("confirmSubmit");
+      this.transitionToError(
+        ErrorType.TIMEOUT,
+        "Envio clicado, mas a tela de confirmação não apareceu em 30s.",
+      );
+      this.broadcastStatus();
+      this.running = false;
+      return;
     }
 
     this.transition(AutoApplyStep.COMPLETE);
@@ -373,16 +429,31 @@ export class StateMachine {
     console.log("[SM] Auto mode: submitting directly");
 
     const finishBtn = adapter().findFinishButton();
-    if (finishBtn) {
-      await humanLikeClick(finishBtn);
-      await waitForNavigation(15000);
+    if (!finishBtn) {
+      // Don't silently report completed when we never actually submitted.
+      this.transitionToError(
+        ErrorType.VALIDATION_ERROR,
+        "Botão de envio não encontrado. A Gupy pode ter mudado a interface.",
+      );
+      return;
     }
 
+    await humanLikeClick(finishBtn);
+    await waitForNavigation(15000).catch(() => {});
+
+    const landed = await this.awaitSubmissionLanded(30000);
+    if (!landed) {
+      this.logPostSubmitFailure("autoSubmit");
+      this.transitionToError(
+        ErrorType.TIMEOUT,
+        "Envio clicado, mas a tela de confirmação não apareceu em 30s.",
+      );
+      return;
+    }
+
+    // Let the outer run-loop's COMPLETE handler do the reporting so we
+    // don't double-log / double-notify.
     this.transition(AutoApplyStep.COMPLETE);
-    await this.logApplication("success");
-    this.broadcastStatus();
-    await this.clearState();
-    reportTabStatus({ completed: true });
   }
 
   cancelSubmit(): void {
