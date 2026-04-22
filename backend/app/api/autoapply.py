@@ -20,6 +20,7 @@ from app.services.gemini_ai import (
     match_form_fields,
     answer_custom_question,
 )
+from app.services.knowledge import build_knowledge_from_profile
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -36,7 +37,25 @@ async def get_profile(
     fs = FirestoreService()
 
     knowledge = await fs.get_candidate_knowledge(user.uid)
+    auto_built = False
+    if knowledge is None:
+        # Mirror /api/profile/knowledge: lazily materialize the doc from the
+        # latest uploaded profile. Without this, an extension user whose web
+        # session never hit /dashboard/profile sees an empty profile and the
+        # popup renders "Ausente" even though their resume data exists.
+        knowledge = await build_knowledge_from_profile(user.uid)
+        auto_built = knowledge is not None
+
     current_count, _within = await fs.check_daily_llm_budget(user.uid, limit=DAILY_LLM_LIMIT)
+
+    logger.info(
+        "autoapply_profile_fetched",
+        uid=user.uid,
+        email=user.email,
+        has_knowledge=bool(knowledge),
+        skills_count=len(knowledge.get("skills", [])) if knowledge else 0,
+        auto_built=auto_built,
+    )
 
     return ProfileResponse(
         knowledge=knowledge or {},

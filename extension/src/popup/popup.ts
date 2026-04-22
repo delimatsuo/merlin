@@ -107,15 +107,25 @@ async function loadProfessionalProfile(): Promise<void> {
       path: "/api/autoapply",
     });
 
-    if (response?.error || response?.status === 401) {
+    const httpStatus: number | undefined = response?.status;
+    const isHttpError = typeof httpStatus === "number" && httpStatus >= 400;
+    if (response?.error || isHttpError) {
       if (statusEl) {
         statusEl.textContent = "Erro";
         statusEl.className = "status-badge status-error";
       }
       if (detailEl) {
-        detailEl.textContent = response?.status === 401
-          ? "Sessao expirada. Faca login novamente."
-          : "Erro ao carregar perfil.";
+        if (httpStatus === 401) {
+          detailEl.textContent = "Sessao expirada. Faca login novamente.";
+        } else if (httpStatus === 403) {
+          detailEl.textContent = "Acesso negado (403). Verifique a conta.";
+        } else if (httpStatus === 404) {
+          detailEl.textContent = "Endpoint nao encontrado (404).";
+        } else if (typeof httpStatus === "number" && httpStatus >= 500) {
+          detailEl.textContent = `Erro do servidor (${httpStatus}).`;
+        } else {
+          detailEl.textContent = "Erro ao carregar perfil.";
+        }
       }
       professionalProfileLoaded = false;
       return;
