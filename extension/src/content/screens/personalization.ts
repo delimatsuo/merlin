@@ -20,27 +20,15 @@ export async function handlePersonalization(): Promise<PersonalizationResult> {
   const textareaField = fields.find(f => f.type === "textarea");
 
   if (!textareaField) {
-    console.log("[Personalization] No textarea found, checking for finish/skip option");
-    // Gupy shows "Finish application" / "Finalizar" to skip personalization
-    const finishTexts = ["finish application", "finalizar candidatura", "finalizar", "pular", "skip", "não personalizar"];
-    const buttons = document.querySelectorAll("button, a, div, span, [role='button'], [class*='btn'], [class*='Btn'], [class*='button'], [class*='Button']");
-    for (let i = 0; i < buttons.length; i++) {
-      const b = buttons[i] as HTMLElement;
-      const btnText = b.textContent?.trim().toLowerCase() || "";
-      if (btnText.length < 40 && finishTexts.some(t => btnText.includes(t))) {
-        console.log(`[Personalization] Clicking "${b.textContent?.trim()}" (${b.tagName})`);
-        b.click();
-        await waitForNavigation(5000);
-        return { answered: false, llmCalls: 0 };
-      }
-    }
-
-    // No textarea and no skip — just try next button
-    const nextBtn = findNextButton();
-    if (nextBtn) {
-      await humanLikeClick(nextBtn);
-      await waitForNavigation(15000);
-    }
+    // No textarea on this page. Don't click anything — the state machine is
+    // responsible for navigation. Previously this handler scanned the whole
+    // document for any "finalizar" button and clicked it with a raw b.click(),
+    // which raced with the main loop's modal handler: when Gupy's
+    // "Introduce yourself!" modal was open the handler would try to dismiss it
+    // with an uncoordinated click, leaving the SM and the DOM out of sync.
+    // Returning cleanly lets the loop re-detect and route to FINAL_CONFIRMATION
+    // or COMPLETE as appropriate.
+    console.log("[Personalization] No textarea found — letting state machine re-detect");
     return { answered: false, llmCalls: 0 };
   }
 

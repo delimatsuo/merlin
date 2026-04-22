@@ -9,7 +9,17 @@ import { findElementByText } from "../dom/helpers";
  * Gupy is a React SPA — URL changes are unreliable between screens.
  */
 export function detectScreen(): AutoApplyStep {
-  // Check for completion screen first (highest priority)
+  // Priority order matters. Two-way races we care about:
+  //   1. Introduce-yourself modal vs. form underneath — the modal wins so
+  //      isPersonalizationScreen() doesn't match its "finalizar" button.
+  //   2. Introduce-yourself modal vs. completion screen — the modal wins so
+  //      a stale "candidatura concluída" tooltip can't false-positive us
+  //      past the real submit step.
+
+  // Gupy's pre-submit confirmation modal (FINAL_CONFIRMATION).
+  if (findIntroduceYourselfModal()) return AutoApplyStep.FINAL_CONFIRMATION;
+
+  // Check for completion screen (real post-submit success page)
   if (isCompletionScreen()) return AutoApplyStep.COMPLETE;
 
   // Check for personalization prompt
@@ -28,15 +38,19 @@ export function detectScreen(): AutoApplyStep {
 }
 
 function isCompletionScreen(): boolean {
-  // Strategy: Gupy's success page reuses the /curriculum URL (no URL change
-  // after submit), and the class names on the success DOM keep drifting. So
-  // the class-selector check is a last resort; heading + distinctive-button
-  // text is the reliable signal.
+  // Gupy's success page reuses the /curriculum URL (no URL change after
+  // submit) and class names drift, so we can't rely on a single signal.
+  //
+  // Previous versions matched on heading-OR-button-OR-bodyText, which
+  // false-positived when any of those strings appeared on the application
+  // form itself (tooltips, hidden tabs, modal body text). A single
+  // false-positive reported "completed" to the queue without actually
+  // submitting. Now we require TWO independent signals: a heading/title
+  // text AND a distinctive post-submit element (button label or URL path).
+  // Legacy class-based hits still qualify as a second signal.
 
   const headingTexts = [
-    // English — Gupy renders the user's account locale
     "application completed",
-    // Portuguese variants seen in the wild
     "candidatura concluída",
     "candidatura concluida",
     "candidatura enviada",
@@ -48,11 +62,14 @@ function isCompletionScreen(): boolean {
   ];
   const headingSelector =
     "h1, h2, h3, h4, [class*='title'], [class*='Title'], [class*='heading'], [class*='Heading']";
+  let hasHeading = false;
   for (const text of headingTexts) {
-    if (findElementByText(headingSelector, text)) return true;
+    if (findElementByText(headingSelector, text)) {
+      hasHeading = true;
+      break;
+    }
   }
 
-  // Distinctive success-page buttons — only shown after submission completes
   const postSubmitButtonTexts = [
     "track application",
     "acompanhar candidatura",
@@ -62,55 +79,39 @@ function isCompletionScreen(): boolean {
     "revisar meu curriculo",
   ];
   const clickable = "button, a, [role='button']";
+  let hasPostSubmitButton = false;
   for (const text of postSubmitButtonTexts) {
-    if (findElementByText(clickable, text)) return true;
+    if (findElementByText(clickable, text)) {
+      hasPostSubmitButton = true;
+      break;
+    }
   }
 
-  // Legacy class-based selector — kept as a fallback for older Gupy skins
+  const isSuccessUrl =
+    window.location.pathname.includes("success") ||
+    window.location.pathname.includes("complete");
+
+  let hasLegacyMarker = false;
   const completionEl = document.querySelector(SELECTORS.gupy.completionMessage);
   if (completionEl) {
     const text = completionEl.textContent?.toLowerCase() || "";
-    if (
+    hasLegacyMarker =
       text.includes("sucesso") ||
       text.includes("candidatura enviada") ||
       text.includes("inscriç") ||
       text.includes("completed") ||
       text.includes("concluída") ||
-      text.includes("concluida")
-    ) {
-      return true;
-    }
+      text.includes("concluida");
   }
 
-  // URL fallback for tenants that do route to /success or /complete
-  if (
-    window.location.pathname.includes("success") ||
-    window.location.pathname.includes("complete")
-  ) {
-    return true;
-  }
+  // Strict URL routes to /success are themselves a two-signal match (a URL
+  // change rarely happens spuriously on Gupy's SPA).
+  if (isSuccessUrl) return true;
 
-  // Last resort: scan the whole visible body text for the known success
-  // phrases. Catches skinned-tenant variants whose DOM structure doesn't
-  // match any of the selectors above. Constrained to phrases that only
-  // appear on the post-submit screen so we don't false-positive on the
-  // application form itself.
-  const bodyText = (document.body?.innerText || "").toLowerCase();
-  const postSubmitPhrases = [
-    "application completed",
-    "candidatura concluída",
-    "candidatura concluida",
-    "will now analyze your compatibility",
-    "vai analisar sua compatibilidade",
-    "keep an eye on your email",
-    "fique de olho no seu e-mail",
-    "fique de olho no seu email",
-  ];
-  for (const phrase of postSubmitPhrases) {
-    if (bodyText.includes(phrase)) return true;
-  }
-
-  return false;
+  // Otherwise require a heading AND one supporting signal (button or legacy
+  // marker). Heading alone is insufficient: modal titles sometimes include
+  // "candidatura" phrases in tooltip text.
+  return hasHeading && (hasPostSubmitButton || hasLegacyMarker);
 }
 
 function isPersonalizationScreen(): boolean {

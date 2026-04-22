@@ -24,7 +24,8 @@ import { AutoApplyStep } from "../lib/types";
  *     finishes loading
  *   - SM exiting normally but the detector missing the success screen in its
  *     final poll window
- *   - Any future adapter path where we bypass autoSubmit's built-in polling.
+ *   - Any future adapter path that reaches COMPLETE without going through
+ *     the state machine's main loop.
  */
 function installCompletionSafetyNet(queueId: string): void {
   let reported = false;

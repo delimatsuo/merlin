@@ -66,6 +66,8 @@ export class StateMachine {
   private pendingFields: UnansweredField[] = [];
   private tabId: number | null = null;
   private manualOrigin: boolean = false;
+  /** Epoch ms when this run first entered FINAL_CONFIRMATION. 0 = not yet. */
+  private finalConfirmationStart: number = 0;
 
   setTabId(tabId: number): void {
     this.tabId = tabId;
@@ -287,19 +289,57 @@ export class StateMachine {
             if (pResult.answered) this.questionsAnswered += 1;
             this.llmCalls += pResult.llmCalls;
             await randomDelay(1000, 2000);
-            // After personalization, check if we're now on the review/finish screen
-            const nextScreen = a.detectScreen();
-            if (nextScreen === AutoApplyStep.COMPLETE || nextScreen === AutoApplyStep.IDLE) {
-              if (this.mode === "auto") {
-                // Auto mode: submit directly
-                await this.autoSubmit();
-              } else {
-                // Dry-run: pause for review
-                this.transition(AutoApplyStep.REVIEW);
-              }
-            } else {
-              this.transition(nextScreen);
+            // Always re-detect — if the pre-submit modal is now open we'll
+            // route to FINAL_CONFIRMATION on the next iteration; if the
+            // success screen showed up directly we'll route to COMPLETE.
+            this.transition(a.detectScreen());
+            break;
+          }
+
+          case AutoApplyStep.FINAL_CONFIRMATION: {
+            // Gupy's "Introduce yourself!" modal — the real submit step. In
+            // auto mode we click the Finish-application button and let the
+            // loop re-detect; in dry-run we pause for manual confirm.
+            if (this.mode !== "auto") {
+              this.transition(AutoApplyStep.REVIEW);
+              break;
             }
+
+            const modal = a.findFinalConfirmationModal?.() ?? null;
+            if (!modal) {
+              // Modal vanished between detection and handling — re-detect.
+              this.transition(a.detectScreen());
+              break;
+            }
+
+            // First entry: mark the timeout clock. Subsequent entries (the
+            // loop can iterate here while the click propagates) check it.
+            if (this.finalConfirmationStart === 0) {
+              this.finalConfirmationStart = Date.now();
+            } else if (Date.now() - this.finalConfirmationStart > 60000) {
+              this.transitionToError(
+                ErrorType.TIMEOUT,
+                "Modal 'Introduce yourself' não fechou após 60s — envio pode ter falhado.",
+              );
+              break;
+            }
+
+            const finishBtn = a.findFinalConfirmationSubmitButton?.(modal) ?? null;
+            if (!finishBtn) {
+              this.transitionToError(
+                ErrorType.VALIDATION_ERROR,
+                "Botão 'Finalizar candidatura' não encontrado no modal.",
+              );
+              break;
+            }
+
+            console.log("[SM] FINAL_CONFIRMATION: clicking Finish in modal");
+            await humanLikeClick(finishBtn);
+            // Short wait for the modal close + success render. We don't
+            // insist on success here — the next loop iteration re-detects.
+            await waitForNavigation(5000).catch(() => {});
+            await randomDelay(500, 1200);
+            this.transition(a.detectScreen());
             break;
           }
 
@@ -387,26 +427,38 @@ export class StateMachine {
     );
   }
 
+  /**
+   * Manual-confirmation path: the user hit Confirm in the popup after a
+   * dry-run paused at REVIEW. Auto mode never lands here — FINAL_CONFIRMATION
+   * in the main loop handles the click + re-detect directly.
+   *
+   * We prefer the final-confirmation modal's submit button when it's open
+   * (tenants that show "Introduce yourself!"), falling back to a page-level
+   * findFinishButton() for tenants that don't show a pre-submit modal.
+   */
   async confirmSubmit(): Promise<void> {
     if (this.currentStep !== AutoApplyStep.REVIEW) return;
 
     console.log("[SM] User confirmed submission");
     this.running = true;
 
-    const finishBtn = adapter().findFinishButton();
-    if (!finishBtn) {
+    const a = adapter();
+    const modal = a.findFinalConfirmationModal?.() ?? null;
+    const btn = modal
+      ? a.findFinalConfirmationSubmitButton?.(modal) ?? null
+      : a.findFinishButton();
+
+    if (!btn) {
       this.transitionToError(
         ErrorType.VALIDATION_ERROR,
-        "Botão de envio não encontrado. A Gupy pode ter mudado a interface.",
+        "Botão de envio não encontrado. A interface do site pode ter mudado.",
       );
       this.broadcastStatus();
       this.running = false;
       return;
     }
 
-    await humanLikeClick(finishBtn);
-    // waitForNavigation is a best-effort hint; the real proof is the
-    // detector seeing COMPLETE.
+    await humanLikeClick(btn);
     await waitForNavigation(15000).catch(() => {});
 
     const landed = await this.awaitSubmissionLanded(30000);
@@ -427,37 +479,6 @@ export class StateMachine {
     await this.clearState();
     reportTabStatus({ completed: true });
     this.running = false;
-  }
-
-  private async autoSubmit(): Promise<void> {
-    console.log("[SM] Auto mode: submitting directly");
-
-    const finishBtn = adapter().findFinishButton();
-    if (!finishBtn) {
-      // Don't silently report completed when we never actually submitted.
-      this.transitionToError(
-        ErrorType.VALIDATION_ERROR,
-        "Botão de envio não encontrado. A Gupy pode ter mudado a interface.",
-      );
-      return;
-    }
-
-    await humanLikeClick(finishBtn);
-    await waitForNavigation(15000).catch(() => {});
-
-    const landed = await this.awaitSubmissionLanded(30000);
-    if (!landed) {
-      this.logPostSubmitFailure("autoSubmit");
-      this.transitionToError(
-        ErrorType.TIMEOUT,
-        "Envio clicado, mas a tela de confirmação não apareceu em 30s.",
-      );
-      return;
-    }
-
-    // Let the outer run-loop's COMPLETE handler do the reporting so we
-    // don't double-log / double-notify.
-    this.transition(AutoApplyStep.COMPLETE);
   }
 
   cancelSubmit(): void {

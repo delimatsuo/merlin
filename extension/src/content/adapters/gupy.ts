@@ -63,18 +63,25 @@ export const gupyAdapter: BoardAdapter = {
     return findFinishButton();
   },
 
-  // Order matters: the disqualifying-review modal appears between custom
-  // questions and the final step; the introduce-yourself modal appears
-  // right before submit. Only one is ever visible at once.
+  // `findBlockingModal` handles modals that aren't part of the canonical
+  // submit sequence — currently just the disqualifying-review confirmation.
+  // The "Introduce yourself!" modal is NOT returned here: it IS the submit
+  // step, so it's modelled as AutoApplyStep.FINAL_CONFIRMATION and detected
+  // by detectScreen(). Treating it as a blocking modal previously caused a
+  // race with the personalization handler's rogue finish-click.
   findBlockingModal() {
-    return findDisqualifyingReviewModal() ?? findIntroduceYourselfModal();
+    return findDisqualifyingReviewModal();
   },
 
-  // Each modal has its own "continue past this" button. Try the confirm
-  // button first (for the disqualifying-review modal), fall back to the
-  // finish button (for the introduce-yourself modal). Returning null here
-  // means the caller pauses for user confirmation.
   findModalConfirmButton(modal) {
-    return findConfirmButtonInModal(modal) ?? findFinishButtonInIntroduceModal(modal);
+    return findConfirmButtonInModal(modal);
+  },
+
+  findFinalConfirmationModal() {
+    return findIntroduceYourselfModal();
+  },
+
+  findFinalConfirmationSubmitButton(modal) {
+    return findFinishButtonInIntroduceModal(modal);
   },
 };

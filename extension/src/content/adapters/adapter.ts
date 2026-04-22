@@ -39,8 +39,22 @@ export interface BoardAdapter {
   findFinishButton(): HTMLElement | null;
 
   // --- Optional per-board modals / checkpoints ---
-  /** Return the current blocking confirmation modal, if any. */
+  /**
+   * Return the current blocking confirmation modal that isn't part of the
+   * canonical submit sequence (e.g. Gupy's "Review of disqualifying
+   * questions"). The final-submit modal has its own state (see below) and
+   * must NOT be returned here.
+   */
   findBlockingModal?(): HTMLElement | null;
   /** Given a modal from findBlockingModal, return the "confirm/submit" button. */
   findModalConfirmButton?(modal: HTMLElement): HTMLElement | null;
+
+  /**
+   * Return the final-submit confirmation modal (e.g. Gupy's "Introduce
+   * yourself!") if it's currently open. This is the last step before
+   * COMPLETE. When visible, detectScreen() should return FINAL_CONFIRMATION.
+   */
+  findFinalConfirmationModal?(): HTMLElement | null;
+  /** Given that modal, return the "Finish / Finalizar candidatura" button. */
+  findFinalConfirmationSubmitButton?(modal: HTMLElement): HTMLElement | null;
 }
