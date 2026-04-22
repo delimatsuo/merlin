@@ -28,18 +28,65 @@ export function detectScreen(): AutoApplyStep {
 }
 
 function isCompletionScreen(): boolean {
-  // Look for success/completion messages
+  // Strategy: Gupy's success page reuses the /curriculum URL (no URL change
+  // after submit), and the class names on the success DOM keep drifting. So
+  // the class-selector check is a last resort; heading + distinctive-button
+  // text is the reliable signal.
+
+  const headingTexts = [
+    // English — Gupy renders the user's account locale
+    "application completed",
+    // Portuguese variants seen in the wild
+    "candidatura concluída",
+    "candidatura concluida",
+    "candidatura enviada",
+    "aplicação concluída",
+    "aplicacao concluida",
+    "inscrição concluída",
+    "inscricao concluida",
+    "sua candidatura foi enviada",
+  ];
+  const headingSelector =
+    "h1, h2, h3, h4, [class*='title'], [class*='Title'], [class*='heading'], [class*='Heading']";
+  for (const text of headingTexts) {
+    if (findElementByText(headingSelector, text)) return true;
+  }
+
+  // Distinctive success-page buttons — only shown after submission completes
+  const postSubmitButtonTexts = [
+    "track application",
+    "acompanhar candidatura",
+    "acompanhar minha candidatura",
+    "review my curriculum",
+    "revisar meu currículo",
+    "revisar meu curriculo",
+  ];
+  const clickable = "button, a, [role='button']";
+  for (const text of postSubmitButtonTexts) {
+    if (findElementByText(clickable, text)) return true;
+  }
+
+  // Legacy class-based selector — kept as a fallback for older Gupy skins
   const completionEl = document.querySelector(SELECTORS.gupy.completionMessage);
   if (completionEl) {
     const text = completionEl.textContent?.toLowerCase() || "";
-    if (text.includes("sucesso") || text.includes("candidatura enviada") ||
-        text.includes("inscriç") || text.includes("completed")) {
+    if (
+      text.includes("sucesso") ||
+      text.includes("candidatura enviada") ||
+      text.includes("inscriç") ||
+      text.includes("completed") ||
+      text.includes("concluída") ||
+      text.includes("concluida")
+    ) {
       return true;
     }
   }
 
-  // Also check for success in the URL
-  if (window.location.pathname.includes("success") || window.location.pathname.includes("complete")) {
+  // URL fallback for tenants that do route to /success or /complete
+  if (
+    window.location.pathname.includes("success") ||
+    window.location.pathname.includes("complete")
+  ) {
     return true;
   }
 
