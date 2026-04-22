@@ -1013,6 +1013,54 @@ async def match_form_fields(fields: list[dict], profile: dict) -> dict:
         return {}
 
 
+def _normalize_question(text: str) -> str:
+    """Normalize a question label for fuzzy matching against saved_answers.
+
+    Strips leading numbering ("1.", "2)"), collapses whitespace, lowercases,
+    and removes trailing punctuation. The same literal question rendered on
+    different applications can have tiny whitespace or numbering differences;
+    this normalization is what lets the learning loop actually learn.
+    """
+    text = re.sub(r"^\s*\d+[\.\)]\s*", "", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    text = text.rstrip(".!?: ").lower()
+    return text
+
+
+def _lookup_saved_answer(
+    question: str,
+    options: list[str] | None,
+    saved_answers: dict,
+) -> str | None:
+    """Return a previously-user-provided answer matching `question`, or None.
+
+    Try exact match first, then normalized match. For select/radio fields we
+    also validate that the saved answer is still among the current options —
+    tenants sometimes re-order or re-word options, and returning a stale
+    option would fail form validation on submit.
+    """
+    if not saved_answers:
+        return None
+
+    if question in saved_answers:
+        answer = saved_answers[question]
+    else:
+        needle = _normalize_question(question)
+        matched = next(
+            (v for k, v in saved_answers.items() if _normalize_question(k) == needle),
+            None,
+        )
+        if matched is None:
+            return None
+        answer = matched
+
+    if options:
+        if not any(opt.strip().lower() == str(answer).strip().lower() for opt in options):
+            return None
+
+    return str(answer) if answer else None
+
+
 async def answer_custom_question(
     question: str,
     field_type: str,
@@ -1030,9 +1078,25 @@ async def answer_custom_question(
         profile: candidate professional profile (NO PII)
 
     Returns:
-        (answer, needs_human, model_used) tuple.
+        (answer, needs_human, model_used) tuple. model_used is "saved" when
+        the answer came from the learning loop's saved_answers cache.
         If needs_human is True, answer may be None.
     """
+    # Learning loop: if the user previously answered this exact (or near-
+    # exact) question, return that without burning an LLM call. Without this
+    # short-circuit, the same question keeps prompting the user on every new
+    # application because the LLM wasn't explicitly told to consult saved
+    # answers from the profile.
+    saved = profile.get("saved_answers") or {}
+    hit = _lookup_saved_answer(question, options, saved)
+    if hit is not None:
+        logger.info(
+            "autoapply_question_saved_hit",
+            question_preview=question[:80],
+            answer_preview=hit[:80],
+        )
+        return (hit, False, "saved")
+
     safe_profile = _strip_pii(profile)
 
     context = json.dumps({
