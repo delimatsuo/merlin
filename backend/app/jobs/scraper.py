@@ -107,18 +107,38 @@ def _is_brazilian_job(location: str) -> bool:
     return True
 
 
-# Consolidated search terms — fewer calls = lower Apify cost.
-# Each call costs ~$0.48 regardless of result count, so we maximize
-# results per call with broad terms + higher maxListings.
+# Search terms for Gupy's free candidate-portal API. Because Gupy is now
+# our only source and we want a broad inventory, we cast a wide net here —
+# each term costs nothing (free API, just HTTP) so there's no reason to
+# stay narrow. Dedup is by Gupy's native job ID so overlapping terms don't
+# inflate the final count.
 BRAZILIAN_JOB_CATEGORIES = [
-    "analista",             # Broadest BR job title — covers finance, HR, marketing, data, QA, etc.
-    "engenheiro",           # Engineering + tech + software
-    "gerente",              # Management across all areas
-    "desenvolvedor",        # Software dev specifically
-    "coordenador",          # Mid-management — product, marketing, HR, operations
-    "consultor",            # Consulting roles across all areas
-    "tecnico",              # Technical/hands-on roles — maintenance, mechanics, support
-    "diretor",              # Director/executive level across all areas
+    # Cross-functional "headword" roles — broadest coverage
+    "analista",
+    "assistente",
+    "auxiliar",
+    "especialista",
+    "coordenador",
+    "supervisor",
+    "gerente",
+    "diretor",
+    "consultor",
+    "administrador",
+    # Tech
+    "desenvolvedor",
+    "programador",
+    "engenheiro",
+    "arquiteto",
+    "tecnico",
+    # Commercial / ops
+    "vendedor",
+    "representante",
+    "operador",
+    # Creative / product
+    "designer",
+    "produto",
+    # Data / AI (growing categories in BR)
+    "dados",
 ]
 
 
@@ -145,13 +165,16 @@ async def run_scraping_pipeline() -> dict:
     sources_ok = 0
     sources_failed = 0
 
-    # Gupy: switched from Apify actor (paid, ignored search terms, ~200 random
-    # jobs/day) to Gupy's public candidate-portal API (free, supports keyword
-    # search, returns thousands of relevant jobs). scrape_gupy_apify is kept
-    # available for emergencies — wire it back if the direct API breaks.
+    # Gupy is the only source. Adzuna was removed because its jobs aren't
+    # automatable and cluttered the feed. scrape_gupy_direct hits Gupy's
+    # public candidate-portal API (free, supports keyword search). The
+    # Apify-based fallback is kept in the import for emergencies — wire it
+    # back via adding (scrape_gupy_apify, "gupy") to this list if the direct
+    # API breaks. Adzuna client is preserved for reference / future non-
+    # automated-feed use cases; just not scraped by default anymore.
     for scraper_fn, source_name in [
-        (scrape_adzuna, "adzuna"),
         (scrape_gupy_direct, "gupy"),
+        # (scrape_adzuna, "adzuna"),            # Removed — not automatable
         # (scrape_brazil_jobs, "brazil_jobs"),  # Suspended — $0.005/job too expensive
         # (scrape_gupy_apify, "gupy_apify"),    # Fallback — paid, disabled by default
     ]:

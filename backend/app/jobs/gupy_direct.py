@@ -131,7 +131,7 @@ def _normalize_job(job: dict) -> dict:
 
 async def scrape_gupy_direct(
     search_terms: list[str],
-    max_per_term: int = 500,
+    max_per_term: int = 1500,
 ) -> list[dict]:
     """Scrape Gupy via the public candidate-portal API.
 

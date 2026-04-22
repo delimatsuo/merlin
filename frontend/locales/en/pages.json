@@ -33,7 +33,6 @@
   "landing.ctaTitle": "Ready to personalize your resume?",
   "landing.ctaSubtitle": "Create your account and generate up to 5 personalized resumes per day, at no cost.",
   "landing.ctaButton": "Create free account",
-
   "login.tagline": "AI-tailored resume",
   "login.email": "Email",
   "login.password": "Password",
@@ -45,7 +44,6 @@
   "login.signUp": "Sign up",
   "login.errorInvalidCredentials": "Invalid email or password. Please try again.",
   "login.errorGoogle": "Error signing in with Google. Please try again.",
-
   "signup.title": "Create Account",
   "signup.subtitle": "Start personalizing your resume",
   "signup.fullName": "Full name",
@@ -67,7 +65,6 @@
   "signup.errorCreate": "Error creating account. Check your information and try again.",
   "signup.regionNotice": "Currently available in Brazil and the United States.",
   "signup.errorGoogle": "Error signing in with Google. Please try again.",
-
   "dashboard.welcomeTitle": "Welcome to Merlin",
   "dashboard.welcomeSubtitle": "To get started, upload your resume and complete the interview. Then, you can personalize for as many jobs as you want.",
   "dashboard.step1Label": "Step 1",
@@ -86,7 +83,6 @@
   "dashboard.candidate": "Candidate",
   "dashboard.viewResume": "View resume",
   "dashboard.deleteApp": "Delete application",
-
   "profile.title": "My Profile",
   "profile.subtitle": "Upload resumes to enrich your profile. The more data, the better the personalization.",
   "profile.upload": "Upload",
@@ -132,7 +128,6 @@
   "profile.after": "After",
   "profile.loadingRecommendations": "Analyzing...",
   "profile.errorRecommendations": "Error generating recommendations. Please try again.",
-
   "job.title": "New Job",
   "job.subtitle": "Paste the job description for analysis and resume generation.",
   "job.howTitle": "How it works:",
@@ -170,7 +165,6 @@
   "job.errorAnalyze": "Error analyzing the job. Please try again.",
   "job.errorGenerate": "Error generating resume. Please try again.",
   "job.errorNoProfile": "No profile found. Upload your resume first.",
-
   "interview.title": "Profile Interview",
   "interview.chooseMode": "Let's ask a few questions to enrich your profile. How would you like to answer?",
   "interview.byVoice": "By Voice",
@@ -216,7 +210,6 @@
   "interview.errorMicAccess": "Could not access the microphone. Check browser permissions.",
   "interview.errorNoProfile": "No profile found. Upload your resume first.",
   "interview.errorNoQuestions": "Upload your resume first to generate the questions.",
-
   "application.title": "Application",
   "application.generatingResume": "Generating your personalized resume... This may take up to 2 minutes.",
   "application.jobDesc": "Job",
@@ -229,7 +222,6 @@
   "application.errorRegenerate": "Error regenerating the resume.",
   "application.errorNewVersion": "Error generating new version.",
   "application.regenerateInstruction": "Generate a new version with a different approach.",
-
   "versions.title": "Versions",
   "versions.download": "Download",
   "versions.edit": "Edit",
@@ -242,7 +234,6 @@
   "versions.errorRename": "Error renaming.",
   "versions.deleted": "Version deleted",
   "versions.errorDelete": "Error deleting version.",
-
   "editor.resume": "Resume",
   "editor.coverLetter": "Cover Letter",
   "editor.edit": "Edit",
@@ -266,7 +257,6 @@
   "editor.changeImpact": "Impact",
   "editor.changeStructure": "Structure",
   "editor.coverLetterWontUpdate": "The cover letter won't update automatically. Use 'Regenerate' to update both.",
-
   "linkedin.title": "LinkedIn Optimizer",
   "linkedin.subtitle": "Analyze and improve your LinkedIn profile with AI to boost your visibility to recruiters.",
   "linkedin.tabUpload": "Upload PDF",
@@ -304,7 +294,6 @@
   "linkedin.errorPaste": "Error processing the text. Please try again.",
   "linkedin.errorAnalyze": "Error analyzing the profile. Please try again.",
   "linkedin.errorLoad": "Error loading LinkedIn profile.",
-
   "settings.title": "Settings",
   "settings.subtitle": "Manage your account and personal data.",
   "settings.yourAccount": "Your Account",
@@ -334,10 +323,8 @@
   "settings.errorExport": "Error exporting data. Please try again.",
   "settings.errorDelete": "Error deleting account. Please try again.",
   "settings.dataFilename": "merlin-data",
-
   "legal.privacyTitle": "Privacy Policy",
   "legal.termsTitle": "Terms of Service",
-
   "vagas.title": "Search jobs",
   "vagas.subtitle": "Matched positions that fit your profile",
   "vagas.tipTitle": "Apply fast!",
@@ -356,7 +343,6 @@
   "vagas.today": "today",
   "vagas.timeRangeDays": "{{days}} days",
   "vagas.searching": "Searching for jobs...",
-
   "vagas.batch.eligibleBanner": "{{count}} jobs eligible for auto-apply today",
   "vagas.batch.eligibleBannerOne": "1 job eligible for auto-apply today",
   "vagas.batch.unsupportedTag": "Not automatable",
@@ -376,7 +362,6 @@
   "vagas.batch.filterAutomatableOnly": "Automatable only",
   "vagas.batch.filterShowAll": "Show all",
   "vagas.batch.filterEmptyAutomatable": "No Gupy jobs matched this period. Adjust the filter or time range.",
-
   "candidaturas.title": "Batch applications",
   "candidaturas.subtitle": "Track the progress of your automatic applications",
   "candidaturas.tabPipeline": "Pipeline",
@@ -398,8 +383,6 @@
   "candidaturas.viewHistory": "View history",
   "candidaturas.browseJobs": "Browse jobs",
   "candidaturas.batchSummary": "{{applied}} applied · {{attention}} need you · {{failed}} failed",
-
-
   "vagas.prefs.title": "Set your preferences",
   "vagas.prefs.subtitle": "Tell Merlin what kind of job you're looking for. We'll find the best opportunities for you every day.",
   "vagas.prefs.titlesLabel": "Desired titles",
@@ -426,5 +409,6 @@
   "vagas.prefs.emailWeekly": "Weekly",
   "vagas.prefs.emailOff": "Off",
   "vagas.prefs.save": "Save preferences",
-  "vagas.prefs.saving": "Saving..."
+  "vagas.prefs.saving": "Saving...",
+  "vagas.batch.supportedBoardsNotice": "Merlin currently auto-applies only to Gupy postings. Coming soon: LinkedIn, Vagas.com, and Catho."
 }

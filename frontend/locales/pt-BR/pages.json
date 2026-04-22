@@ -33,7 +33,6 @@
   "landing.ctaTitle": "Pronto para personalizar seu currículo?",
   "landing.ctaSubtitle": "Crie sua conta e gere até 5 currículos personalizados por dia, sem custo nenhum.",
   "landing.ctaButton": "Criar conta gratuita",
-
   "login.tagline": "Currículo sob medida com IA",
   "login.email": "Email",
   "login.password": "Senha",
@@ -45,7 +44,6 @@
   "login.signUp": "Cadastre-se",
   "login.errorInvalidCredentials": "Email ou senha inválidos. Tente novamente.",
   "login.errorGoogle": "Erro ao entrar com Google. Tente novamente.",
-
   "signup.title": "Criar conta",
   "signup.subtitle": "Comece a personalizar seu currículo",
   "signup.fullName": "Nome completo",
@@ -67,7 +65,6 @@
   "signup.errorCreate": "Erro ao criar conta. Verifique seus dados e tente novamente.",
   "signup.regionNotice": "Disponível no Brasil e nos Estados Unidos.",
   "signup.errorGoogle": "Erro ao entrar com Google. Tente novamente.",
-
   "dashboard.welcomeTitle": "Bem-vindo ao Merlin",
   "dashboard.welcomeSubtitle": "Para começar, envie seu currículo e complete a entrevista. Depois, você poderá personalizar para quantas vagas quiser.",
   "dashboard.step1Label": "Passo 1",
@@ -86,7 +83,6 @@
   "dashboard.candidate": "Candidato",
   "dashboard.viewResume": "Ver currículo",
   "dashboard.deleteApp": "Excluir vaga",
-
   "profile.title": "Meu Perfil",
   "profile.subtitle": "Envie currículos para enriquecer seu perfil. Quanto mais dados, melhor a personalização.",
   "profile.upload": "Upload",
@@ -132,7 +128,6 @@
   "profile.after": "Depois",
   "profile.loadingRecommendations": "Analisando...",
   "profile.errorRecommendations": "Erro ao gerar recomendações. Tente novamente.",
-
   "job.title": "Nova Vaga",
   "job.subtitle": "Cole a descrição da vaga para análise e geração do currículo.",
   "job.howTitle": "Como funciona:",
@@ -170,7 +165,6 @@
   "job.errorAnalyze": "Erro ao analisar a vaga. Tente novamente.",
   "job.errorGenerate": "Erro ao gerar currículo. Tente novamente.",
   "job.errorNoProfile": "Nenhum perfil encontrado. Envie seu currículo primeiro.",
-
   "interview.title": "Entrevista de Perfil",
   "interview.chooseMode": "Vamos fazer algumas perguntas para enriquecer seu perfil. Como você prefere responder?",
   "interview.byVoice": "Por Voz",
@@ -216,7 +210,6 @@
   "interview.errorMicAccess": "Não foi possível acessar o microfone. Verifique as permissões do navegador.",
   "interview.errorNoProfile": "Nenhum perfil encontrado. Envie seu currículo primeiro.",
   "interview.errorNoQuestions": "Envie seu currículo primeiro para gerar as perguntas.",
-
   "application.title": "Candidatura",
   "application.generatingResume": "Gerando seu currículo personalizado... Isso pode levar até 2 minutos.",
   "application.jobDesc": "Vaga",
@@ -229,7 +222,6 @@
   "application.errorRegenerate": "Erro ao regenerar o currículo.",
   "application.errorNewVersion": "Erro ao gerar nova versão.",
   "application.regenerateInstruction": "Gere uma nova versão com abordagem diferente.",
-
   "versions.title": "Versões",
   "versions.download": "Baixar",
   "versions.edit": "Editar",
@@ -242,7 +234,6 @@
   "versions.errorRename": "Erro ao renomear.",
   "versions.deleted": "Versão excluída",
   "versions.errorDelete": "Erro ao excluir versão.",
-
   "editor.resume": "Currículo",
   "editor.coverLetter": "Carta",
   "editor.edit": "Editar",
@@ -266,7 +257,6 @@
   "editor.changeImpact": "Impacto",
   "editor.changeStructure": "Estrutura",
   "editor.coverLetterWontUpdate": "A carta de apresentação não será atualizada automaticamente. Use 'Regenerar' para atualizar ambos.",
-
   "linkedin.title": "Otimizador de LinkedIn",
   "linkedin.subtitle": "Analise e melhore seu perfil do LinkedIn com IA para aumentar sua visibilidade para recrutadores.",
   "linkedin.tabUpload": "Upload PDF",
@@ -304,7 +294,6 @@
   "linkedin.errorPaste": "Erro ao processar o texto. Tente novamente.",
   "linkedin.errorAnalyze": "Erro ao analisar o perfil. Tente novamente.",
   "linkedin.errorLoad": "Erro ao carregar perfil LinkedIn.",
-
   "settings.title": "Configurações",
   "settings.subtitle": "Gerencie sua conta e seus dados pessoais.",
   "settings.yourAccount": "Sua Conta",
@@ -334,10 +323,8 @@
   "settings.errorExport": "Erro ao exportar dados. Tente novamente.",
   "settings.errorDelete": "Erro ao excluir conta. Tente novamente.",
   "settings.dataFilename": "merlin-dados",
-
   "legal.privacyTitle": "Política de Privacidade",
   "legal.termsTitle": "Termos de Uso",
-
   "vagas.title": "Buscar vagas",
   "vagas.subtitle": "Vagas encontradas que combinam com seu perfil",
   "vagas.tipTitle": "Candidate-se rápido!",
@@ -356,7 +343,6 @@
   "vagas.today": "hoje",
   "vagas.timeRangeDays": "{{days}} dias",
   "vagas.searching": "Buscando vagas...",
-
   "vagas.batch.eligibleBanner": "{{count}} vagas elegíveis para aplicação automática hoje",
   "vagas.batch.eligibleBannerOne": "1 vaga elegível para aplicação automática hoje",
   "vagas.batch.unsupportedTag": "Não automatizável",
@@ -376,7 +362,6 @@
   "vagas.batch.filterAutomatableOnly": "Só automatizáveis",
   "vagas.batch.filterShowAll": "Mostrar todas",
   "vagas.batch.filterEmptyAutomatable": "Nenhuma vaga do Gupy encontrada neste período. Ajuste o filtro ou o intervalo de tempo.",
-
   "candidaturas.title": "Candidaturas em lote",
   "candidaturas.subtitle": "Acompanhe o progresso das aplicações automáticas",
   "candidaturas.tabPipeline": "Pipeline",
@@ -398,8 +383,6 @@
   "candidaturas.viewHistory": "Ver histórico",
   "candidaturas.browseJobs": "Buscar vagas",
   "candidaturas.batchSummary": "{{applied}} aplicadas · {{attention}} precisam de você · {{failed}} falharam",
-
-
   "vagas.prefs.title": "Configure suas preferências",
   "vagas.prefs.subtitle": "Diga ao Merlin que tipo de vaga você procura. Encontraremos as melhores oportunidades para você todos os dias.",
   "vagas.prefs.titlesLabel": "Cargos desejados",
@@ -426,5 +409,6 @@
   "vagas.prefs.emailWeekly": "Semanal",
   "vagas.prefs.emailOff": "Desligado",
   "vagas.prefs.save": "Salvar preferências",
-  "vagas.prefs.saving": "Salvando..."
+  "vagas.prefs.saving": "Salvando...",
+  "vagas.batch.supportedBoardsNotice": "No momento, o Merlin aplica automaticamente apenas em vagas do Gupy. Em breve: LinkedIn, Vagas.com e Catho."
 }

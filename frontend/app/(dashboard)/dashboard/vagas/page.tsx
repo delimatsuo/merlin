@@ -39,16 +39,15 @@ function VagasContent() {
   const [showPrefsEditor, setShowPrefsEditor] = useState(false);
   const [preflightOpen, setPreflightOpen] = useState(false);
   const [submittingBatch, setSubmittingBatch] = useState(false);
-  const [automatableOnly, setAutomatableOnly] = useState(false);
 
+  // Merlin currently only supports Gupy postings for auto-apply. Non-Gupy
+  // matches are hidden from the feed entirely — we'll re-expose them once
+  // we ship adapters for LinkedIn Easy Apply, Vagas.com, Catho, etc.
   const gupyMatches = useMemo(
     () => matches.filter((m) => (m.source || "").toLowerCase() === "gupy"),
     [matches],
   );
-  const visibleMatches = useMemo(
-    () => (automatableOnly ? gupyMatches : matches),
-    [automatableOnly, gupyMatches, matches],
-  );
+  const visibleMatches = gupyMatches;
   const selectedJobs = useMemo(
     () => gupyMatches.filter((m) => selectedIds.has(m.job_id)),
     [gupyMatches, selectedIds],
@@ -225,33 +224,16 @@ function VagasContent() {
         </p>
       </div>
 
-      {/* Auto-apply eligibility banner with filter toggle */}
-      {gupyMatches.length > 0 && (
-        <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-3 flex items-center gap-2.5">
-          <div className="shrink-0 h-7 w-7 rounded-full bg-amber-500/20 flex items-center justify-center">
-            <Zap className="h-3.5 w-3.5 text-amber-700" />
-          </div>
-          <p className="text-xs text-amber-900 font-medium leading-relaxed flex-1">
-            {gupyMatches.length === 1
-              ? t("vagas.batch.eligibleBannerOne")
-              : t("vagas.batch.eligibleBanner", { count: String(gupyMatches.length) })}
-          </p>
-          <button
-            type="button"
-            onClick={() => setAutomatableOnly((v) => !v)}
-            className={cn(
-              "shrink-0 h-7 rounded-full px-3 text-[11px] font-semibold transition-colors",
-              automatableOnly
-                ? "bg-amber-600 text-white hover:bg-amber-700"
-                : "bg-amber-500/20 text-amber-900 hover:bg-amber-500/30",
-            )}
-          >
-            {automatableOnly
-              ? t("vagas.batch.filterShowAll")
-              : t("vagas.batch.filterAutomatableOnly")}
-          </button>
+      {/* Supported-boards notice. Merlin auto-applies only to Gupy postings
+          today; more boards (LinkedIn, Vagas.com, Catho) are planned. */}
+      <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-3 flex items-center gap-2.5">
+        <div className="shrink-0 h-7 w-7 rounded-full bg-amber-500/20 flex items-center justify-center">
+          <Zap className="h-3.5 w-3.5 text-amber-700" />
         </div>
-      )}
+        <p className="text-xs text-amber-900 font-medium leading-relaxed flex-1">
+          {t("vagas.batch.supportedBoardsNotice")}
+        </p>
+      </div>
 
       {/* Time range selector */}
       <div className="flex items-center justify-center gap-1.5">
@@ -297,17 +279,11 @@ function VagasContent() {
         </div>
       )}
 
-      {!loading && visibleMatches.length === 0 && matches.length > 0 && automatableOnly && (
+      {!loading && visibleMatches.length === 0 && matches.length > 0 && (
         <div className="apple-shadow rounded-2xl bg-card p-8 text-center">
           <p className="text-sm text-muted-foreground">
             {t("vagas.batch.filterEmptyAutomatable")}
           </p>
-          <button
-            onClick={() => setAutomatableOnly(false)}
-            className="mt-3 text-xs text-foreground font-medium hover:underline"
-          >
-            {t("vagas.batch.filterShowAll")}
-          </button>
         </div>
       )}
 
