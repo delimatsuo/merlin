@@ -392,14 +392,15 @@ export function findFinishButtonInIntroduceModal(modal: HTMLElement): HTMLElemen
     "finalizar",
     "concluir",
   ];
+  // Return the button element even when it's currently disabled — the caller
+  // (state machine) waits for enablement and clicks when ready. Returning
+  // null here would force an immediate error on a cooling-period delay.
   const buttons = modal.querySelectorAll<HTMLElement>(CLICKABLE);
   for (const text of finishTexts) {
     for (let i = 0; i < buttons.length; i++) {
       const btn = buttons[i];
-      if ((btn as HTMLButtonElement).disabled) continue;
       const label = btn.textContent?.trim().toLowerCase() || "";
       if (label === text || label.includes(text)) {
-        console.log(`[Detector] Found Introduce-yourself Finish button (matched "${text}")`);
         return btn;
       }
     }
@@ -409,17 +410,16 @@ export function findFinishButtonInIntroduceModal(modal: HTMLElement): HTMLElemen
   // is NOT "personalize"/"personalizar" is the dismiss button.
   for (let i = 0; i < buttons.length; i++) {
     const btn = buttons[i];
-    if ((btn as HTMLButtonElement).disabled) continue;
     const label = btn.textContent?.trim().toLowerCase() || "";
     if (!label) continue;
     if (label.includes("personaliz")) continue;
     if (label.length > 0 && label.length < 50) {
-      console.log(`[Detector] Introduce-yourself: picking non-personalize button "${label}"`);
       return btn;
     }
   }
   return null;
 }
+
 
 /**
  * Find a clickable "next" or "continue" button on the current screen.

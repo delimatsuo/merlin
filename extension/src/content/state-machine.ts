@@ -12,7 +12,14 @@ import type { CustomQuestionsResult, UnansweredField } from "./screens/custom-qu
 import type { PersonalizationResult } from "./screens/personalization";
 import { showInPageHumanPrompt, removeInPagePrompt } from "./screens/in-page-prompt";
 import { isJobClosed } from "./screens/detector";
-import { randomDelay, waitForNavigation, humanLikeClick } from "./dom/helpers";
+import {
+  randomDelay,
+  waitForNavigation,
+  humanLikeClick,
+  isClickable,
+  describeClickability,
+  waitUntilClickable,
+} from "./dom/helpers";
 import { getPiiProfile, isPiiComplete } from "../lib/pii-store";
 import { loadProfile } from "../lib/profile";
 import { getMode } from "../lib/settings";
@@ -298,8 +305,9 @@ export class StateMachine {
 
           case AutoApplyStep.FINAL_CONFIRMATION: {
             // Gupy's "Introduce yourself!" modal — the real submit step. In
-            // auto mode we click the Finish-application button and let the
-            // loop re-detect; in dry-run we pause for manual confirm.
+            // auto mode we wait for the Finish button to become clickable
+            // (Gupy keeps it aria-disabled during a cooling period to force
+            // users to read the modal), then click; in dry-run we pause.
             if (this.mode !== "auto") {
               this.transition(AutoApplyStep.REVIEW);
               break;
@@ -312,18 +320,6 @@ export class StateMachine {
               break;
             }
 
-            // First entry: mark the timeout clock. Subsequent entries (the
-            // loop can iterate here while the click propagates) check it.
-            if (this.finalConfirmationStart === 0) {
-              this.finalConfirmationStart = Date.now();
-            } else if (Date.now() - this.finalConfirmationStart > 60000) {
-              this.transitionToError(
-                ErrorType.TIMEOUT,
-                "Modal 'Introduce yourself' não fechou após 60s — envio pode ter falhado.",
-              );
-              break;
-            }
-
             const finishBtn = a.findFinalConfirmationSubmitButton?.(modal) ?? null;
             if (!finishBtn) {
               this.transitionToError(
@@ -333,12 +329,46 @@ export class StateMachine {
               break;
             }
 
+            if (!isClickable(finishBtn)) {
+              // Gupy's cooling period — poll up to 25s for enablement.
+              // Typical wait is 3-10s. 25s is generous for slow connections.
+              console.log(
+                "[SM] FINAL_CONFIRMATION: Finish button not clickable yet, waiting...",
+                describeClickability(finishBtn),
+              );
+              const becameClickable = await waitUntilClickable(finishBtn, 25000, 400);
+              if (!becameClickable) {
+                console.error(
+                  "[SM] FINAL_CONFIRMATION: Finish button stayed disabled after 25s",
+                  describeClickability(finishBtn),
+                );
+                this.transitionToError(
+                  ErrorType.TIMEOUT,
+                  "Botão 'Finalizar candidatura' permaneceu desabilitado após 25s.",
+                );
+                break;
+              }
+              console.log("[SM] FINAL_CONFIRMATION: Finish button now clickable");
+            }
+
             console.log("[SM] FINAL_CONFIRMATION: clicking Finish in modal");
             await humanLikeClick(finishBtn);
-            // Short wait for the modal close + success render. We don't
-            // insist on success here — the next loop iteration re-detects.
-            await waitForNavigation(5000).catch(() => {});
-            await randomDelay(500, 1200);
+            // Watch for completion actively: modal should close and success
+            // render within a few seconds. If the modal is still up after the
+            // click, the re-entry into this case will poll clickability again
+            // (idempotent retries are fine).
+            await waitForNavigation(8000).catch(() => {});
+            await randomDelay(800, 1500);
+            // Total budget from first entry: 60s.
+            if (this.finalConfirmationStart === 0) {
+              this.finalConfirmationStart = Date.now();
+            } else if (Date.now() - this.finalConfirmationStart > 60000) {
+              this.transitionToError(
+                ErrorType.TIMEOUT,
+                "Modal 'Introduce yourself' não fechou após 60s — envio pode ter falhado.",
+              );
+              break;
+            }
             this.transition(a.detectScreen());
             break;
           }

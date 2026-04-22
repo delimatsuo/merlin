@@ -115,6 +115,64 @@ export async function humanLikeType(
 /**
  * Simulates a realistic mouse click sequence on an element.
  */
+/**
+ * Is this element actually clickable right now? Covers all the ways a page
+ * can disable a button without setting the native `disabled` attribute:
+ *   - HTMLButtonElement.disabled (form elements only)
+ *   - aria-disabled="true"
+ *   - CSS pointer-events: none (on the element or an ancestor)
+ *   - opacity below 0.5 (visually disabled)
+ */
+export function isClickable(el: HTMLElement): boolean {
+  if ((el as HTMLButtonElement).disabled) return false;
+  if (el.getAttribute("aria-disabled") === "true") return false;
+  const style = getComputedStyle(el);
+  if (style.pointerEvents === "none") return false;
+  if (parseFloat(style.opacity || "1") < 0.5) return false;
+  // Ancestor with pointer-events:none also blocks clicks
+  let cursor: HTMLElement | null = el.parentElement;
+  while (cursor) {
+    if (getComputedStyle(cursor).pointerEvents === "none") return false;
+    cursor = cursor.parentElement;
+  }
+  return true;
+}
+
+/** Snapshot of why an element is (or isn't) clickable. For stuck-state logs. */
+export function describeClickability(el: HTMLElement): Record<string, string> {
+  const style = getComputedStyle(el);
+  const parent = el.parentElement;
+  return {
+    tag: el.tagName.toLowerCase(),
+    text: (el.textContent || "").trim().slice(0, 50),
+    disabled: String((el as HTMLButtonElement).disabled),
+    ariaDisabled: el.getAttribute("aria-disabled") || "",
+    pointerEvents: style.pointerEvents,
+    opacity: style.opacity,
+    parentPointerEvents: parent ? getComputedStyle(parent).pointerEvents : "",
+  };
+}
+
+/**
+ * Wait for an element to become clickable (see isClickable). Polls every
+ * `intervalMs`, resolving true on first clickable check or false on timeout.
+ * Used by the state machine's FINAL_CONFIRMATION handler to wait out Gupy's
+ * "cooling period" on the Introduce-yourself modal's Finish button instead
+ * of clicking a disabled button uselessly in a loop.
+ */
+export async function waitUntilClickable(
+  el: HTMLElement,
+  timeoutMs: number = 20000,
+  intervalMs: number = 400,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (isClickable(el)) return true;
+    await sleep(intervalMs);
+  }
+  return false;
+}
+
 export async function humanLikeClick(el: HTMLElement): Promise<void> {
   el.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
   // Small pause (50–100 ms)
