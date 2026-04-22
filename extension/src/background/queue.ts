@@ -17,6 +17,34 @@ const POLL_ALARM = "merlin_queue_poll";
 const POLL_INTERVAL_MIN = 1.5; // 90 seconds per spec
 const ACTIVE_STATUSES = new Set(["pending", "running", "needs_attention"]);
 
+/**
+ * Max application tabs we drive in parallel. A single stuck tab (e.g. waiting
+ * out Gupy's "Introduce yourself!" cooling period or waiting on a human for
+ * a custom question) no longer blocks the rest of the batch. 4 gives roughly
+ * 4× throughput while staying well below any plausible bot-detection heuristic
+ * — each tab is still a one-user-one-application event, just in parallel.
+ */
+const MAX_CONCURRENT_APPLICATIONS = 4;
+
+/**
+ * Minimum + jitter between tab opens within a single drive pass. Prevents all
+ * N tabs from opening in the same millisecond (which looks scripted) and also
+ * gives each tab's content script a moment to initialize before the next fires.
+ */
+const TAB_OPEN_MIN_DELAY_MS = 5000;
+const TAB_OPEN_MAX_DELAY_MS = 10000;
+
+function staggerDelayMs(): number {
+  return (
+    TAB_OPEN_MIN_DELAY_MS +
+    Math.floor(Math.random() * (TAB_OPEN_MAX_DELAY_MS - TAB_OPEN_MIN_DELAY_MS))
+  );
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 type ApiFn = (
   method: string,
   path: string,
@@ -125,8 +153,9 @@ async function findQueueIdForTab(tabId: number): Promise<string | null> {
  * popup open, tab status update, batch kick).
  *
  * Rules:
- *   - At most one tab in status "running" at a time (sequential).
- *   - "needs_attention" tabs stay open but do NOT block the next pending.
+ *   - Up to MAX_CONCURRENT_APPLICATIONS tabs in status "running" at once.
+ *   - "needs_attention" tabs stay open but do NOT count toward concurrency
+ *     (they're waiting on the user, not actively consuming a slot).
  *   - When no active entries remain, call complete-batch (once per batch).
  */
 export async function driveQueue(): Promise<void> {
@@ -161,9 +190,18 @@ export async function driveQueue(): Promise<void> {
       }
     }
 
-    // Only open a new tab if nothing is actively running.
-    if (running.length === 0 && pending.length > 0) {
-      const next = pending[0];
+    // Open up to `slots` new tabs this pass. A small random stagger between
+    // opens avoids all N tabs firing in the same millisecond (which looks
+    // scripted and would also hit Gupy with burst traffic from one account).
+    const slots = Math.max(0, MAX_CONCURRENT_APPLICATIONS - running.length);
+    const toOpen = pending.slice(0, slots);
+    if (toOpen.length > 0) {
+      console.log(
+        `[Queue] Opening ${toOpen.length} tab(s) (running=${running.length}, pending=${pending.length}, cap=${MAX_CONCURRENT_APPLICATIONS})`,
+      );
+    }
+    for (let i = 0; i < toOpen.length; i++) {
+      const next = toOpen[i];
       try {
         const tab = await chrome.tabs.create({ url: next.job_url, active: false });
         if (tab.id) {
@@ -178,6 +216,10 @@ export async function driveQueue(): Promise<void> {
           status: "failed",
           error_message: (err as Error).message,
         });
+      }
+      // Stagger before opening the next tab (skip stagger after the last one).
+      if (i < toOpen.length - 1) {
+        await sleep(staggerDelayMs());
       }
     }
 
