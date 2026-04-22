@@ -14,6 +14,47 @@
 
 import { StateMachine } from "./state-machine";
 import { getAdapter } from "./adapters/registry";
+import { AutoApplyStep } from "../lib/types";
+
+/**
+ * Safety net: keep watching the page for the success screen even after the
+ * state machine has exited or gotten stuck. Fires a single completion report
+ * if we ever observe COMPLETE. This guards against:
+ *   - SM reaching ERROR (timed out in IDLE) before the user-submitted page
+ *     finishes loading
+ *   - SM exiting normally but the detector missing the success screen in its
+ *     final poll window
+ *   - Any future adapter path where we bypass autoSubmit's built-in polling.
+ */
+function installCompletionSafetyNet(queueId: string): void {
+  let reported = false;
+  const start = Date.now();
+  const MAX_WATCH_MS = 10 * 60 * 1000; // 10 min — longer than any realistic apply
+  const timer = setInterval(() => {
+    if (reported) return;
+    if (Date.now() - start > MAX_WATCH_MS) {
+      clearInterval(timer);
+      return;
+    }
+    try {
+      const a = getAdapter();
+      if (!a) return;
+      if (a.detectScreen() === AutoApplyStep.COMPLETE) {
+        reported = true;
+        console.log(
+          "[GuPy AutoApply] Safety-net: success screen detected, reporting completion. queueId:",
+          queueId,
+        );
+        chrome.runtime
+          .sendMessage({ type: "TAB_STATUS_UPDATE", update: { completed: true } })
+          .catch(() => {});
+        clearInterval(timer);
+      }
+    } catch {
+      /* adapter changed mid-navigation — retry next tick */
+    }
+  }, 2000);
+}
 
 function isSupportedApplicationPage(): boolean {
   const a = getAdapter();
@@ -109,6 +150,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       "[GuPy AutoApply] Queue-owned tab — auto-running. queueId:",
       ownership.ownership.queueId,
     );
+    installCompletionSafetyNet(ownership.ownership.queueId);
     await new Promise((r) => setTimeout(r, 500));
     sm.run(window.location.href);
     return;
