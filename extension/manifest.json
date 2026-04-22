@@ -8,7 +8,9 @@
     "*://*.gupy.io/*",
     "https://merlincv.com/*",
     "https://staging.merlincv.com/*",
-    "http://localhost:3000/*"
+    "https://merlin-backend-531233742939.southamerica-east1.run.app/*",
+    "http://localhost:3000/*",
+    "http://localhost:8000/*"
   ],
   "background": { "service_worker": "dist/service-worker.js" },
   "content_scripts": [
