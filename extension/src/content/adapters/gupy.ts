@@ -12,6 +12,8 @@ import {
   findFinishButton,
   findDisqualifyingReviewModal,
   findConfirmButtonInModal,
+  findIntroduceYourselfModal,
+  findFinishButtonInIntroduceModal,
 } from "../screens/detector";
 import { handleWelcome } from "../screens/welcome";
 import { handleAdditionalInfo } from "../screens/additional-info";
@@ -61,11 +63,18 @@ export const gupyAdapter: BoardAdapter = {
     return findFinishButton();
   },
 
+  // Order matters: the disqualifying-review modal appears between custom
+  // questions and the final step; the introduce-yourself modal appears
+  // right before submit. Only one is ever visible at once.
   findBlockingModal() {
-    return findDisqualifyingReviewModal();
+    return findDisqualifyingReviewModal() ?? findIntroduceYourselfModal();
   },
 
+  // Each modal has its own "continue past this" button. Try the confirm
+  // button first (for the disqualifying-review modal), fall back to the
+  // finish button (for the introduce-yourself modal). Returning null here
+  // means the caller pauses for user confirmation.
   findModalConfirmButton(modal) {
-    return findConfirmButtonInModal(modal);
+    return findConfirmButtonInModal(modal) ?? findFinishButtonInIntroduceModal(modal);
   },
 };

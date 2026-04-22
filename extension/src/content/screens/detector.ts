@@ -315,6 +315,60 @@ export function findConfirmButtonInModal(modal: HTMLElement): HTMLElement | null
 }
 
 /**
+ * Detect Gupy's "Introduce yourself!" optional-personalization modal that
+ * appears right before the final submit step. Two buttons: "Personalize
+ * application" (opens cover letter flow) and "Finish application" (skip).
+ * Auto mode skips straight to submit by clicking the finish button.
+ */
+export function findIntroduceYourselfModal(): HTMLElement | null {
+  const headingTexts = [
+    "introduce yourself",
+    "apresente-se",
+    "apresente se",
+  ];
+  for (const text of headingTexts) {
+    const el = findElementByText(
+      "h1, h2, h3, h4, [class*='title'], [class*='Title'], [class*='heading'], [class*='Heading']",
+      text,
+    );
+    if (el) {
+      const modal = el.closest(
+        "[role='dialog'], [class*='modal'], [class*='Modal'], [class*='dialog'], [class*='Dialog']",
+      ) as HTMLElement | null;
+      if (modal) return modal;
+      return (el.closest("section, div[class*='container']") as HTMLElement | null) ?? el;
+    }
+  }
+  return null;
+}
+
+/**
+ * Inside the Introduce-yourself modal, find the "Finish application" /
+ * "Finalizar candidatura" button. We deliberately pick finish over
+ * personalize so the batch driver doesn't get sidetracked into an optional
+ * cover-letter flow — users can iterate on cover letters separately.
+ */
+export function findFinishButtonInIntroduceModal(modal: HTMLElement): HTMLElement | null {
+  const finishTexts = [
+    "finish application",
+    "finalizar candidatura",
+    "finalizar aplicação",
+    "finalizar aplicacao",
+    "concluir candidatura",
+  ];
+  const buttons = modal.querySelectorAll<HTMLElement>(CLICKABLE);
+  for (const text of finishTexts) {
+    for (let i = 0; i < buttons.length; i++) {
+      const btn = buttons[i];
+      if ((btn as HTMLButtonElement).disabled) continue;
+      const label = btn.textContent?.trim().toLowerCase() || "";
+      if (label === text || label.includes(text)) return btn;
+    }
+  }
+  return null;
+}
+
+/**
  * Find a clickable "next" or "continue" button on the current screen.
  */
 export function findNextButton(): HTMLElement | null {
