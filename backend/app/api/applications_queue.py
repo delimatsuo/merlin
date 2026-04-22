@@ -143,10 +143,20 @@ async def create_queue(
         })
 
     if not accepted:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Nenhuma vaga elegível para aplicação automática (apenas Gupy).",
-        )
+        # Pick the most useful error message for the user based on WHY all
+        # the jobs were rejected. Distinguishes "already queued" (actionable:
+        # cancel the current batch first) from "no Gupy jobs" (actionable:
+        # pick different jobs).
+        reasons = {r.get("reason") for r in rejected}
+        if reasons == {"already_queued"}:
+            detail = "Essas vagas já estão no lote atual. Abra /dashboard/candidaturas e clique em 'Cancelar restantes' antes de aplicar novamente."
+        elif reasons == {"duplicate_in_request"}:
+            detail = "Vagas duplicadas na seleção."
+        elif "already_queued" in reasons:
+            detail = "Uma ou mais vagas selecionadas já estão no lote atual; as demais não são do Gupy."
+        else:
+            detail = "Nenhuma vaga elegível para aplicação automática (apenas Gupy)."
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
 
     batch_id = str(uuid.uuid4())
     await fs.create_queue_entries(user.uid, accepted, batch_id)
