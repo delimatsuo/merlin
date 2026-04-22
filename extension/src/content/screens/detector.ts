@@ -204,6 +204,46 @@ function isWelcomeScreen(): boolean {
 }
 
 /**
+ * Is the job posting closed / no longer accepting applications?
+ * Gupy tenants render this on the welcome page (before the form flow),
+ * with either an "Applications closed" badge, a "No longer accepting
+ * applications" / "Inscrições encerradas" label, or a disabled Apply button.
+ */
+export function isJobClosed(): boolean {
+  const bodyText = (document.body?.innerText || "").toLowerCase();
+  const closedPhrases = [
+    "applications closed",
+    "no longer accepting applications",
+    "inscrições encerradas",
+    "inscricoes encerradas",
+    "candidaturas encerradas",
+    "vaga encerrada",
+    "vagas encerradas",
+    "não está mais recebendo candidaturas",
+    "nao esta mais recebendo candidaturas",
+    "esta vaga expirou",
+    "this job is no longer available",
+  ];
+  for (const phrase of closedPhrases) {
+    if (bodyText.includes(phrase)) return true;
+  }
+
+  // Disabled Apply button is a strong signal on the job posting page.
+  // Gupy usually renders the Apply button as <button disabled> on closed jobs.
+  const applyButtons = document.querySelectorAll<HTMLButtonElement>("button");
+  const applyLabels = ["apply", "candidatar", "candidatar-se", "inscrever-se", "aplicar"];
+  for (let i = 0; i < applyButtons.length; i++) {
+    const btn = applyButtons[i];
+    const text = (btn.textContent || "").trim().toLowerCase();
+    if (applyLabels.some((l) => text === l || text.startsWith(l + " ") || text.startsWith(l))) {
+      if (btn.disabled) return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Check if the user is logged into Gupy.
  * Returns true if a user avatar or menu is detected.
  */

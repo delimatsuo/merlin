@@ -11,6 +11,7 @@ import type { AdditionalInfoResult } from "./screens/additional-info";
 import type { CustomQuestionsResult, UnansweredField } from "./screens/custom-questions";
 import type { PersonalizationResult } from "./screens/personalization";
 import { showInPageHumanPrompt, removeInPagePrompt } from "./screens/in-page-prompt";
+import { isJobClosed } from "./screens/detector";
 import { randomDelay, waitForNavigation, humanLikeClick } from "./dom/helpers";
 import { getPiiProfile, isPiiComplete } from "../lib/pii-store";
 import { loadProfile } from "../lib/profile";
@@ -33,6 +34,8 @@ function reportTabStatus(update: {
   errorMessage?: string;
   needsHuman?: boolean;
   needsConfirmation?: boolean;
+  skipped?: boolean;
+  skipReason?: string;
 }): void {
   chrome.runtime
     .sendMessage({ type: "TAB_STATUS_UPDATE", update })
@@ -505,6 +508,23 @@ export class StateMachine {
     if (!a || !a.isApplicationPage()) {
       this.transitionToError(ErrorType.GUPY_LOGIN_REQUIRED, "Navegue para uma página de candidatura suportada.");
       this.broadcastStatus();
+      return false;
+    }
+
+    // Check 1b: job posting closed — skip cleanly instead of erroring.
+    // Checked before auth/profile loading so a closed job never spends LLM
+    // budget and never confuses the user with a "failed" status.
+    if (isJobClosed()) {
+      console.log("[SM] Job is closed — reporting skipped and exiting");
+      reportTabStatus({
+        skipped: true,
+        skipReason: "Vaga encerrada — não aceita mais candidaturas.",
+      });
+      // Don't transition to ERROR: skipped is a clean outcome, not a failure.
+      // Leave state at PRE_CHECK, caller's run() will exit the loop because
+      // we return false. clearState drops any persisted session for this tab.
+      await this.clearState();
+      this.running = false;
       return false;
     }
 

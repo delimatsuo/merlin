@@ -210,6 +210,8 @@ export async function onTabStatusUpdate(
     errorMessage?: string;
     needsHuman?: boolean;
     needsConfirmation?: boolean;
+    skipped?: boolean;
+    skipReason?: string;
   },
 ): Promise<void> {
   const queueId = await findQueueIdForTab(tabId);
@@ -217,6 +219,24 @@ export async function onTabStatusUpdate(
 
   if (update.completed) {
     await patchQueueEntry(queueId, { status: "applied" });
+    await clearTabOwnership(tabId);
+    try {
+      await chrome.tabs.remove(tabId);
+    } catch {
+      /* already closed */
+    }
+    await driveQueue();
+    return;
+  }
+
+  if (update.skipped) {
+    // Job posting closed or otherwise un-appliable — mark skipped (not failed)
+    // and advance. Distinct from "failed" in the UI so the user can see this
+    // wasn't a tooling bug.
+    await patchQueueEntry(queueId, {
+      status: "skipped",
+      error_message: update.skipReason ?? "Vaga não aceita mais candidaturas.",
+    });
     await clearTabOwnership(tabId);
     try {
       await chrome.tabs.remove(tabId);
