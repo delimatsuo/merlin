@@ -123,7 +123,7 @@ export class StateMachine {
   /**
    * Main run loop. Drives the state machine from PRE_CHECK to REVIEW/COMPLETE.
    */
-  async run(jobUrl: string): Promise<void> {
+  async run(jobUrl: string, opts?: { forceMode?: "dry-run" | "auto" }): Promise<void> {
     if (this.running) return;
     this.running = true;
     this.jobUrl = jobUrl;
@@ -133,9 +133,10 @@ export class StateMachine {
       // Restore state if resuming
       await this.restoreState();
 
-      // Load mode setting
-      this.mode = await getMode();
-      console.log(`[SM] Running in ${this.mode} mode`);
+      // Load mode setting — queue-driven tabs force "auto" (the user opted
+      // in by queuing the batch; the popup toggle governs only manual runs).
+      this.mode = opts?.forceMode ?? (await getMode());
+      console.log(`[SM] Running in ${this.mode} mode${opts?.forceMode ? " (forced)" : ""}`);
 
       // If starting fresh, begin with pre-checks
       if (this.currentStep === AutoApplyStep.IDLE) {

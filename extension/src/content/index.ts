@@ -152,7 +152,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     );
     installCompletionSafetyNet(ownership.ownership.queueId);
     await new Promise((r) => setTimeout(r, 500));
-    sm.run(window.location.href);
+    sm.run(window.location.href, { forceMode: "auto" });
     return;
   }
 
