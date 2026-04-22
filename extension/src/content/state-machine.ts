@@ -218,7 +218,7 @@ export class StateMachine {
         switch (this.currentStep) {
           case AutoApplyStep.WELCOME:
             await a.handleWelcome();
-            await randomDelay(300, 800);
+            await randomDelay(150, 400);
             await waitForNavigation(5000);
             this.transition(a.detectScreen()); // Re-detect after navigation
             break;
@@ -237,7 +237,7 @@ export class StateMachine {
               break;
             }
 
-            await randomDelay(1000, 2000);
+            await randomDelay(400, 800);
             // Click next and wait for navigation is handled inside handleAdditionalInfo
             this.transition(a.detectScreen());
             break;
@@ -286,7 +286,7 @@ export class StateMachine {
               return;
             }
 
-            await randomDelay(1000, 2000);
+            await randomDelay(400, 800);
             this.transition(a.detectScreen());
             break;
           }
@@ -295,7 +295,7 @@ export class StateMachine {
             const pResult: PersonalizationResult = await a.handlePersonalization();
             if (pResult.answered) this.questionsAnswered += 1;
             this.llmCalls += pResult.llmCalls;
-            await randomDelay(1000, 2000);
+            await randomDelay(400, 800);
             // Always re-detect — if the pre-submit modal is now open we'll
             // route to FINAL_CONFIRMATION on the next iteration; if the
             // success screen showed up directly we'll route to COMPLETE.
@@ -357,8 +357,8 @@ export class StateMachine {
             // render within a few seconds. If the modal is still up after the
             // click, the re-entry into this case will poll clickability again
             // (idempotent retries are fine).
-            await waitForNavigation(8000).catch(() => {});
-            await randomDelay(800, 1500);
+            await waitForNavigation(5000).catch(() => {});
+            await randomDelay(400, 900);
             // Total budget from first entry: 60s.
             if (this.finalConfirmationStart === 0) {
               this.finalConfirmationStart = Date.now();
@@ -384,7 +384,7 @@ export class StateMachine {
                 this.transitionToError(ErrorType.TIMEOUT, "Nenhuma tela reconhecida após 30s.");
                 break;
               }
-              await randomDelay(2000, 3000);
+              await randomDelay(1000, 1500);
             } else {
               this.transition(detected);
             }

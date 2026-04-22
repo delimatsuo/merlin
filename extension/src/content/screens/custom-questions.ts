@@ -130,7 +130,7 @@ export async function handleCustomQuestions(): Promise<CustomQuestionsResult> {
         await fillQuestionField(result.field, result.value);
         answered++;
         console.log(`[CustomQuestions] Filled "${result.field.label}" via ${result.source}`);
-        await randomDelay(300, 800);
+        await randomDelay(150, 400);
       } catch (err) {
         console.error(`[CustomQuestions] Fill failed for "${result.field.label}":`, err);
         needsHuman.push(result.field.label);
@@ -142,8 +142,15 @@ export async function handleCustomQuestions(): Promise<CustomQuestionsResult> {
     }
   }
 
-  // --- Fallback: individual LLM calls for remaining fields ---
-  for (const field of needsIndividualLlm) {
+  // --- Fallback: parallel individual LLM calls for remaining fields ---
+  // Network round-trip is the dominant cost per call (backend ~2-3s each).
+  // Running them in parallel collapses N*2.5s into roughly 2.5s total. Fills
+  // still happen sequentially afterwards so React state updates don't race.
+  type IndivResult =
+    | { field: ScrapedField; ok: true; answer: string; modelUsed: string }
+    | { field: ScrapedField; ok: false; reason: "needs_human" | "error" | "budget"; model?: string; err?: string };
+
+  const callOne = async (field: ScrapedField): Promise<IndivResult> => {
     try {
       const response = await apiPost<{
         answer: string | null;
@@ -158,32 +165,50 @@ export async function handleCustomQuestions(): Promise<CustomQuestionsResult> {
         job_title: jobTitle,
       });
 
-      llmCalls++;
-
       if (response.needs_human || !response.answer) {
-        console.log(`[CustomQuestions] NEEDS_HUMAN: "${field.label}" (${response.model_used})`);
-        needsHuman.push(field.label);
-        skipped++;
-        continue;
+        return { field, ok: false, reason: "needs_human", model: response.model_used };
       }
-
-      await fillQuestionField(field, response.answer);
-      answered++;
-      console.log(`[CustomQuestions] Answered: "${field.label}" (${response.model_used})`);
-      await randomDelay(500, 1500);
-
+      return { field, ok: true, answer: response.answer, modelUsed: response.model_used };
     } catch (error) {
-      console.error(`[CustomQuestions] Failed for "${field.label}":`, error);
       const errMsg = (error as Error).message || "";
       if (errMsg.includes("429") || errMsg.includes("Limite")) {
-        needsHuman.push(field.label);
-        for (let i = needsIndividualLlm.indexOf(field) + 1; i < needsIndividualLlm.length; i++) {
-          needsHuman.push(needsIndividualLlm[i].label);
-        }
-        skipped += needsIndividualLlm.length - needsIndividualLlm.indexOf(field);
-        break;
+        return { field, ok: false, reason: "budget", err: errMsg };
       }
-      needsHuman.push(field.label);
+      return { field, ok: false, reason: "error", err: errMsg };
+    }
+  };
+
+  const results = await Promise.all(needsIndividualLlm.map(callOne));
+  // The only case where we short-circuit the whole step is 429 / budget
+  // exhaustion — once we're out of budget, every remaining call will fail
+  // the same way, and we should route all unfilled to needs_human.
+  const budgetExhausted = results.some((r) => !r.ok && r.reason === "budget");
+
+  for (const r of results) {
+    llmCalls++;
+    if (budgetExhausted) {
+      needsHuman.push(r.field.label);
+      skipped++;
+      continue;
+    }
+    if (!r.ok) {
+      if (r.reason === "needs_human") {
+        console.log(`[CustomQuestions] NEEDS_HUMAN: "${r.field.label}" (${r.model ?? "?"})`);
+      } else {
+        console.error(`[CustomQuestions] Failed for "${r.field.label}": ${r.err}`);
+      }
+      needsHuman.push(r.field.label);
+      skipped++;
+      continue;
+    }
+    try {
+      await fillQuestionField(r.field, r.answer);
+      answered++;
+      console.log(`[CustomQuestions] Answered: "${r.field.label}" (${r.modelUsed})`);
+      await randomDelay(200, 500);
+    } catch (err) {
+      console.error(`[CustomQuestions] Fill failed for "${r.field.label}":`, err);
+      needsHuman.push(r.field.label);
       skipped++;
     }
   }
@@ -236,11 +261,11 @@ async function finishAndNavigate(
     return { answered, skipped, llmCalls, needsHuman, unansweredFields, validationErrors: [] };
   }
 
-  await randomDelay(1000, 2000);
+  await randomDelay(400, 800);
   const nextBtn = findNextButton();
   if (nextBtn) {
     await humanLikeClick(nextBtn);
-    await waitForNavigation(15000);
+    await waitForNavigation(8000);
   }
 
   const validationErrors = await detectValidationErrors();

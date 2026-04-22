@@ -39,7 +39,7 @@ export async function handlePersonalization(): Promise<PersonalizationResult> {
     const nextBtn = findNextButton();
     if (nextBtn) {
       await humanLikeClick(nextBtn);
-      await waitForNavigation(15000);
+      await waitForNavigation(8000);
     }
     return { answered: true, llmCalls: 0 };
   }
@@ -72,11 +72,11 @@ export async function handlePersonalization(): Promise<PersonalizationResult> {
     console.log(`[Personalization] Answered (${response.model_used}): "${response.answer.substring(0, 50)}..."`);
 
     // Click next
-    await randomDelay(1000, 2000);
+    await randomDelay(400, 800);
     const nextBtn = findNextButton();
     if (nextBtn) {
       await humanLikeClick(nextBtn);
-      await waitForNavigation(15000);
+      await waitForNavigation(8000);
     }
 
     return { answered: true, llmCalls: 1 };

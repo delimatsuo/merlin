@@ -70,18 +70,24 @@ export function setReactValue(
 /* ------------------------------------------------------------------ */
 
 /**
- * Types a string character by character with realistic timing.
- * Clears any existing value first.
+ * Type-in value with character-level timing for short inputs (≤ 80 chars),
+ * and a single-shot burst via setReactValue for longer values.
+ *
+ * Why the split: character-by-character typing on a 1000-char personalization
+ * textarea took 30-60s of pure delay. Gupy's candidate portal doesn't check
+ * for typing rhythm (anti-bot here relies on session/IP, not keystroke
+ * timing), so there's no benefit to that cost. Short inputs (name, phone,
+ * salary, single-line questions) still go through the per-char path because
+ * they're cheap and some React forms debounce on keyup.
  */
 export async function humanLikeType(
   el: HTMLInputElement | HTMLTextAreaElement,
   value: string,
 ): Promise<void> {
-  // Focus the element
   el.focus();
   el.dispatchEvent(new Event("focus", { bubbles: true }));
 
-  // Clear existing value (select all + delete)
+  // Clear existing value first.
   el.dispatchEvent(
     new KeyboardEvent("keydown", { key: "a", code: "KeyA", ctrlKey: true, bubbles: true }),
   );
@@ -90,25 +96,30 @@ export async function humanLikeType(
   );
   setReactValue(el, "");
 
-  // Type character by character
+  // Long values: burst via setReactValue. ~80 chars = roughly the shortest
+  // "intro sentence" we see in real answers; below it we keep per-char timing.
+  if (value.length > 80) {
+    setReactValue(el, value);
+    el.dispatchEvent(new Event("blur", { bubbles: true }));
+    return;
+  }
+
+  // Short values: per-char with snug (15-40 ms) delays. Original 30-80 ms was
+  // more jitter than needed — anti-bot detectors look for constant rhythms,
+  // not absolute per-char speed, and this range is still within human range.
   let current = "";
   for (const char of value) {
     el.dispatchEvent(
       new KeyboardEvent("keydown", { key: char, code: `Key${char.toUpperCase()}`, bubbles: true }),
     );
-
     current += char;
     setReactValue(el, current);
-
     el.dispatchEvent(
       new KeyboardEvent("keyup", { key: char, code: `Key${char.toUpperCase()}`, bubbles: true }),
     );
-
-    // Random 30–80 ms between characters
-    await sleep(Math.floor(Math.random() * 51) + 30);
+    await sleep(Math.floor(Math.random() * 26) + 15);
   }
 
-  // Final blur
   el.dispatchEvent(new Event("blur", { bubbles: true }));
 }
 

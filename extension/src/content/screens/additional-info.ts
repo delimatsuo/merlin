@@ -35,7 +35,7 @@ export async function handleAdditionalInfo(): Promise<AdditionalInfoResult> {
     const nextBtn = findNextButton();
     if (nextBtn) {
       await humanLikeClick(nextBtn);
-      await waitForNavigation(15000);
+      await waitForNavigation(8000);
     }
     return { filled: 0, skipped: 0, llmCalls: 0, validationErrors: [] };
   }
@@ -64,7 +64,7 @@ export async function handleAdditionalInfo(): Promise<AdditionalInfoResult> {
   // skip matching entirely
   if (unfilled.length === 0) {
     console.log("[AdditionalInfo] All fields pre-filled, clicking next");
-    await randomDelay(300, 600);
+    await randomDelay(150, 300);
     const nextBtn = findNextButton();
     if (nextBtn) {
       nextBtn.click();
@@ -92,7 +92,7 @@ export async function handleAdditionalInfo(): Promise<AdditionalInfoResult> {
     try {
       await fillField(result.field.element, result.field.type, result.value, result.field.options);
       filled++;
-      await randomDelay(300, 800); // Small delay between fields
+      await randomDelay(150, 400); // Small delay between fields
     } catch (error) {
       console.warn(`[AdditionalInfo] Failed to fill "${result.field.label}":`, error);
       skipped++;

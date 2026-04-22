@@ -20,7 +20,7 @@ export async function handleWelcome(): Promise<void> {
     if (btn) {
       console.log(`[Welcome] Clicking apply: "${text}" (${btn.tagName})`);
       await humanLikeClick(btn);
-      await waitForNavigation(15000);
+      await waitForNavigation(8000);
       return;
     }
   }
@@ -31,7 +31,7 @@ export async function handleWelcome(): Promise<void> {
     if (btn) {
       console.log(`[Welcome] Clicking answer now: "${text}" (${btn.tagName})`);
       await humanLikeClick(btn);
-      await waitForNavigation(15000);
+      await waitForNavigation(8000);
       return;
     }
   }
@@ -47,7 +47,7 @@ export async function handleWelcome(): Promise<void> {
       if (!btnText.includes("save") && !btnText.includes("salvar")) {
         console.log(`[Welcome] Clicking continue: "${btnText}" (${btn.tagName})`);
         await humanLikeClick(btn);
-        await waitForNavigation(15000);
+        await waitForNavigation(8000);
         return;
       }
     }
@@ -64,7 +64,7 @@ export async function handleWelcome(): Promise<void> {
     )) {
       console.log(`[Welcome] Found apply button via fallback: "${b.textContent?.trim()}"`);
       await humanLikeClick(b);
-      await waitForNavigation(15000);
+      await waitForNavigation(8000);
       return;
     }
   }
