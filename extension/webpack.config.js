@@ -10,6 +10,14 @@ const CopyWebpackPlugin = require("copy-webpack-plugin");
 const FIREBASE_API_KEY =
   process.env.FIREBASE_API_KEY || "AIzaSyAPhPf4qzo94WplQwQl9gbjauBbFOi7J3w";
 
+// Backend URL. Default to prod so an unpacked-but-production build works out
+// of the box (an earlier runtime `update_url` check pointed at localhost for
+// any unpacked install, which silently broke every API call). Opt in to
+// localhost with `API_BASE=http://localhost:8000 npm run build`.
+const API_BASE =
+  process.env.API_BASE ||
+  "https://merlin-backend-531233742939.southamerica-east1.run.app";
+
 module.exports = {
   mode: "development",
   devtool: "inline-source-map",
@@ -40,6 +48,7 @@ module.exports = {
   plugins: [
     new webpack.DefinePlugin({
       "process.env.FIREBASE_API_KEY": JSON.stringify(FIREBASE_API_KEY),
+      "process.env.API_BASE": JSON.stringify(API_BASE),
     }),
     new CopyWebpackPlugin({
       patterns: [
