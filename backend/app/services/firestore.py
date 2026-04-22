@@ -1955,6 +1955,39 @@ class FirestoreService:
         logger.info("queue_batch_updated", uid=uid, batch_id=batch_id, status=new_status, count=count)
         return count
 
+    async def cancel_all_active_entries(
+        self,
+        uid: str,
+        only_from: list[str],
+    ) -> int:
+        """Cancel every active entry across all batches for a user.
+
+        Unlike update_batch_status (which is scoped to one batch_id), this
+        walks the whole applicationQueue subcollection and cancels anything
+        whose status matches `only_from`. Used by /cancel to handle the
+        multi-batch accumulation case — a user with 5 overlapping batches
+        should be able to clear the pipeline in one click.
+        """
+        query = (
+            self.db.collection("users").document(uid)
+            .collection("applicationQueue")
+            .order_by("created_at", direction=firestore.Query.DESCENDING)
+            .limit(500)
+        )
+        count = 0
+        now_iso = datetime.now(timezone.utc).isoformat()
+        async for doc in query.stream():
+            data = doc.to_dict() or {}
+            if data.get("status") not in only_from:
+                continue
+            await doc.reference.update({
+                "status": "cancelled",
+                "finished_at": now_iso,
+            })
+            count += 1
+        logger.info("queue_all_active_cancelled", uid=uid, count=count)
+        return count
+
     async def get_batch_entries(self, uid: str, batch_id: str) -> list[dict]:
         query = (
             self.db.collection("users").document(uid)

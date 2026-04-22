@@ -280,40 +280,33 @@ async def update_queue(
 async def pause_queue(
     user: AuthenticatedUser = Depends(get_current_user),
 ):
-    """Cancel all pending entries in the active batch.
+    """Cancel all pending entries across all batches for the user.
 
     v1 is "pause = cancel pending" — running/needs_attention entries keep
-    going. Users who want to stop everything should use /cancel. We drop
-    the old 1-day window that used to strand long-paused batches.
+    going. Users who want to stop everything should use /cancel. Works
+    across all accumulated batches, not just the newest one.
     """
     fs = FirestoreService()
-    active_batch = await fs.get_active_batch_id(user.uid)
-    if not active_batch:
-        return {"paused": 0, "batch_id": None}
-
-    count = await fs.update_batch_status(
-        user.uid, active_batch, "cancelled", only_from=["pending"]
-    )
-    return {"paused": count, "batch_id": active_batch}
+    count = await fs.cancel_all_active_entries(user.uid, only_from=["pending"])
+    return {"paused": count}
 
 
 @router.post("/cancel")
 async def cancel_queue(
     user: AuthenticatedUser = Depends(get_current_user),
 ):
-    """Cancel all remaining work in the active batch (pending + running + needs_attention)."""
-    fs = FirestoreService()
-    active_batch = await fs.get_active_batch_id(user.uid)
-    if not active_batch:
-        return {"cancelled": 0, "batch_id": None}
+    """Cancel ALL active entries across ALL batches for the user.
 
-    count = await fs.update_batch_status(
+    "Cancel remaining" in the UI means "clear the pipeline". Works across
+    accumulated batches — a user who somehow ended up with 5 overlapping
+    batches clears everything in one click instead of N.
+    """
+    fs = FirestoreService()
+    count = await fs.cancel_all_active_entries(
         user.uid,
-        active_batch,
-        "cancelled",
         only_from=["pending", "running", "needs_attention"],
     )
-    return {"cancelled": count, "batch_id": active_batch}
+    return {"cancelled": count}
 
 
 @router.post("/dev-seed", response_model=QueueCreateResponse)
