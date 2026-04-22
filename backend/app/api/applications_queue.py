@@ -91,10 +91,33 @@ async def create_queue(
     """
     fs = FirestoreService()
 
+    # Dedup: if the user already has an ACTIVE entry for the same job_id
+    # (pending / running / needs_attention), don't create a duplicate. This
+    # fixes the failure mode where a browser sees a CORS error, retries the
+    # POST, and each retry silently creates another copy of the same job in
+    # Firestore.
+    active_entries = await fs.list_queue_entries(user.uid, since=None)
+    active_job_ids = {
+        e.get("job_id")
+        for e in active_entries
+        if e.get("status") in {"pending", "running", "needs_attention"}
+    }
+
     accepted: list[dict] = []
     rejected: list[dict] = []
+    seen_in_this_request: set[str] = set()
 
     for job_id in body.job_ids:
+        if job_id in seen_in_this_request:
+            # Caller sent the same id twice in one body — count once.
+            rejected.append({"job_id": job_id, "reason": "duplicate_in_request"})
+            continue
+        seen_in_this_request.add(job_id)
+
+        if job_id in active_job_ids:
+            rejected.append({"job_id": job_id, "reason": "already_queued"})
+            continue
+
         job = await fs.get_job(job_id)
         if not job:
             rejected.append({"job_id": job_id, "reason": "not_found"})

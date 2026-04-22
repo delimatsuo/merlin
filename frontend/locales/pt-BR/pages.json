@@ -373,6 +373,9 @@
   "vagas.batch.startError": "Erro ao iniciar lote. Tente novamente.",
   "vagas.batch.clearSelection": "Limpar seleção",
   "vagas.batch.viewPipeline": "Ver candidaturas em andamento",
+  "vagas.batch.filterAutomatableOnly": "Só automatizáveis",
+  "vagas.batch.filterShowAll": "Mostrar todas",
+  "vagas.batch.filterEmptyAutomatable": "Nenhuma vaga do Gupy encontrada neste período. Ajuste o filtro ou o intervalo de tempo.",
 
   "candidaturas.title": "Candidaturas em lote",
   "candidaturas.subtitle": "Acompanhe o progresso das aplicações automáticas",

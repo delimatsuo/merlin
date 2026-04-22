@@ -373,6 +373,9 @@
   "vagas.batch.startError": "Failed to start batch. Please try again.",
   "vagas.batch.clearSelection": "Clear selection",
   "vagas.batch.viewPipeline": "View running applications",
+  "vagas.batch.filterAutomatableOnly": "Automatable only",
+  "vagas.batch.filterShowAll": "Show all",
+  "vagas.batch.filterEmptyAutomatable": "No Gupy jobs matched this period. Adjust the filter or time range.",
 
   "candidaturas.title": "Batch applications",
   "candidaturas.subtitle": "Track the progress of your automatic applications",

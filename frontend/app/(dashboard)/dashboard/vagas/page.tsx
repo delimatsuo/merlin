@@ -39,10 +39,15 @@ function VagasContent() {
   const [showPrefsEditor, setShowPrefsEditor] = useState(false);
   const [preflightOpen, setPreflightOpen] = useState(false);
   const [submittingBatch, setSubmittingBatch] = useState(false);
+  const [automatableOnly, setAutomatableOnly] = useState(false);
 
   const gupyMatches = useMemo(
     () => matches.filter((m) => (m.source || "").toLowerCase() === "gupy"),
     [matches],
+  );
+  const visibleMatches = useMemo(
+    () => (automatableOnly ? gupyMatches : matches),
+    [automatableOnly, gupyMatches, matches],
   );
   const selectedJobs = useMemo(
     () => gupyMatches.filter((m) => selectedIds.has(m.job_id)),
@@ -220,7 +225,7 @@ function VagasContent() {
         </p>
       </div>
 
-      {/* Auto-apply eligibility banner */}
+      {/* Auto-apply eligibility banner with filter toggle */}
       {gupyMatches.length > 0 && (
         <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-3 flex items-center gap-2.5">
           <div className="shrink-0 h-7 w-7 rounded-full bg-amber-500/20 flex items-center justify-center">
@@ -231,6 +236,20 @@ function VagasContent() {
               ? t("vagas.batch.eligibleBannerOne")
               : t("vagas.batch.eligibleBanner", { count: String(gupyMatches.length) })}
           </p>
+          <button
+            type="button"
+            onClick={() => setAutomatableOnly((v) => !v)}
+            className={cn(
+              "shrink-0 h-7 rounded-full px-3 text-[11px] font-semibold transition-colors",
+              automatableOnly
+                ? "bg-amber-600 text-white hover:bg-amber-700"
+                : "bg-amber-500/20 text-amber-900 hover:bg-amber-500/30",
+            )}
+          >
+            {automatableOnly
+              ? t("vagas.batch.filterShowAll")
+              : t("vagas.batch.filterAutomatableOnly")}
+          </button>
         </div>
       )}
 
@@ -265,9 +284,9 @@ function VagasContent() {
       )}
 
       {/* Matches */}
-      {!loading && matches.length > 0 && (
+      {!loading && visibleMatches.length > 0 && (
         <div className={cn("space-y-3", selectedIds.size > 0 && "pb-24")}>
-          {matches.map((job) => (
+          {visibleMatches.map((job) => (
             <JobCard
               key={job.job_id}
               job={job}
@@ -275,6 +294,20 @@ function VagasContent() {
               onToggleSelect={toggle}
             />
           ))}
+        </div>
+      )}
+
+      {!loading && visibleMatches.length === 0 && matches.length > 0 && automatableOnly && (
+        <div className="apple-shadow rounded-2xl bg-card p-8 text-center">
+          <p className="text-sm text-muted-foreground">
+            {t("vagas.batch.filterEmptyAutomatable")}
+          </p>
+          <button
+            onClick={() => setAutomatableOnly(false)}
+            className="mt-3 text-xs text-foreground font-medium hover:underline"
+          >
+            {t("vagas.batch.filterShowAll")}
+          </button>
         </div>
       )}
 
