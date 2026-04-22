@@ -319,24 +319,56 @@ export function findConfirmButtonInModal(modal: HTMLElement): HTMLElement | null
  * appears right before the final submit step. Two buttons: "Personalize
  * application" (opens cover letter flow) and "Finish application" (skip).
  * Auto mode skips straight to submit by clicking the finish button.
+ *
+ * Gupy styles modal text via styled-components, so the heading is not always
+ * in an h1..h4. We detect defensively by looking for any visible dialog that
+ * contains BOTH an "Introduce yourself"/"Apresente-se" heading AND a
+ * "Finish/Finalizar/Concluir" button — that combination is unique to this
+ * modal in the Gupy candidate flow.
  */
 export function findIntroduceYourselfModal(): HTMLElement | null {
-  const headingTexts = [
-    "introduce yourself",
-    "apresente-se",
-    "apresente se",
+  const introMarkers = ["introduce yourself", "apresente-se", "apresente se"];
+  const finishMarkers = [
+    "finish application",
+    "finalizar candidatura",
+    "finalizar aplicação",
+    "finalizar aplicacao",
+    "concluir candidatura",
   ];
-  for (const text of headingTexts) {
+
+  // Primary: any visible dialog/modal whose text contains both markers.
+  const dialogs = document.querySelectorAll<HTMLElement>(
+    "[role='dialog'], [aria-modal='true'], [class*='modal'], [class*='Modal'], [class*='dialog'], [class*='Dialog']",
+  );
+  for (let i = 0; i < dialogs.length; i++) {
+    const dialog = dialogs[i];
+    const style = getComputedStyle(dialog);
+    if (style.display === "none" || style.visibility === "hidden") continue;
+    const text = (dialog.textContent || "").toLowerCase();
+    const hasIntro = introMarkers.some((m) => text.includes(m));
+    const hasFinish = finishMarkers.some((m) => text.includes(m));
+    if (hasIntro && hasFinish) {
+      console.log("[Detector] Found Introduce-yourself modal via dialog signature");
+      return dialog;
+    }
+  }
+
+  // Fallback: broader heading selector (p/span/div, not just h*), then walk
+  // up to the dialog ancestor.
+  for (const text of introMarkers) {
     const el = findElementByText(
-      "h1, h2, h3, h4, [class*='title'], [class*='Title'], [class*='heading'], [class*='Heading']",
+      "h1, h2, h3, h4, h5, h6, p, strong, span, div, [class*='title'], [class*='Title'], [class*='heading'], [class*='Heading']",
       text,
     );
     if (el) {
       const modal = el.closest(
-        "[role='dialog'], [class*='modal'], [class*='Modal'], [class*='dialog'], [class*='Dialog']",
+        "[role='dialog'], [aria-modal='true'], [class*='modal'], [class*='Modal'], [class*='dialog'], [class*='Dialog']",
       ) as HTMLElement | null;
-      if (modal) return modal;
-      return (el.closest("section, div[class*='container']") as HTMLElement | null) ?? el;
+      if (modal) {
+        console.log("[Detector] Found Introduce-yourself modal via heading fallback");
+        return modal;
+      }
+      return (el.closest("section, div") as HTMLElement | null) ?? el;
     }
   }
   return null;
@@ -355,6 +387,9 @@ export function findFinishButtonInIntroduceModal(modal: HTMLElement): HTMLElemen
     "finalizar aplicação",
     "finalizar aplicacao",
     "concluir candidatura",
+    "finish",
+    "finalizar",
+    "concluir",
   ];
   const buttons = modal.querySelectorAll<HTMLElement>(CLICKABLE);
   for (const text of finishTexts) {
@@ -362,7 +397,24 @@ export function findFinishButtonInIntroduceModal(modal: HTMLElement): HTMLElemen
       const btn = buttons[i];
       if ((btn as HTMLButtonElement).disabled) continue;
       const label = btn.textContent?.trim().toLowerCase() || "";
-      if (label === text || label.includes(text)) return btn;
+      if (label === text || label.includes(text)) {
+        console.log(`[Detector] Found Introduce-yourself Finish button (matched "${text}")`);
+        return btn;
+      }
+    }
+  }
+  // Last resort: pick a non-"Personalize" button in the modal. The modal
+  // reliably contains exactly two buttons (personalize vs finish); whichever
+  // is NOT "personalize"/"personalizar" is the dismiss button.
+  for (let i = 0; i < buttons.length; i++) {
+    const btn = buttons[i];
+    if ((btn as HTMLButtonElement).disabled) continue;
+    const label = btn.textContent?.trim().toLowerCase() || "";
+    if (!label) continue;
+    if (label.includes("personaliz")) continue;
+    if (label.length > 0 && label.length < 50) {
+      console.log(`[Detector] Introduce-yourself: picking non-personalize button "${label}"`);
+      return btn;
     }
   }
   return null;
