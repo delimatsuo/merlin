@@ -127,20 +127,22 @@ export async function humanLikeType(
  * Simulates a realistic mouse click sequence on an element.
  */
 /**
- * Is this element actually clickable right now? Covers all the ways a page
- * can disable a button without setting the native `disabled` attribute:
- *   - HTMLButtonElement.disabled (form elements only)
+ * Is this element actually clickable right now? Checks the three signals
+ * browsers and React apps actually use to block click propagation:
+ *   - HTMLButtonElement.disabled (native)
  *   - aria-disabled="true"
- *   - CSS pointer-events: none (on the element or an ancestor)
- *   - opacity below 0.5 (visually disabled)
+ *   - CSS pointer-events: none (on the element or any ancestor)
+ *
+ * Deliberately does NOT check opacity. Gupy styles secondary buttons (e.g.
+ * "Finish application" vs. "Personalize application") with low opacity
+ * (~0.6) to steer users toward the primary action — those buttons are
+ * fully clickable. An opacity-based rejection produced 5/5 false negatives
+ * in a real batch and left every finish-click as a no-op.
  */
 export function isClickable(el: HTMLElement): boolean {
   if ((el as HTMLButtonElement).disabled) return false;
   if (el.getAttribute("aria-disabled") === "true") return false;
-  const style = getComputedStyle(el);
-  if (style.pointerEvents === "none") return false;
-  if (parseFloat(style.opacity || "1") < 0.5) return false;
-  // Ancestor with pointer-events:none also blocks clicks
+  if (getComputedStyle(el).pointerEvents === "none") return false;
   let cursor: HTMLElement | null = el.parentElement;
   while (cursor) {
     if (getComputedStyle(cursor).pointerEvents === "none") return false;
