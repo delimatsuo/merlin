@@ -1,104 +1,158 @@
 /**
- * Popup script — renders extension status and controls.
- * Handles auth flow, PII profile management, and pre-check status.
+ * Merlin popup — minimal shell.
+ *
+ * Three views:
+ *   - loading      initial fetch of auth + profile
+ *   - auth         not signed in → "Entrar com Google"
+ *   - main         signed in; shows pii-setup OR ready based on state
+ *
+ * Everything that used to live here (mode toggle, manual start, live
+ * application status, review panel, human-input panel, history, LLM usage
+ * counter) is either irrelevant to the batch workflow or surfaced in the
+ * web dashboard. The popup is now a setup + shortcut — nothing else.
  */
 
 import { getPiiProfile, savePiiProfile, isPiiComplete } from "../lib/pii-store";
 import type { PiiProfile } from "../lib/types";
 
-// --- Helper Functions ---
+type View = "loading" | "auth" | "main";
+type SubView = "pii" | "ready";
 
-function showSection(id: string): void {
-  const sections = ["loading", "login-section", "main-section"];
-  for (const sectionId of sections) {
-    const el = document.getElementById(sectionId);
-    if (el) el.style.display = sectionId === id ? "block" : "none";
+let currentView: View = "loading";
+let currentSubView: SubView | null = null;
+
+/** Does this user already have PII saved? Cached so edit→cancel restores. */
+let piiWasCompleteOnOpen = false;
+
+// ---------- View switching ----------
+
+function showView(view: View): void {
+  currentView = view;
+  for (const id of ["view-loading", "view-auth", "view-main"]) {
+    document.getElementById(id)!.hidden = id !== `view-${view}`;
   }
 }
 
-function displayUserInfo(user: { email: string | null; displayName: string | null }): void {
-  const emailEl = document.getElementById("user-email");
-  if (emailEl) {
-    emailEl.textContent = user.email || "Sem email";
-  }
+function showSubView(sub: SubView): void {
+  currentSubView = sub;
+  document.getElementById("view-pii")!.hidden = sub !== "pii";
+  document.getElementById("view-ready")!.hidden = sub !== "ready";
+  const cancelBtn = document.getElementById("pii-cancel") as HTMLButtonElement;
+  // Cancel only makes sense if there's a ready view to return to (i.e. PII
+  // was already complete when the popup opened).
+  cancelBtn.hidden = !(sub === "pii" && piiWasCompleteOnOpen);
 }
 
-function updatePiiStatus(pii: PiiProfile | null): void {
-  const statusEl = document.getElementById("pii-status");
-  const detailEl = document.getElementById("pii-detail");
-  const toggleBtn = document.getElementById("toggle-pii-form");
+// ---------- Toast ----------
 
-  if (isPiiComplete(pii)) {
-    if (statusEl) {
-      statusEl.textContent = "Completo";
-      statusEl.className = "status-badge status-ok";
-    }
-    if (detailEl) {
-      detailEl.textContent = `CPF: ${maskCpf(pii!.cpf)} | Tel: ${pii!.phone}`;
-    }
-    if (toggleBtn) {
-      toggleBtn.textContent = "Editar perfil";
-    }
-  } else {
-    if (statusEl) {
-      statusEl.textContent = "Incompleto";
-      statusEl.className = "status-badge status-pending";
-    }
-    if (detailEl) {
-      detailEl.textContent = "Preencha seus dados para candidaturas automaticas.";
-    }
-    if (toggleBtn) {
-      toggleBtn.textContent = "Configurar perfil";
-    }
-  }
+let toastTimer: ReturnType<typeof setTimeout> | null = null;
+
+function toast(message: string, kind: "success" | "error" = "success"): void {
+  const el = document.getElementById("toast")!;
+  el.textContent = message;
+  el.dataset.kind = kind;
+  el.hidden = false;
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    el.hidden = true;
+  }, 2200);
 }
 
-function maskCpf(cpf: string): string {
-  // Show only last 4 digits: ***.***. 1234
-  if (cpf.length >= 4) {
-    return "***.***.***-" + cpf.replace(/\D/g, "").slice(-2);
-  }
-  return cpf;
+// ---------- User bar ----------
+
+function setUserEmail(email: string | null): void {
+  document.getElementById("user-email")!.textContent = email ?? "";
 }
 
-function populatePiiForm(pii: PiiProfile): void {
-  const form = document.getElementById("pii-form") as HTMLFormElement | null;
-  if (!form) return;
+// ---------- PII form ----------
 
-  const fields: Array<[string, string]> = [
-    ["cpf", pii.cpf],
-    ["rg", pii.rg],
-    ["motherName", pii.motherName],
-    ["birthDate", pii.birthDate],
-    ["gender", pii.gender],
-    ["ethnicity", pii.ethnicity],
-    ["disability", pii.disability],
-    ["maritalStatus", pii.maritalStatus],
-    ["phone", pii.phone],
-    ["street", pii.address.street],
-    ["city", pii.address.city],
-    ["state", pii.address.state],
-    ["zip", pii.address.zip],
-  ];
-
-  for (const [name, value] of fields) {
-    const el = form.querySelector(`[name="${name}"]`) as HTMLInputElement | HTMLSelectElement | null;
+function piiToForm(pii: PiiProfile): void {
+  const form = document.getElementById("pii-form") as HTMLFormElement;
+  const set = (name: string, value: string) => {
+    const el = form.elements.namedItem(name) as
+      | HTMLInputElement
+      | HTMLSelectElement
+      | null;
     if (el) el.value = value || "";
-  }
+  };
+  set("cpf", pii.cpf);
+  set("rg", pii.rg);
+  set("motherName", pii.motherName);
+  set("birthDate", pii.birthDate);
+  set("gender", pii.gender);
+  set("ethnicity", pii.ethnicity);
+  set("disability", pii.disability);
+  set("maritalStatus", pii.maritalStatus);
+  set("phone", pii.phone);
+  set("street", pii.address.street);
+  set("city", pii.address.city);
+  set("state", pii.address.state);
+  set("zip", pii.address.zip);
 }
 
-function togglePiiForm(show: boolean): void {
-  const container = document.getElementById("pii-form-container");
-  if (container) {
-    container.style.display = show ? "block" : "none";
-  }
+function formToPii(): PiiProfile {
+  const form = document.getElementById("pii-form") as HTMLFormElement;
+  const read = (name: string) =>
+    ((form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement)?.value ?? "").trim();
+  return {
+    cpf: read("cpf"),
+    rg: read("rg"),
+    motherName: read("motherName"),
+    birthDate: read("birthDate"),
+    gender: read("gender"),
+    ethnicity: read("ethnicity"),
+    disability: read("disability"),
+    maritalStatus: read("maritalStatus"),
+    phone: read("phone"),
+    address: {
+      street: read("street"),
+      city: read("city"),
+      state: read("state"),
+      zip: read("zip"),
+    },
+  };
 }
 
-let professionalProfileLoaded = false;
+// ---------- Input masks ----------
 
-async function loadProfessionalProfile(): Promise<void> {
-  const statusEl = document.getElementById("profile-status");
-  const detailEl = document.getElementById("profile-detail");
+function applyCpfMask(el: HTMLInputElement): void {
+  el.addEventListener("input", () => {
+    let v = el.value.replace(/\D/g, "").slice(0, 11);
+    if (v.length > 9) v = `${v.slice(0, 3)}.${v.slice(3, 6)}.${v.slice(6, 9)}-${v.slice(9)}`;
+    else if (v.length > 6) v = `${v.slice(0, 3)}.${v.slice(3, 6)}.${v.slice(6)}`;
+    else if (v.length > 3) v = `${v.slice(0, 3)}.${v.slice(3)}`;
+    el.value = v;
+  });
+}
+
+function applyPhoneMask(el: HTMLInputElement): void {
+  el.addEventListener("input", () => {
+    let v = el.value.replace(/\D/g, "").slice(0, 11);
+    if (v.length > 10) v = `(${v.slice(0, 2)}) ${v.slice(2, 7)}-${v.slice(7)}`;
+    else if (v.length > 6) v = `(${v.slice(0, 2)}) ${v.slice(2, 6)}-${v.slice(6)}`;
+    else if (v.length > 2) v = `(${v.slice(0, 2)}) ${v.slice(2)}`;
+    el.value = v;
+  });
+}
+
+function applyCepMask(el: HTMLInputElement): void {
+  el.addEventListener("input", () => {
+    let v = el.value.replace(/\D/g, "").slice(0, 8);
+    if (v.length > 5) v = `${v.slice(0, 5)}-${v.slice(5)}`;
+    el.value = v;
+  });
+}
+
+// ---------- Knowledge-profile status (backend) ----------
+
+interface ProfileResponse {
+  knowledge?: { skills?: string[] } | null;
+}
+
+async function renderProfileStatus(): Promise<void> {
+  const row = document.getElementById("status-profile")!;
+  const textEl = document.getElementById("profile-text")!;
+  const check = row.querySelector(".check") as HTMLElement;
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -108,803 +162,176 @@ async function loadProfessionalProfile(): Promise<void> {
     });
 
     const httpStatus: number | undefined = response?.status;
-    const isHttpError = typeof httpStatus === "number" && httpStatus >= 400;
-    if (response?.error || isHttpError) {
-      if (statusEl) {
-        statusEl.textContent = "Erro";
-        statusEl.className = "status-badge status-error";
+    const isError =
+      response?.error ||
+      (typeof httpStatus === "number" && httpStatus >= 400);
+
+    if (isError) {
+      check.dataset.state = "error";
+      check.textContent = "!";
+      if (httpStatus === 401) {
+        textEl.textContent = "Sessão expirada. Faça login novamente.";
+      } else if (httpStatus === 404) {
+        textEl.textContent = "Complete o onboarding no painel Merlin.";
+      } else {
+        textEl.textContent = "Erro ao carregar perfil.";
       }
-      if (detailEl) {
-        if (httpStatus === 401) {
-          detailEl.textContent = "Sessao expirada. Faca login novamente.";
-        } else if (httpStatus === 403) {
-          detailEl.textContent = "Acesso negado (403). Verifique a conta.";
-        } else if (httpStatus === 404) {
-          detailEl.textContent = "Endpoint nao encontrado (404).";
-        } else if (typeof httpStatus === "number" && httpStatus >= 500) {
-          detailEl.textContent = `Erro do servidor (${httpStatus}).`;
-        } else {
-          detailEl.textContent = "Erro ao carregar perfil.";
-        }
-      }
-      professionalProfileLoaded = false;
       return;
     }
 
-    // Update usage from the same response
-    updateUsageFromProfile(response.data?.daily_llm_calls, response.data?.daily_llm_limit);
-
-    const knowledge = response?.data?.knowledge;
-    if (knowledge && Object.keys(knowledge).length > 0) {
-      if (statusEl) {
-        statusEl.textContent = "OK";
-        statusEl.className = "status-badge status-ok";
-      }
-      const skills = knowledge.skills?.length || 0;
-      if (detailEl) {
-        detailEl.textContent = `${skills} competencias carregadas.`;
-      }
-      professionalProfileLoaded = true;
+    const data = response?.data as ProfileResponse | undefined;
+    const skillCount = data?.knowledge?.skills?.length ?? 0;
+    if (skillCount > 0) {
+      check.dataset.state = "ok";
+      check.textContent = "✓";
+      textEl.textContent = `${skillCount} competências carregadas`;
     } else {
-      if (statusEl) {
-        statusEl.textContent = "Ausente";
-        statusEl.className = "status-badge status-pending";
-      }
-      if (detailEl) {
-        detailEl.textContent = "Configure seu perfil no merlincv.com primeiro.";
-      }
-      professionalProfileLoaded = false;
+      check.dataset.state = "pending";
+      check.textContent = "•";
+      textEl.textContent = "Complete o onboarding no painel Merlin.";
     }
   } catch {
-    if (statusEl) {
-      statusEl.textContent = "Erro";
-      statusEl.className = "status-badge status-error";
-    }
-    if (detailEl) {
-      detailEl.textContent = "Falha ao conectar com o servidor.";
-    }
-    professionalProfileLoaded = false;
+    check.dataset.state = "error";
+    check.textContent = "!";
+    textEl.textContent = "Erro ao carregar perfil.";
   }
 }
 
-function updateUsageFromProfile(count?: number, limit?: number): void {
-  const countEl = document.getElementById("usage-count");
-  if (countEl && count !== undefined) {
-    const max = limit || 50;
-    countEl.textContent = `${count}/${max}`;
-    if (count >= max) {
-      countEl.style.color = "#dc2626";
-    }
+function renderPiiStatus(pii: PiiProfile | null): void {
+  const row = document.getElementById("status-pii")!;
+  const check = row.querySelector(".check") as HTMLElement;
+  const text = row.querySelector(".status-text") as HTMLElement;
+  if (isPiiComplete(pii)) {
+    check.dataset.state = "ok";
+    check.textContent = "✓";
+    text.textContent = "Dados pessoais completos";
+  } else {
+    check.dataset.state = "pending";
+    check.textContent = "•";
+    text.textContent = "Dados pessoais incompletos";
   }
 }
 
-async function loadApplicationHistory(): Promise<void> {
-  const listEl = document.getElementById("history-list");
-  if (!listEl) return;
+// ---------- Flow ----------
 
+async function enterMainView(): Promise<void> {
+  showView("main");
+
+  const pii = await getPiiProfile();
+  piiWasCompleteOnOpen = isPiiComplete(pii);
+  if (pii) piiToForm(pii);
+  renderPiiStatus(pii);
+
+  if (piiWasCompleteOnOpen) {
+    showSubView("ready");
+    void renderProfileStatus();
+  } else {
+    showSubView("pii");
+  }
+}
+
+async function boot(): Promise<void> {
   try {
-    const response = await chrome.runtime.sendMessage({
-      type: "API_REQUEST",
-      method: "GET",
-      path: "/api/autoapply/logs?limit=10",
-    });
+    // Ask the SW for auth state. Fall back to session storage — the SW may
+    // have been torn down and not yet rehydrated.
+    let authResponse = await chrome.runtime
+      .sendMessage({ type: "GET_AUTH_STATE" })
+      .catch(() => null);
 
-    if (response?.error || !response?.data?.logs) {
-      listEl.innerHTML = '<p class="card-detail">Nenhuma candidatura registrada.</p>';
-      return;
-    }
-
-    const logs = response.data.logs as Array<{
-      id: string;
-      company: string;
-      job_title: string;
-      status: string;
-      fields_answered: number;
-      questions_answered: number;
-      duration_seconds: number;
-      timestamp: string;
-      job_url: string;
-    }>;
-
-    if (logs.length === 0) {
-      listEl.innerHTML = '<p class="card-detail">Nenhuma candidatura registrada.</p>';
-      return;
-    }
-
-    listEl.innerHTML = logs.map(log => {
-      const statusBadge = {
-        "success": '<span class="history-badge badge-success">Enviada</span>',
-        "dry-run": '<span class="history-badge badge-dryrun">Dry-run</span>',
-        "failed": '<span class="history-badge badge-failed">Falhou</span>',
-      }[log.status] || '<span class="history-badge">' + escapeHtml(log.status) + '</span>';
-
-      const company = log.company || "\u2014";
-      const title = log.job_title || "Vaga";
-      const time = formatRelativeTime(log.timestamp);
-      const stats = `${log.fields_answered || 0} campos, ${log.questions_answered || 0} perguntas`;
-
-      return `
-        <div class="history-item">
-          <div class="history-main">
-            <span class="history-title">${escapeHtml(title)}</span>
-            ${statusBadge}
-          </div>
-          <div class="history-meta">
-            <span>${escapeHtml(company)}</span>
-            <span>&middot;</span>
-            <span>${stats}</span>
-            <span>&middot;</span>
-            <span>${time}</span>
-          </div>
-        </div>
-      `;
-    }).join("");
-
-  } catch {
-    listEl.innerHTML = '<p class="card-detail">Erro ao carregar historico.</p>';
-  }
-}
-
-function formatRelativeTime(isoString: string): string {
-  try {
-    const date = new Date(isoString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffMins < 1) return "agora";
-    if (diffMins < 60) return `${diffMins}min atras`;
-    if (diffHours < 24) return `${diffHours}h atras`;
-    if (diffDays < 7) return `${diffDays}d atras`;
-    return date.toLocaleDateString("pt-BR");
-  } catch {
-    return "";
-  }
-}
-
-function escapeHtml(text: string): string {
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-function updatePreChecks(pii: PiiProfile | null): void {
-  const startBtn = document.getElementById("start-btn") as HTMLButtonElement | null;
-  if (!startBtn) return;
-
-  const piiOk = isPiiComplete(pii);
-  const allOk = piiOk && professionalProfileLoaded;
-
-  startBtn.disabled = !allOk;
-  startBtn.title = !piiOk
-    ? "Complete seus dados pessoais primeiro"
-    : !professionalProfileLoaded
-      ? "Configure seu perfil profissional no merlincv.com"
-      : "Iniciar candidatura automatica";
-
-  if (allOk) {
-    startBtn.textContent = "Iniciar candidatura";
-  }
-}
-
-let toastTimeout: ReturnType<typeof setTimeout> | null = null;
-
-function showToast(message: string, type: "success" | "error"): void {
-  const toast = document.getElementById("toast");
-  if (!toast) return;
-
-  if (toastTimeout) clearTimeout(toastTimeout);
-
-  toast.textContent = message;
-  toast.className = `toast toast-${type}`;
-  toast.style.display = "block";
-
-  toastTimeout = setTimeout(() => {
-    toast.style.display = "none";
-  }, 3000);
-}
-
-function showError(message: string): void {
-  showToast(message, "error");
-}
-
-function showSuccess(message: string): void {
-  showToast(message, "success");
-}
-
-// --- CPF Mask ---
-
-function applyCpfMask(input: HTMLInputElement): void {
-  input.addEventListener("input", () => {
-    let v = input.value.replace(/\D/g, "");
-    if (v.length > 11) v = v.slice(0, 11);
-    if (v.length > 9) {
-      v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, "$1.$2.$3-$4");
-    } else if (v.length > 6) {
-      v = v.replace(/(\d{3})(\d{3})(\d{1,3})/, "$1.$2.$3");
-    } else if (v.length > 3) {
-      v = v.replace(/(\d{3})(\d{1,3})/, "$1.$2");
-    }
-    input.value = v;
-  });
-}
-
-// --- Phone Mask ---
-
-function applyPhoneMask(input: HTMLInputElement): void {
-  input.addEventListener("input", () => {
-    let v = input.value.replace(/\D/g, "");
-    if (v.length > 11) v = v.slice(0, 11);
-    if (v.length > 6) {
-      v = v.replace(/(\d{2})(\d{5})(\d{1,4})/, "($1) $2-$3");
-    } else if (v.length > 2) {
-      v = v.replace(/(\d{2})(\d{1,5})/, "($1) $2");
-    }
-    input.value = v;
-  });
-}
-
-// --- CEP Mask ---
-
-function applyCepMask(input: HTMLInputElement): void {
-  input.addEventListener("input", () => {
-    let v = input.value.replace(/\D/g, "");
-    if (v.length > 8) v = v.slice(0, 8);
-    if (v.length > 5) {
-      v = v.replace(/(\d{5})(\d{1,3})/, "$1-$2");
-    }
-    input.value = v;
-  });
-}
-
-// --- Main Init ---
-
-document.addEventListener("DOMContentLoaded", async () => {
-  showSection("loading");
-
-  // Apply input masks
-  const cpfInput = document.getElementById("cpf") as HTMLInputElement | null;
-  if (cpfInput) applyCpfMask(cpfInput);
-
-  const phoneInput = document.getElementById("phone") as HTMLInputElement | null;
-  if (phoneInput) applyPhoneMask(phoneInput);
-
-  const zipInput = document.getElementById("zip") as HTMLInputElement | null;
-  if (zipInput) applyCepMask(zipInput);
-
-  // 1. Check auth — also check storage directly in case SW hasn't restored yet
-  try {
-    // First try the service worker
-    let authResponse = await chrome.runtime.sendMessage({ type: "GET_AUTH_STATE" });
-
-    // If SW says not authenticated, double-check storage directly
-    // (SW may have been killed and not restored state yet)
     if (!authResponse?.isAuthenticated) {
       const stored = await chrome.storage.session.get("authState");
-      const storedAuth = stored.authState as { token?: string; user?: any } | undefined;
-      if (storedAuth?.token) {
-        authResponse = { isAuthenticated: true, user: storedAuth.user };
+      const s = stored.authState as { token?: string; user?: { email?: string } } | undefined;
+      if (s?.token) {
+        authResponse = { isAuthenticated: true, user: s.user };
       }
     }
 
     if (!authResponse?.isAuthenticated) {
-      showSection("login-section");
+      showView("auth");
       return;
     }
 
-    showSection("main-section");
+    setUserEmail(authResponse.user?.email ?? null);
+    await enterMainView();
+  } catch {
+    showView("auth");
+  }
+}
 
-    // 2. Display user info
-    if (authResponse.user) {
-      displayUserInfo(authResponse.user);
-    }
+// ---------- Event wiring ----------
 
-    // 3. Check PII profile
-    const pii = await getPiiProfile();
-    updatePiiStatus(pii);
-    if (pii) populatePiiForm(pii);
-
-    // 4. Load professional profile from backend + history in parallel
-    await Promise.all([
-      loadProfessionalProfile(),
-      loadApplicationHistory(),
-    ]);
-
-    // 5. Update pre-check status
-    updatePreChecks(pii);
-
-    // 6. Refresh history button
-    document.getElementById("refresh-history")?.addEventListener("click", () => {
-      loadApplicationHistory();
-    });
-
-    // 7. Load mode setting
-    await loadModeSetting();
-
-    // 8. If a previous run paused waiting for user input in the active tab,
-    //    restore the panel. Session state is per-tab (autoapply_active_session_<tabId>)
-    //    so this popup only sees its own tab's paused state.
+function wire(): void {
+  // Sign in
+  document.getElementById("sign-in-btn")?.addEventListener("click", async () => {
+    const btn = document.getElementById("sign-in-btn") as HTMLButtonElement;
+    btn.disabled = true;
+    btn.textContent = "Entrando…";
     try {
-      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (activeTab?.id) {
-        const key = `autoapply_active_session_${activeTab.id}`;
-        const stored = await chrome.storage.session.get(key);
-        const session = stored[key] as
-          | { pendingFields?: HumanField[]; running?: boolean }
-          | undefined;
-        if (session?.pendingFields?.length) {
-          showHumanInputPanel(session.pendingFields);
-        }
+      const resp = await chrome.runtime.sendMessage({ type: "SIGN_IN" });
+      if (resp?.success) {
+        location.reload();
+      } else {
+        btn.disabled = false;
+        btn.textContent = "Entrar com Google";
+        toast(resp?.error || "Não foi possível entrar.", "error");
       }
     } catch {
-      // Ignore — session storage may be unavailable.
-    }
-  } catch {
-    showSection("login-section");
-  }
-});
-
-// --- Event Listeners ---
-
-// Sign in
-document.getElementById("sign-in-btn")?.addEventListener("click", async () => {
-  const btn = document.getElementById("sign-in-btn") as HTMLButtonElement;
-  btn.disabled = true;
-  btn.textContent = "Entrando...";
-
-  try {
-    const response = await chrome.runtime.sendMessage({ type: "SIGN_IN" });
-    if (response?.success) {
-      location.reload();
-    } else {
       btn.disabled = false;
       btn.textContent = "Entrar com Google";
-      showError("Erro ao fazer login: " + (response?.error || "Tente novamente"));
+      toast("Não foi possível entrar.", "error");
     }
-  } catch {
-    btn.disabled = false;
-    btn.textContent = "Entrar com Google";
-    showError("Erro ao fazer login. Tente novamente.");
-  }
-});
+  });
 
-// Sign out
-document.getElementById("sign-out-btn")?.addEventListener("click", async (e) => {
-  e.preventDefault();
-  await chrome.runtime.sendMessage({ type: "SIGN_OUT" });
-  location.reload();
-});
+  // Sign out
+  document.getElementById("sign-out-btn")?.addEventListener("click", async () => {
+    await chrome.runtime.sendMessage({ type: "SIGN_OUT" });
+    location.reload();
+  });
 
-// Open batch dashboard in a new tab
-document.getElementById("open-dashboard")?.addEventListener("click", async () => {
-  await chrome.runtime.sendMessage({ type: "QUEUE_OPEN_DASHBOARD" });
-  window.close();
-});
+  // Open dashboard
+  document.getElementById("open-dashboard")?.addEventListener("click", async () => {
+    await chrome.runtime.sendMessage({ type: "QUEUE_OPEN_DASHBOARD" });
+    window.close();
+  });
 
-// Toggle PII form
-document.getElementById("toggle-pii-form")?.addEventListener("click", async () => {
-  const container = document.getElementById("pii-form-container");
-  const isVisible = container?.style.display !== "none";
+  // Edit PII from ready view
+  document.getElementById("edit-pii")?.addEventListener("click", () => {
+    showSubView("pii");
+  });
 
-  if (!isVisible) {
-    // Load existing values into form before showing
-    const pii = await getPiiProfile();
-    if (pii) populatePiiForm(pii);
-  }
+  // Cancel edit (back to ready)
+  document.getElementById("pii-cancel")?.addEventListener("click", () => {
+    if (piiWasCompleteOnOpen) showSubView("ready");
+  });
 
-  togglePiiForm(!isVisible);
-});
-
-// Start auto-apply
-document.getElementById("start-btn")?.addEventListener("click", async () => {
-  const btn = document.getElementById("start-btn") as HTMLButtonElement;
-  btn.disabled = true;
-  btn.textContent = "Iniciando...";
-
-  try {
-    // Send START_AUTOAPPLY to content script in the active tab
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) {
-      showError("Nenhuma aba ativa encontrada.");
-      btn.disabled = false;
-      btn.textContent = "Iniciar candidatura";
+  // PII save
+  document.getElementById("pii-form")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const pii = formToPii();
+    if (!isPiiComplete(pii)) {
+      toast("CPF e telefone são obrigatórios.", "error");
       return;
     }
-
-    const response = await chrome.tabs.sendMessage(tab.id, { type: "START_AUTOAPPLY" });
-    if (response?.success) {
-      showSuccess("Candidatura iniciada!");
-      btn.textContent = "Em andamento...";
-      // Show automation status card
-      const automationCard = document.getElementById("automation-card");
-      if (automationCard) automationCard.style.display = "block";
-      // Start listening for status updates
-      startStatusListener();
-    } else {
-      showError(response?.error || "Erro ao iniciar.");
-      btn.disabled = false;
-      btn.textContent = "Iniciar candidatura";
-    }
-  } catch {
-    showError("Erro: a pagina pode nao ser do Gupy.");
-    btn.disabled = false;
-    btn.textContent = "Iniciar candidatura";
-  }
-});
-
-// Confirm submit (review flow)
-document.getElementById("confirm-submit")?.addEventListener("click", async () => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab?.id) {
-    await chrome.tabs.sendMessage(tab.id, { type: "CONFIRM_SUBMIT" });
-    showSuccess("Candidatura enviada!");
-    const reviewPanel = document.getElementById("review-panel");
-    if (reviewPanel) reviewPanel.style.display = "none";
-  }
-});
-
-// Cancel submit (review flow)
-document.getElementById("cancel-submit")?.addEventListener("click", async () => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab?.id) {
-    await chrome.tabs.sendMessage(tab.id, { type: "CANCEL_SUBMIT" });
-    showToast("Candidatura cancelada.", "error");
-    const reviewPanel = document.getElementById("review-panel");
-    if (reviewPanel) reviewPanel.style.display = "none";
-
-    const startBtn = document.getElementById("start-btn") as HTMLButtonElement | null;
-    if (startBtn) {
-      startBtn.disabled = false;
-      startBtn.textContent = "Iniciar candidatura";
-    }
-  }
-});
-
-// PII form submission
-document.getElementById("pii-form")?.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const form = e.target as HTMLFormElement;
-
-  const pii: PiiProfile = {
-    cpf: (form.querySelector("[name=cpf]") as HTMLInputElement).value,
-    rg: (form.querySelector("[name=rg]") as HTMLInputElement).value,
-    motherName: (form.querySelector("[name=motherName]") as HTMLInputElement).value,
-    birthDate: (form.querySelector("[name=birthDate]") as HTMLInputElement).value,
-    gender: (form.querySelector("[name=gender]") as HTMLSelectElement).value,
-    ethnicity: (form.querySelector("[name=ethnicity]") as HTMLSelectElement).value,
-    disability: (form.querySelector("[name=disability]") as HTMLSelectElement).value,
-    maritalStatus: (form.querySelector("[name=maritalStatus]") as HTMLSelectElement).value,
-    phone: (form.querySelector("[name=phone]") as HTMLInputElement).value,
-    address: {
-      street: (form.querySelector("[name=street]") as HTMLInputElement).value,
-      city: (form.querySelector("[name=city]") as HTMLInputElement).value,
-      state: (form.querySelector("[name=state]") as HTMLSelectElement).value,
-      zip: (form.querySelector("[name=zip]") as HTMLInputElement).value,
-    },
-  };
-
-  await savePiiProfile(pii);
-  updatePiiStatus(pii);
-  updatePreChecks(pii);
-  togglePiiForm(false);
-  showSuccess("Perfil salvo com sucesso!");
-});
-
-// --- Mode Toggle ---
-
-async function loadModeSetting(): Promise<void> {
-  const { getSettings } = await import("../lib/settings");
-  const settings = await getSettings();
-  const toggle = document.getElementById("mode-toggle") as HTMLInputElement | null;
-
-  if (toggle) {
-    toggle.checked = settings.mode === "auto";
-  }
-  updateModeDisplay(settings.mode === "auto");
-}
-
-function updateModeDisplay(isAuto: boolean): void {
-  const label = document.getElementById("mode-label");
-  const desc = document.getElementById("mode-desc");
-
-  if (label) label.textContent = isAuto ? "Modo: Auto" : "Modo: Dry-run";
-  if (desc) desc.textContent = isAuto
-    ? "Candidaturas enviadas automaticamente"
-    : "Pausa antes de enviar para revisão";
-}
-
-document.getElementById("mode-toggle")?.addEventListener("change", async (e) => {
-  const toggle = e.target as HTMLInputElement;
-  const newMode = toggle.checked ? "auto" : "dry-run";
-
-  if (newMode === "auto") {
-    // Confirmation dialog
-    const confirmed = confirm(
-      "Tem certeza?\n\nNo modo Auto, as candidaturas serão enviadas automaticamente sem pausa para revisão.\n\nVocê não poderá revisar as respostas antes do envio."
-    );
-
-    if (!confirmed) {
-      toggle.checked = false;
-      return;
-    }
-  }
-
-  const { saveSettings } = await import("../lib/settings");
-  await saveSettings({ mode: newMode });
-  updateModeDisplay(toggle.checked);
-  showSuccess(newMode === "auto" ? "Modo Auto ativado" : "Modo Dry-run ativado");
-});
-
-// --- Status Listener ---
-
-function startStatusListener(): void {
-  chrome.runtime.onMessage.addListener((message) => {
-    if (message.type === "STATUS_UPDATE") {
-      updateStatusDisplay(message);
-    }
-    if (message.type === "NEEDS_HUMAN_INPUT") {
-      showHumanInputPanel(message.fields);
-    }
-  });
-}
-
-function updateStatusDisplay(status: {
-  step: string;
-  error?: string;
-  detail?: string;
-  fieldsAnswered?: number;
-  questionsAnswered?: number;
-}): void {
-  const statusEl = document.getElementById("automation-status");
-  const automationCard = document.getElementById("automation-card");
-  const reviewPanel = document.getElementById("review-panel");
-
-  // Show automation card
-  if (automationCard) automationCard.style.display = "block";
-
-  if (statusEl) {
-    const stepNames: Record<string, string> = {
-      PRE_CHECK: "Verificando pre-requisitos...",
-      WELCOME: "Tela de boas-vindas...",
-      ADDITIONAL_INFO: "Preenchendo informacoes...",
-      CUSTOM_QUESTIONS_DETECT: "Detectando perguntas...",
-      CUSTOM_QUESTIONS_FILL: "Respondendo perguntas...",
-      PERSONALIZATION: "Gerando personalizacao...",
-      REVIEW: "Aguardando confirmacao",
-      COMPLETE: "Candidatura finalizada!",
-      ERROR: "",
-    };
-
-    if (status.step === "ERROR") {
-      const errorMessages: Record<string, string> = {
-        VALIDATION_ERROR: "Erro de validacao no formulario",
-        NEEDS_HUMAN: "Pergunta precisa de resposta manual",
-        BUDGET_EXCEEDED: "Limite diario de IA atingido",
-        LLM_FAILED: "Erro no servico de IA",
-        AUTH_REQUIRED: "Faca login novamente",
-        GUPY_LOGIN_REQUIRED: "Faca login no Gupy",
-        TIMEOUT: "Tempo esgotado aguardando a pagina",
-      };
-
-      const errorBase = errorMessages[status.error || ""] || "Erro desconhecido";
-      statusEl.textContent = `\u2715 ${errorBase}`;
-      if (status.detail) {
-        statusEl.textContent += `: ${status.detail}`;
-      }
-      statusEl.style.color = "#dc2626";
-    } else {
-      statusEl.textContent = stepNames[status.step] || status.step;
-      statusEl.style.color = status.step === "COMPLETE" ? "#16a34a" : "#4b5563";
-
-      // Refresh history and profile (includes usage) when complete
-      if (status.step === "COMPLETE") {
-        loadApplicationHistory();
-        loadProfessionalProfile();
-      }
-    }
-
-    if (status.fieldsAnswered || status.questionsAnswered) {
-      statusEl.textContent += ` (${status.fieldsAnswered || 0} campos, ${status.questionsAnswered || 0} perguntas)`;
-    }
-
-    statusEl.style.display = "block";
-  }
-
-  // Show review panel when in REVIEW state
-  if (reviewPanel) {
-    reviewPanel.style.display = status.step === "REVIEW" ? "block" : "none";
-  }
-
-  // Update start button
-  const startBtn = document.getElementById("start-btn") as HTMLButtonElement | null;
-  if (startBtn) {
-    if (status.step === "COMPLETE") {
-      startBtn.disabled = false;
-      startBtn.textContent = "Iniciar outra candidatura";
-    } else if (status.step === "ERROR") {
-      startBtn.disabled = false;
-      startBtn.textContent = "Tentar novamente";
-    } else if (status.step !== "REVIEW") {
-      startBtn.disabled = true;
-      startBtn.textContent = "Em andamento...";
-    }
-  }
-}
-
-// --- Human Input Panel ---
-
-interface HumanField {
-  label: string;
-  type: string;
-  options?: string[];
-}
-
-function showHumanInputPanel(fields: HumanField[]): void {
-  const panel = document.getElementById("human-input-panel");
-  const container = document.getElementById("human-input-fields");
-  const automationCard = document.getElementById("automation-card");
-
-  if (!panel || !container) return;
-
-  // Show the panel, hide automation status
-  panel.style.display = "block";
-  if (automationCard) {
-    const statusEl = document.getElementById("automation-status");
-    if (statusEl) statusEl.textContent = "Aguardando suas respostas...";
-  }
-
-  // Build input fields
-  container.innerHTML = fields.map((field, i) => {
-    if (field.type === "select" && field.options?.length) {
-      const opts = field.options.map((o) =>
-        `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`
-      ).join("");
-      return `
-        <div class="form-group">
-          <label>${escapeHtml(field.label)}</label>
-          <select class="human-answer" data-label="${escapeHtml(field.label)}">
-            <option value="">Selecione...</option>
-            ${opts}
-          </select>
-        </div>`;
-    }
-
-    if (field.type === "radio" && field.options?.length) {
-      const radios = field.options.map((o, j) => `
-        <label class="radio-label">
-          <input type="radio" name="human_radio_${i}" value="${escapeHtml(o)}" class="human-answer-radio" data-label="${escapeHtml(field.label)}">
-          ${escapeHtml(o)}
-        </label>`
-      ).join("");
-      return `
-        <div class="form-group">
-          <label>${escapeHtml(field.label)}</label>
-          ${radios}
-        </div>`;
-    }
-
-    const inputType = field.type === "textarea" ? "textarea" : "input";
-    if (inputType === "textarea") {
-      return `
-        <div class="form-group">
-          <label>${escapeHtml(field.label)}</label>
-          <textarea class="human-answer" data-label="${escapeHtml(field.label)}" rows="2"></textarea>
-        </div>`;
-    }
-
-    return `
-      <div class="form-group">
-        <label>${escapeHtml(field.label)}</label>
-        <input type="text" class="human-answer" data-label="${escapeHtml(field.label)}">
-      </div>`;
-  }).join("");
-}
-
-function collectHumanAnswers(): Record<string, string> {
-  const answers: Record<string, string> = {};
-
-  // Text inputs, textareas, selects
-  document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
-    ".human-answer"
-  ).forEach((el) => {
-    const label = el.dataset.label;
-    if (label && el.value.trim()) {
-      answers[label] = el.value.trim();
-    }
+    await savePiiProfile(pii);
+    piiWasCompleteOnOpen = true;
+    renderPiiStatus(pii);
+    showSubView("ready");
+    void renderProfileStatus();
+    toast("Dados salvos", "success");
   });
 
-  // Radio buttons
-  document.querySelectorAll<HTMLInputElement>(
-    ".human-answer-radio:checked"
-  ).forEach((el) => {
-    const label = el.dataset.label;
-    if (label) {
-      answers[label] = el.value;
-    }
-  });
-
-  return answers;
+  // Input masks
+  applyCpfMask(document.getElementById("cpf") as HTMLInputElement);
+  applyPhoneMask(document.getElementById("phone") as HTMLInputElement);
+  applyCepMask(document.getElementById("zip") as HTMLInputElement);
 }
 
-// Submit human answers
-document.getElementById("submit-human-answers")?.addEventListener("click", async () => {
-  const answers = collectHumanAnswers();
-  if (Object.keys(answers).length === 0) {
-    showError("Preencha pelo menos um campo.");
-    return;
-  }
-
-  const btn = document.getElementById("submit-human-answers") as HTMLButtonElement;
-  btn.disabled = true;
-  btn.textContent = "Preenchendo...";
-
-  try {
-    // Send answers to content script to fill the form
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab?.id) {
-      await chrome.tabs.sendMessage(tab.id, {
-        type: "SUBMIT_USER_ANSWERS",
-        answers,
-      });
-    }
-
-    // Optionally save to knowledge file
-    const saveCheck = document.getElementById("save-answers-check") as HTMLInputElement;
-    if (saveCheck?.checked) {
-      try {
-        await chrome.runtime.sendMessage({
-          type: "API_REQUEST",
-          method: "POST",
-          path: "/api/autoapply/save-answers",
-          body: { answers },
-        });
-        showSuccess(`${Object.keys(answers).length} respostas salvas!`);
-      } catch {
-        // Non-blocking — answers are already filled in the form
-        console.warn("Failed to save answers to knowledge file");
-      }
-    }
-
-    // Hide the panel
-    const panel = document.getElementById("human-input-panel");
-    if (panel) panel.style.display = "none";
-
-    await clearPendingFields();
-    showSuccess("Respostas preenchidas!");
-  } catch {
-    showError("Erro ao preencher respostas.");
-    btn.disabled = false;
-    btn.textContent = "Preencher";
-  }
+document.addEventListener("DOMContentLoaded", () => {
+  wire();
+  void boot();
 });
 
-async function clearPendingFields(): Promise<void> {
-  try {
-    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!activeTab?.id) return;
-    const key = `autoapply_active_session_${activeTab.id}`;
-    const stored = await chrome.storage.session.get(key);
-    const session = stored[key] as Record<string, unknown> | undefined;
-    if (session) {
-      session.pendingFields = [];
-      await chrome.storage.session.set({ [key]: session });
-    }
-  } catch {
-    // Ignore.
-  }
-}
-
-// Skip human answers
-document.getElementById("skip-human-answers")?.addEventListener("click", async () => {
-  const panel = document.getElementById("human-input-panel");
-  if (panel) panel.style.display = "none";
-  await clearPendingFields();
-
-  const startBtn = document.getElementById("start-btn") as HTMLButtonElement | null;
-  if (startBtn) {
-    startBtn.disabled = false;
-    startBtn.textContent = "Iniciar candidatura";
-  }
-});
+// Reference currentView/currentSubView so TS doesn't flag them as unused —
+// they are kept for future telemetry / keyboard-nav extensions.
+void currentView;
+void currentSubView;
