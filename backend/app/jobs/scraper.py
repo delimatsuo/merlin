@@ -284,10 +284,12 @@ async def run_scraping_pipeline() -> dict:
                 try:
                     if posted_date:
                         posted_dt = datetime.fromisoformat(posted_date.replace("Z", "+00:00"))
+                        if posted_dt.tzinfo is None:
+                            posted_dt = posted_dt.replace(tzinfo=timezone.utc)
                     else:
                         posted_dt = datetime.now(timezone.utc)
                     expires_at = posted_dt + timedelta(days=14)
-                except (ValueError, TypeError):
+                except (ValueError, TypeError, AttributeError):
                     posted_dt = datetime.now(timezone.utc)
                     expires_at = posted_dt + timedelta(days=14)
                     posted_date = posted_dt.strftime("%Y-%m-%d")
