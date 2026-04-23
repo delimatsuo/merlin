@@ -220,7 +220,7 @@ jobs:
               --service-account ${{ env.CLOUD_RUN_SA }} \
               --memory 2Gi \
               --cpu 1 \
-              --task-timeout 1800 \
+              --task-timeout 3600 \
               --max-retries 1 \
               --command "python,-m,app.jobs.entrypoint" \
               --quiet
@@ -232,7 +232,7 @@ jobs:
               --service-account ${{ env.CLOUD_RUN_SA }} \
               --memory 2Gi \
               --cpu 1 \
-              --task-timeout 1800 \
+              --task-timeout 3600 \
               --max-retries 1 \
               --command "python,-m,app.jobs.entrypoint" \
               --quiet

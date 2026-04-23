@@ -196,9 +196,11 @@ async def run_scraping_pipeline() -> dict:
         # TODO: Fire Sentry alert
         return {"jobs_new": 0, "jobs_total": 0, "sources_ok": sources_ok, "sources_failed": sources_failed}
 
-    # Phase 1: Dedup — filter out jobs already in Firestore (cheap Firestore reads)
-    new_raw_jobs = []
-    jobs_duplicate = 0
+    # Phase 1: Dedup — batch-read existing jobs from Firestore.
+    # Serial per-job reads were hitting the 30-min task timeout at ~20k scraped
+    # jobs. Chunked get_all() cuts dedup from ~30min to a few seconds.
+    candidates: list[dict] = []
+    seen_ids: set[str] = set()
 
     for raw_job in all_raw_jobs:
         source = raw_job.get("source", "unknown")
@@ -209,10 +211,9 @@ async def run_scraping_pipeline() -> dict:
             continue
 
         job_id = _make_job_id(source, source_id)
-        existing = await fs.get_job(job_id)
-        if existing:
-            jobs_duplicate += 1
+        if job_id in seen_ids:
             continue
+        seen_ids.add(job_id)
 
         clean_text = _strip_html(raw_text)
         if not clean_text or len(clean_text) < 30:
@@ -220,7 +221,20 @@ async def run_scraping_pipeline() -> dict:
 
         raw_job["_job_id"] = job_id
         raw_job["_clean_text"] = clean_text
-        new_raw_jobs.append(raw_job)
+        candidates.append(raw_job)
+
+    DEDUP_BATCH_SIZE = 500
+    existing_ids: set[str] = set()
+    jobs_col = fs.db.collection("jobs")
+    for i in range(0, len(candidates), DEDUP_BATCH_SIZE):
+        chunk = candidates[i:i + DEDUP_BATCH_SIZE]
+        refs = [jobs_col.document(j["_job_id"]) for j in chunk]
+        async for snap in fs.db.get_all(refs):
+            if snap.exists:
+                existing_ids.add(snap.id)
+
+    new_raw_jobs = [j for j in candidates if j["_job_id"] not in existing_ids]
+    jobs_duplicate = len(candidates) - len(new_raw_jobs)
 
     logger.info("scrape_dedup_done", new=len(new_raw_jobs), duplicates=jobs_duplicate)
 
