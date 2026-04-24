@@ -1473,6 +1473,17 @@ class FirestoreService:
             return data
         return None
 
+    async def count_jobs(self) -> int:
+        """Server-side count of all jobs in the collection.
+
+        Uses Firestore's aggregation query — single round-trip, billed
+        at 1 read per 1000 documents scanned.
+        """
+        agg = self.db.collection("jobs").count(alias="total")
+        snapshot = await agg.get()
+        # snapshot is list-of-lists of AggregationResult; first row, first agg
+        return int(snapshot[0][0].value) if snapshot and snapshot[0] else 0
+
     async def get_active_jobs(self, limit: int = 500) -> list[dict]:
         """Get all jobs, filtering expired ones in-memory.
 

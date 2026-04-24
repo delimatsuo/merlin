@@ -39,6 +39,7 @@ function VagasContent() {
   const [showPrefsEditor, setShowPrefsEditor] = useState(false);
   const [preflightOpen, setPreflightOpen] = useState(false);
   const [submittingBatch, setSubmittingBatch] = useState(false);
+  const [totalInSystem, setTotalInSystem] = useState<number | null>(null);
 
   // Merlin currently only supports Gupy postings for auto-apply. Non-Gupy
   // matches are hidden from the feed entirely — we'll re-expose them once
@@ -110,6 +111,18 @@ function VagasContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Fetch total jobs in the system (independent of matched feed)
+  useEffect(() => {
+    (async () => {
+      try {
+        const resp = await api.get<{ total: number }>("/api/jobs/total");
+        setTotalInSystem(resp.total);
+      } catch {
+        setTotalInSystem(null);
+      }
+    })();
+  }, []);
+
   // Load feed when preferences exist or days change
   useEffect(() => {
     if (!preferences) return;
@@ -161,6 +174,11 @@ function VagasContent() {
           <p className="text-base text-muted-foreground mt-1">
             {t("vagas.subtitle")}
           </p>
+          {totalInSystem !== null && (
+            <p className="text-sm text-muted-foreground/80 mt-2">
+              {t("vagas.totalInSystem", { count: totalInSystem.toLocaleString("pt-BR") })}
+            </p>
+          )}
         </div>
         <JobPreferencesForm onSaved={() => setShowPrefsEditor(false)} />
       </div>
@@ -200,8 +218,13 @@ function VagasContent() {
           <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground">
             {t("vagas.title")}
           </h1>
-          {matches.length > 0 && (
+          {totalInSystem !== null && (
             <p className="text-sm text-muted-foreground mt-1">
+              {t("vagas.totalInSystem", { count: totalInSystem.toLocaleString("pt-BR") })}
+            </p>
+          )}
+          {matches.length > 0 && (
+            <p className="text-xs text-muted-foreground/80 mt-0.5">
               {t("vagas.matchesFound", { count: String(matches.length) })}
             </p>
           )}

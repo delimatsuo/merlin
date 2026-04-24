@@ -330,6 +330,7 @@
   "vagas.tipTitle": "Candidate-se rápido!",
   "vagas.tipBody": "Estudos mostram que candidatos que aplicam nas primeiras 24 horas têm 32% mais chance de serem chamados para entrevista. Após 4 dias, suas chances caem até 8x. Por isso, mostramos as vagas mais recentes primeiro.",
   "vagas.matchesFound": "{{count}} vagas encontradas",
+  "vagas.totalInSystem": "{{count}} vagas disponíveis no sistema",
   "vagas.noMatches": "Nenhuma vaga encontrada para hoje.",
   "vagas.noMatchesSub": "Tente ajustar seus filtros ou volte amanhã.",
   "vagas.pendingTitle": "Suas vagas estão a caminho",

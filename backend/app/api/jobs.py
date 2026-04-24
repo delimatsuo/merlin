@@ -24,6 +24,12 @@ logger = structlog.get_logger()
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 
+# Per-process TTL cache for /total. The number moves at most twice a day
+# (scrape writes + expiry cleanup), so a 5-minute cache is conservative.
+import time as _time
+_TOTAL_CACHE: dict[str, tuple[float, int]] = {}
+_TOTAL_CACHE_TTL_S = 300
+
 
 @router.get("/preferences", response_model=JobPreferencesResponse | None)
 async def get_preferences(
@@ -64,6 +70,24 @@ async def delete_preferences(
     fs = FirestoreService()
     await fs.delete_job_preferences(user.uid)
     logger.info("preferences_deleted_lgpd", uid=user.uid)
+
+
+@router.get("/total")
+@limiter.limit("60/minute")
+async def get_total_jobs(
+    request: Request,
+    user: AuthenticatedUser = Depends(get_current_user),
+):
+    """Return total jobs in the system. Short TTL cache to absorb bursts."""
+    now = _time.monotonic()
+    cached = _TOTAL_CACHE.get("total")
+    if cached and now - cached[0] < _TOTAL_CACHE_TTL_S:
+        return {"total": cached[1]}
+
+    fs = FirestoreService()
+    total = await fs.count_jobs()
+    _TOTAL_CACHE["total"] = (now, total)
+    return {"total": total}
 
 
 @router.get("/feed", response_model=JobFeedResponse)

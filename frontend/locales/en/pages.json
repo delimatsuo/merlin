@@ -330,6 +330,7 @@
   "vagas.tipTitle": "Apply fast!",
   "vagas.tipBody": "Studies show that candidates who apply within the first 24 hours are 32% more likely to get an interview. After 4 days, your chances drop by up to 8x. That's why we show the newest jobs first.",
   "vagas.matchesFound": "{{count}} jobs found",
+  "vagas.totalInSystem": "{{count}} jobs available in the system",
   "vagas.noMatches": "No jobs found for today.",
   "vagas.noMatchesSub": "Try adjusting your filters or check back tomorrow.",
   "vagas.pendingTitle": "Your job matches are on the way",
