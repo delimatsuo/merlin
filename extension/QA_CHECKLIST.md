@@ -17,7 +17,7 @@ store listing goes live (with the published install rather than unpacked).
 - [ ] `cd extension && npm run build:store`
 - [ ] `chrome://extensions/` → Developer mode ON → "Load unpacked"
 - [ ] Select `extension/build-store/staging/` (the unzipped staging dir)
-- [ ] Confirm extension ID matches `gpnbdjkdalnalehhfajgapalhlogbbbd (published) / pckpedgciidgclkelofcicgaeelcicea (dev-unpacked)`
+- [ ] Confirm extension ID matches `gpnbdjkdalnalehhfajgapalhlogbbbd`
 - [ ] Confirm the toolbar icon shows the new gold-on-navy "M" logo
 - [ ] Pin the extension to the toolbar
 
@@ -111,13 +111,13 @@ store listing goes live (with the published install rather than unpacked).
 ## After Web Store publish (re-run on a 4th clean Chrome profile)
 
 - [ ] Install from the Web Store listing (not unpacked)
-- [ ] Confirm the extension ID is still `gpnbdjkdalnalehhfajgapalhlogbbbd (published) / pckpedgciidgclkelofcicgaeelcicea (dev-unpacked)`
+- [ ] Confirm the extension ID is still `gpnbdjkdalnalehhfajgapalhlogbbbd`
 - [ ] Re-run all sections above except "Install — local unpacked build"
 - [ ] Confirm install banner stops showing on the dashboard (since
       `chrome.runtime.id` should now resolve from the published install)
 - [ ] Sign-in flow still works (this is the most common breaker — Firebase
       `authorized_domains` and Google OAuth `redirect_uris` must include
-      `gpnbdjkdalnalehhfajgapalhlogbbbd (published) / pckpedgciidgclkelofcicgaeelcicea (dev-unpacked).chromiumapp.org`, which they do
+      `gpnbdjkdalnalehhfajgapalhlogbbbd.chromiumapp.org`, which they do
       per memory)
 
 ## If anything fails
