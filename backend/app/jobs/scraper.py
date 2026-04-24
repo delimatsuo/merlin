@@ -238,22 +238,33 @@ async def run_scraping_pipeline() -> dict:
 
     logger.info("scrape_dedup_done", new=len(new_raw_jobs), duplicates=jobs_duplicate)
 
+    # Cap new jobs per run so extraction + writes fit inside the task-timeout
+    # budget. Leftover jobs dedupe naturally on the next run — they'll appear
+    # as existing on subsequent scrapes and be skipped until they expire.
+    MAX_NEW_JOBS_PER_RUN = 2500
+    if len(new_raw_jobs) > MAX_NEW_JOBS_PER_RUN:
+        logger.info("scrape_cap_applied",
+                    cap=MAX_NEW_JOBS_PER_RUN,
+                    available=len(new_raw_jobs))
+        new_raw_jobs = new_raw_jobs[:MAX_NEW_JOBS_PER_RUN]
+
     # Phase 2: Batch extract — 10 jobs per Flash-Lite call, 5 calls in parallel
     BATCH_SIZE = 10
     PARALLEL_BATCHES = 5
     jobs_new = 0
     now_iso = datetime.now(_BRT).isoformat()
 
-    # Split into batches of 10
     batches = [new_raw_jobs[i:i + BATCH_SIZE] for i in range(0, len(new_raw_jobs), BATCH_SIZE)]
     logger.info("scrape_extraction_start", jobs=len(new_raw_jobs), batches=len(batches))
 
-    # Process batches in parallel groups of 5
+    FIRESTORE_BATCH_SIZE = 500  # Firestore commit limit per write batch
+
+    # Process batches in parallel groups of 5, then commit each group's writes
+    # in a single Firestore WriteBatch (vs ~50 serial awaits previously).
     for group_start in range(0, len(batches), PARALLEL_BATCHES):
         group = batches[group_start:group_start + PARALLEL_BATCHES]
 
         async def _extract_batch(batch: list[dict]) -> list[tuple[dict, dict]]:
-            """Extract a batch and return (raw_job, extracted) pairs."""
             texts = [job["_clean_text"] for job in batch]
             try:
                 results = await extract_job_data_batch(texts)
@@ -262,10 +273,10 @@ async def run_scraping_pipeline() -> dict:
                 return []
             return list(zip(batch, results))
 
-        # Run up to 5 batches in parallel
         group_results = await asyncio.gather(*[_extract_batch(b) for b in group])
 
-        # Store results
+        # Materialize job docs for this group
+        group_writes: list[tuple[str, dict]] = []
         for pairs in group_results:
             for raw_job, extracted in pairs:
                 job_id = raw_job["_job_id"]
@@ -294,11 +305,9 @@ async def run_scraping_pipeline() -> dict:
                     expires_at = posted_dt + timedelta(days=14)
                     posted_date = posted_dt.strftime("%Y-%m-%d")
 
-                # Reject stale jobs (older than 30 days) — catches bad scraper data
                 if (datetime.now(timezone.utc) - posted_dt).days > 30:
                     continue
 
-                # Prefer scraper hints for location/work_mode (more reliable than AI)
                 job_location = (
                     _sanitize_field(raw_job.get("location_hint", ""))
                     or _sanitize_field(extracted.get("location", ""))
@@ -312,7 +321,6 @@ async def run_scraping_pipeline() -> dict:
                     or extracted.get("salary_range")
                 )
 
-                # Filter out non-Brazilian jobs
                 if not _is_brazilian_job(job_location):
                     continue
 
@@ -333,12 +341,25 @@ async def run_scraping_pipeline() -> dict:
                     "extracted_at": now_iso,
                     "expires_at": expires_at,
                 }
+                group_writes.append((job_id, job_doc))
 
-                try:
-                    await fs.db.collection("jobs").document(job_id).set(job_doc)
-                    jobs_new += 1
-                except Exception as e:
-                    logger.error("job_store_error", job_id=job_id, error=str(e))
+        # Commit this group in a single WriteBatch (or chunks of 500 if ever larger).
+        # Committing per group means a timeout mid-way preserves prior groups' work.
+        for i in range(0, len(group_writes), FIRESTORE_BATCH_SIZE):
+            chunk = group_writes[i:i + FIRESTORE_BATCH_SIZE]
+            wb = fs.db.batch()
+            for job_id, job_doc in chunk:
+                wb.set(jobs_col.document(job_id), job_doc)
+            try:
+                await wb.commit()
+                jobs_new += len(chunk)
+            except Exception as e:
+                logger.error("jobs_batch_write_error", count=len(chunk), error=str(e))
+
+        if (group_start // PARALLEL_BATCHES) % 10 == 0:
+            logger.info("scrape_progress", groups_done=group_start // PARALLEL_BATCHES + 1,
+                        groups_total=(len(batches) + PARALLEL_BATCHES - 1) // PARALLEL_BATCHES,
+                        jobs_written=jobs_new)
 
     # Cleanup expired jobs
     expired_count = await fs.cleanup_expired_jobs()
