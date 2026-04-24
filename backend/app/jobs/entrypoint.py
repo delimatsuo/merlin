@@ -66,11 +66,25 @@ async def main():
         one_time_stats = await send_one_time_digests()
         logger.info("job_pipeline_one_time_done", **one_time_stats)
 
-        # Phase 4: Cleanup expired jobs
+        # Phase 4: Cleanup expired jobs (14-day TTL)
         from app.services.firestore import FirestoreService
         fs = FirestoreService()
         expired = await fs.cleanup_expired_jobs()
         logger.info("job_pipeline_cleanup_done", expired_jobs=expired)
+
+        # Phase 5: Mark-and-sweep for jobs removed from Gupy.
+        # Gate on a healthy scrape count — a partial Gupy outage would
+        # otherwise delete live jobs because they weren't re-seen today.
+        SCRAPE_MIN_FOR_SWEEP = 5000
+        scraped_unique = scrape_stats.get("jobs_scraped_unique", 0)
+        if scraped_unique >= SCRAPE_MIN_FOR_SWEEP:
+            stale_stats = await fs.cleanup_stale_jobs(grace_days=3)
+            logger.info("job_pipeline_stale_sweep_done", **stale_stats)
+        else:
+            logger.warning("job_pipeline_stale_sweep_skipped",
+                          reason="scrape_too_small",
+                          scraped_unique=scraped_unique,
+                          threshold=SCRAPE_MIN_FOR_SWEEP)
 
         logger.info("job_pipeline_complete")
 

@@ -1687,6 +1687,63 @@ class FirestoreService:
         doc = await ref.get()
         return doc.exists
 
+    async def cleanup_stale_jobs(self, grace_days: int = 3) -> dict:
+        """Mark-and-sweep: delete jobs not seen in a recent scrape.
+
+        A job is 'stale' if its last_seen_at is older than `grace_days` — i.e.,
+        it hasn't been returned by Gupy for that long. Rows missing the field
+        get it seeded to `now` (self-healing backfill for existing rows written
+        before this field was introduced); they become candidates for deletion
+        on future runs, never on the first cleanup.
+
+        Caller (entrypoint) must guard against a degraded scrape run — if
+        today's Gupy pull returned far fewer jobs than usual, we'd mass-delete
+        live ones.
+        """
+        now = datetime.now(timezone.utc)
+        cutoff_iso = (now - timedelta(days=grace_days)).isoformat()
+        now_iso = now.isoformat()
+
+        to_delete: list = []
+        to_seed: list = []
+        async for doc in self.db.collection("jobs").stream():
+            data = doc.to_dict() or {}
+            last_seen = data.get("last_seen_at")
+            if last_seen is None:
+                to_seed.append(doc.reference)
+            elif isinstance(last_seen, str) and last_seen < cutoff_iso:
+                to_delete.append(doc.reference)
+            # else: fresh enough, leave it alone
+
+        BATCH = 500
+        seeded = 0
+        deleted = 0
+
+        for i in range(0, len(to_seed), BATCH):
+            chunk = to_seed[i:i + BATCH]
+            wb = self.db.batch()
+            for ref in chunk:
+                wb.update(ref, {"last_seen_at": now_iso})
+            try:
+                await wb.commit()
+                seeded += len(chunk)
+            except Exception as e:
+                logger.error("stale_seed_error", count=len(chunk), error=str(e))
+
+        for i in range(0, len(to_delete), BATCH):
+            chunk = to_delete[i:i + BATCH]
+            wb = self.db.batch()
+            for ref in chunk:
+                wb.delete(ref)
+            try:
+                await wb.commit()
+                deleted += len(chunk)
+            except Exception as e:
+                logger.error("stale_delete_error", count=len(chunk), error=str(e))
+
+        logger.info("stale_jobs_cleaned", deleted=deleted, seeded=seeded, grace_days=grace_days)
+        return {"deleted": deleted, "seeded": seeded, "grace_days": grace_days}
+
     async def cleanup_expired_jobs(self) -> int:
         """Delete all expired jobs in batches. Returns count deleted.
 

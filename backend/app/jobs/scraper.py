@@ -238,6 +238,27 @@ async def run_scraping_pipeline() -> dict:
 
     logger.info("scrape_dedup_done", new=len(new_raw_jobs), duplicates=jobs_duplicate)
 
+    # Mark-and-sweep: stamp last_seen_at on every existing job we re-scraped
+    # today. Cleanup later deletes jobs not seen in N days (i.e., removed
+    # from Gupy). Batched to avoid the serial-write hotspot we already fixed
+    # for the write path.
+    now_utc_iso = datetime.now(timezone.utc).isoformat()
+    if existing_ids:
+        TOUCH_BATCH_SIZE = 500
+        existing_list = list(existing_ids)
+        jobs_touched = 0
+        for i in range(0, len(existing_list), TOUCH_BATCH_SIZE):
+            chunk = existing_list[i:i + TOUCH_BATCH_SIZE]
+            wb = fs.db.batch()
+            for job_id in chunk:
+                wb.update(jobs_col.document(job_id), {"last_seen_at": now_utc_iso})
+            try:
+                await wb.commit()
+                jobs_touched += len(chunk)
+            except Exception as e:
+                logger.error("jobs_touch_error", count=len(chunk), error=str(e))
+        logger.info("scrape_touched_existing", count=jobs_touched)
+
     # Cap new jobs per run so extraction + writes fit inside the task-timeout
     # budget. Leftover jobs dedupe naturally on the next run — they'll appear
     # as existing on subsequent scrapes and be skipped until they expire.
@@ -340,6 +361,7 @@ async def run_scraping_pipeline() -> dict:
                     "raw_text": clean_text[:10000],
                     "extracted_at": now_iso,
                     "expires_at": expires_at,
+                    "last_seen_at": now_utc_iso,
                 }
                 group_writes.append((job_id, job_doc))
 
@@ -371,6 +393,7 @@ async def run_scraping_pipeline() -> dict:
         "jobs_new": jobs_new,
         "jobs_duplicate": jobs_duplicate,
         "jobs_total": len(all_raw_jobs),
+        "jobs_scraped_unique": len(candidates),
         "sources_ok": sources_ok,
         "sources_failed": sources_failed,
     }
