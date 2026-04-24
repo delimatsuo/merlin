@@ -193,7 +193,14 @@ async def run_scraping_pipeline() -> dict:
 
     if not all_raw_jobs:
         logger.error("scrape_zero_jobs", sources_ok=sources_ok, sources_failed=sources_failed)
-        # TODO: Fire Sentry alert
+        try:
+            import sentry_sdk
+            sentry_sdk.capture_message(
+                "scrape_zero_jobs: all sources returned no jobs",
+                level="error",
+            )
+        except Exception:
+            pass
         return {"jobs_new": 0, "jobs_total": 0, "sources_ok": sources_ok, "sources_failed": sources_failed}
 
     # Phase 1: Dedup — batch-read existing jobs from Firestore.

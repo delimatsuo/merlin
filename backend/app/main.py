@@ -105,7 +105,12 @@ async def ai_overloaded_handler(request: Request, exc: AIProviderOverloadedError
 # CORS — explicit methods and headers
 origins = settings.allowed_origins.split(",")
 if settings.chrome_extension_origin:
-    origins.append(settings.chrome_extension_origin)
+    # Accept a comma-separated list so we can allow the dev-time extension ID
+    # (forced by manifest.json `key`) and the Web Store-assigned ID at the
+    # same time, with no downtime during the transition.
+    origins.extend(
+        o.strip() for o in settings.chrome_extension_origin.split(",") if o.strip()
+    )
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,

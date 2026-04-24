@@ -37,6 +37,16 @@ def _setup():
             "storageBucket": settings.firebase_storage_bucket,
         })
 
+    settings = get_settings()
+    if settings.sentry_dsn:
+        import sentry_sdk
+        sentry_sdk.init(
+            dsn=settings.sentry_dsn,
+            environment="production" if os.getenv("K_SERVICE") else "development",
+            traces_sample_rate=0.0,
+            send_default_pii=False,
+        )
+
 
 async def main():
     """Run the full daily pipeline: scrape → match → email."""
@@ -90,7 +100,12 @@ async def main():
 
     except Exception as e:
         logger.error("job_pipeline_fatal", error=str(e), error_type=type(e).__name__)
-        # TODO: Fire Sentry alert
+        try:
+            import sentry_sdk
+            sentry_sdk.capture_exception(e)
+            sentry_sdk.flush(timeout=5)
+        except Exception:
+            pass
         sys.exit(1)
 
 
