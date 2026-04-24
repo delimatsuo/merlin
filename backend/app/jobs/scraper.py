@@ -356,19 +356,21 @@ async def run_scraping_pipeline() -> dict:
             except Exception as e:
                 logger.error("jobs_batch_write_error", count=len(chunk), error=str(e))
 
-        if (group_start // PARALLEL_BATCHES) % 10 == 0:
-            logger.info("scrape_progress", groups_done=group_start // PARALLEL_BATCHES + 1,
-                        groups_total=(len(batches) + PARALLEL_BATCHES - 1) // PARALLEL_BATCHES,
-                        jobs_written=jobs_new)
+        group_idx = group_start // PARALLEL_BATCHES
+        groups_total = (len(batches) + PARALLEL_BATCHES - 1) // PARALLEL_BATCHES
+        # Log every 5 groups and always on the final group
+        if group_idx % 5 == 0 or group_idx == groups_total - 1:
+            logger.info("scrape_progress", groups_done=group_idx + 1,
+                        groups_total=groups_total, jobs_written=jobs_new)
 
-    # Cleanup expired jobs
-    expired_count = await fs.cleanup_expired_jobs()
+    # cleanup_expired_jobs is owned by entrypoint.py phase 4; don't run it
+    # here. It previously ran twice per pipeline and its serial per-doc
+    # delete loop hung long enough to trigger a 504 Deadline Exceeded.
 
     stats = {
         "jobs_new": jobs_new,
         "jobs_duplicate": jobs_duplicate,
         "jobs_total": len(all_raw_jobs),
-        "jobs_expired_cleaned": expired_count,
         "sources_ok": sources_ok,
         "sources_failed": sources_failed,
     }

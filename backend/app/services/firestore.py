@@ -1677,15 +1677,33 @@ class FirestoreService:
         return doc.exists
 
     async def cleanup_expired_jobs(self) -> int:
-        """Delete all expired jobs. Returns count deleted."""
+        """Delete all expired jobs in batches. Returns count deleted.
+
+        Previously used per-doc `await delete()` in a stream loop, which at
+        production scale hung long enough to trigger 504 Deadline Exceeded.
+        Batched deletes cut N round-trips → N/500 round-trips.
+        """
         now = datetime.now(timezone.utc)
         query = self.db.collection("jobs").where(
             filter=FieldFilter("expires_at", "<", now)
         )
-        count = 0
+        refs: list = []
         async for doc in query.stream():
-            await doc.reference.delete()
-            count += 1
+            refs.append(doc.reference)
+
+        BATCH = 500
+        count = 0
+        for i in range(0, len(refs), BATCH):
+            chunk = refs[i:i + BATCH]
+            wb = self.db.batch()
+            for ref in chunk:
+                wb.delete(ref)
+            try:
+                await wb.commit()
+                count += len(chunk)
+            except Exception as e:
+                logger.error("expired_jobs_delete_error", count=len(chunk), error=str(e))
+
         logger.info("expired_jobs_cleaned", count=count)
         return count
 
