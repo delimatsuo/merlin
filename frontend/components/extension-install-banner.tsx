@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import Image from "next/image";
 import { X } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -22,11 +23,9 @@ function isDismissed(): boolean {
 
 export function ExtensionInstallBanner() {
   const detected = useExtensionDetected();
-  const [dismissed, setDismissed] = useState(false);
-
-  useEffect(() => {
-    setDismissed(isDismissed());
-  }, []);
+  // Lazy initializer keeps the dismissal check off the render path on
+  // subsequent renders and avoids a setState-in-effect cascade.
+  const [dismissed, setDismissed] = useState<boolean>(() => isDismissed());
 
   // Hide while detection is in flight, or when extension is present, or when
   // recently dismissed.
@@ -43,7 +42,7 @@ export function ExtensionInstallBanner() {
 
   return (
     <div className="rounded-2xl border border-border bg-card apple-shadow-sm p-4 sm:p-5 flex items-start gap-4">
-      <img
+      <Image
         src="/icon.png"
         alt=""
         width={40}

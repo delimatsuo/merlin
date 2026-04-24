@@ -65,7 +65,7 @@ export function DashboardNav() {
     };
     check();
     return () => { cancelled = true; };
-  }, [user, isAdmin]);
+  }, [user, isAdmin, setIsAdmin]);
 
   const handleSignOut = async () => {
     await signOut(auth);

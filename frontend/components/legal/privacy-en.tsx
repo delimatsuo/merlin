@@ -374,7 +374,7 @@ export default function PrivacyEN() {
         </ul>
         <p className="text-sm text-foreground/80 leading-relaxed mb-4">
           This data is used solely by the extension to fill matching
-          fields in Gupy forms. It remains on the user's machine until
+          fields in Gupy forms. It remains on the user&apos;s machine until
           edited or until the extension is uninstalled.
         </p>
 
@@ -401,7 +401,7 @@ export default function PrivacyEN() {
         <p className="text-sm text-foreground/80 leading-relaxed mb-4">
           The extension reads form labels and structure on Gupy job
           pages to identify which fields to fill. Gupy page content is
-          not stored or transmitted outside the context of the user's
+          not stored or transmitted outside the context of the user&apos;s
           own active application.
         </p>
 

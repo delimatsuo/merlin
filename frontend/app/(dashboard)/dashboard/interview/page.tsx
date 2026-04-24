@@ -66,6 +66,11 @@ export default function EntrevistaPage() {
 
   // Cleanup audio, mic, and TTS cache on unmount
   useEffect(() => {
+    // Capture the cache reference at effect creation. The Map identity is
+    // stable for the component's lifetime — only its contents mutate — so
+    // this still revokes the latest entries at unmount, while satisfying
+    // the ref-cleanup lint rule.
+    const ttsCache = ttsCacheRef.current;
     return () => {
       audioRef.current?.pause();
       if (mediaRecorderRef.current?.state !== "inactive") {
@@ -73,9 +78,8 @@ export default function EntrevistaPage() {
       }
       streamRef.current?.getTracks().forEach((t) => t.stop());
       if (timerRef.current) clearInterval(timerRef.current);
-      // Revoke all cached blob URLs
-      ttsCacheRef.current.forEach((url) => URL.revokeObjectURL(url));
-      ttsCacheRef.current.clear();
+      ttsCache.forEach((url) => URL.revokeObjectURL(url));
+      ttsCache.clear();
     };
   }, []);
 
@@ -115,6 +119,9 @@ export default function EntrevistaPage() {
       }
     };
     init();
+    // Questions and translations are bound to the session-start locale.
+    // Mid-session locale changes intentionally don't re-fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Preload TTS audio for all questions when voice mode is selected
@@ -149,6 +156,8 @@ export default function EntrevistaPage() {
     };
 
     preloadAll();
+    // TTS preload is bound to the session-start locale; see init effect above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, mode]);
 
   // In voice mode, auto-play TTS when question changes
@@ -269,7 +278,7 @@ export default function EntrevistaPage() {
     } catch {
       setError(t("interview.errorMicAccess"));
     }
-  }, [currentIndex]);
+  }, [currentIndex, t]);
 
   const pauseRecording = useCallback(() => {
     if (mediaRecorderRef.current?.state === "recording") {

@@ -55,7 +55,7 @@ export default function AdminUsuarios() {
 
   useEffect(() => {
     if (users.length === 0) fetchUsers();
-  }, []);
+  }, [fetchUsers, users.length]);
 
   const handleSearch = () => {
     fetchUsers("", search.trim());

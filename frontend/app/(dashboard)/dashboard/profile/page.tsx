@@ -207,7 +207,7 @@ export default function PerfilPage() {
         setLoading(false);
       }
     },
-    [setProfile, setLoading, setProfileId, markStep, addTask, completeTask, failTask, router]
+    [setProfile, setLoading, setProfileId, markStep, addTask, completeTask, failTask, router, t]
   );
 
   const handleGetRecommendations = async () => {

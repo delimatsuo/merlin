@@ -71,7 +71,7 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [user, authLoading, isAdmin]);
+  }, [user, authLoading, isAdmin, router, setIsAdmin, setStats, setDailyChart, setRecentGenerations]);
 
   if (authLoading || checking || isAdmin === null) {
     return (

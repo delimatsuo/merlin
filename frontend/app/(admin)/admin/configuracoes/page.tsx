@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { useAdminStore, type AdminSettingsData } from "@/lib/store";
 
 export default function AdminConfiguracoes() {
-  const { settings, setSettings } = useAdminStore();
+  const { setSettings } = useAdminStore();
   const [form, setForm] = useState<AdminSettingsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -23,7 +23,7 @@ export default function AdminConfiguracoes() {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [setSettings]);
 
   const handleSave = async () => {
     if (!form) return;
