@@ -20,6 +20,8 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { useQueueStore, type QueueEntry } from "@/lib/store";
 import { useTranslation } from "@/lib/hooks/useTranslation";
+import { useExtensionDetected } from "@/lib/hooks/useExtensionDetected";
+import { ExtensionInstallBanner } from "@/components/extension-install-banner";
 import { cn } from "@/lib/utils";
 
 const POLL_INTERVAL_MS = 5_000;
@@ -140,7 +142,7 @@ function CandidaturasContent() {
   const { active, recent, loading, setQueue, setLoading } = useQueueStore();
   const [tab, setTab] = useState<"pipeline" | "history">("pipeline");
   const [controlBusy, setControlBusy] = useState(false);
-  const [extensionDetected, setExtensionDetected] = useState(false);
+  const extensionDetected = useExtensionDetected() === true;
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const activeCount = active.length;
 
@@ -211,27 +213,6 @@ function CandidaturasContent() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, activeCount]);
-
-  // Detect the Merlin extension via postMessage handshake. The bridge
-  // content script fires MERLIN_EXTENSION_READY once on initial page load,
-  // but we may have been client-side-navigated in after that — so we also
-  // PING on mount and the bridge replies with a second READY.
-  useEffect(() => {
-    const onMsg = (e: MessageEvent) => {
-      if (e.source !== window) return;
-      if (e.data?.type === "MERLIN_EXTENSION_READY") setExtensionDetected(true);
-    };
-    window.addEventListener("message", onMsg);
-    try {
-      window.postMessage(
-        { type: "MERLIN_EXTENSION_PING" },
-        window.location.origin,
-      );
-    } catch {
-      /* ignore */
-    }
-    return () => window.removeEventListener("message", onMsg);
-  }, []);
 
   // Default to Pipeline when there's active work; otherwise show whichever
   // tab the user picked.
@@ -309,6 +290,8 @@ function CandidaturasContent() {
           {t("candidaturas.subtitle")}
         </p>
       </div>
+
+      <ExtensionInstallBanner />
 
       {/* Tabs */}
       <div className="flex items-center justify-between border-b border-border">

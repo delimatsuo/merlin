@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { JobCard } from "@/components/job-card";
 import { JobPreferencesForm } from "@/components/job-preferences-form";
 import { BatchPreflightSheet } from "@/components/batch-preflight-sheet";
+import { ExtensionInstallBanner } from "@/components/extension-install-banner";
 import {
   useBatchSelectionStore,
   useJobFeedStore,
@@ -238,6 +239,8 @@ function VagasContent() {
           {t("vagas.editFilters")}
         </Button>
       </div>
+
+      <ExtensionInstallBanner />
 
       {/* Early application tip */}
       <div className="rounded-xl bg-foreground/[0.03] border border-foreground/[0.06] px-4 py-3">

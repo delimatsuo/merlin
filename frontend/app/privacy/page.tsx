@@ -38,7 +38,7 @@ export default function PrivacyPage() {
             {t("legal.privacyTitle")}
           </h1>
           <p className="text-sm text-muted-foreground mt-3">
-            {locale === "en" ? "Last updated: March 2026" : "Ultima atualizacao: Marco de 2026"}
+            {locale === "en" ? "Last updated: April 2026" : "Ultima atualizacao: Abril de 2026"}
           </p>
         </header>
         {locale === "en" ? <PrivacyEN /> : <PrivacyPTBR />}

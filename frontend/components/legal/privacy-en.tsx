@@ -338,7 +338,110 @@ export default function PrivacyEN() {
 
       <section>
         <h2 className="text-xl font-semibold text-foreground mb-3">
-          14. Regional Availability
+          14. Chrome Extension (Gupy AutoApply)
+        </h2>
+        <p className="text-sm text-foreground/80 leading-relaxed mb-4">
+          The official Merlin Chrome extension automates filling out job
+          application forms on the Gupy portal using your Merlin profile.
+          This section details data handling specific to the extension.
+        </p>
+        <p className="text-sm text-foreground/80 leading-relaxed mb-4">
+          <strong>Single purpose:</strong> automate form-filling for job
+          listings hosted on gupy.io. No other use is offered.
+        </p>
+
+        <h3 className="text-base font-semibold text-foreground mt-6 mb-2">
+          Data stored locally in your browser
+        </h3>
+        <p className="text-sm text-foreground/80 leading-relaxed mb-3">
+          The following data is kept exclusively in
+          <code className="font-mono mx-1">chrome.storage.local</code>
+          on your machine and <strong>is never sent to our servers nor
+          processed by AI</strong>:
+        </p>
+        <ul className="space-y-2 mb-4">
+          {[
+            "Brazilian tax ID (CPF), state ID (RG), and mother's name",
+            "Date of birth, gender, marital status, ethnicity/race, disability status",
+            "Full home address (street, city, state, ZIP)",
+            "Phone number",
+          ].map((item) => (
+            <li key={item} className="flex items-start gap-3 text-sm text-foreground/80">
+              <span className="h-1.5 w-1.5 rounded-full bg-foreground/30 mt-1.5 shrink-0" />
+              {item}
+            </li>
+          ))}
+        </ul>
+        <p className="text-sm text-foreground/80 leading-relaxed mb-4">
+          This data is used solely by the extension to fill matching
+          fields in Gupy forms. It remains on the user's machine until
+          edited or until the extension is uninstalled.
+        </p>
+
+        <h3 className="text-base font-semibold text-foreground mt-6 mb-2">
+          Data transmitted to Merlin servers
+        </h3>
+        <ul className="space-y-2 mb-4">
+          {[
+            "Jobs selected for batch application (ID, URL, title, company)",
+            "Status of each application (pending, running, completed, needs attention, failed)",
+            "User-provided answers to custom questions (saved so the system does not ask again on future applications)",
+            "Text of custom questions that require AI assistance — sent to Gemini to generate a suggested answer based on your existing professional profile in the platform",
+          ].map((item) => (
+            <li key={item} className="flex items-start gap-3 text-sm text-foreground/80">
+              <span className="h-1.5 w-1.5 rounded-full bg-foreground/30 mt-1.5 shrink-0" />
+              {item}
+            </li>
+          ))}
+        </ul>
+
+        <h3 className="text-base font-semibold text-foreground mt-6 mb-2">
+          Data read from Gupy pages
+        </h3>
+        <p className="text-sm text-foreground/80 leading-relaxed mb-4">
+          The extension reads form labels and structure on Gupy job
+          pages to identify which fields to fill. Gupy page content is
+          not stored or transmitted outside the context of the user's
+          own active application.
+        </p>
+
+        <h3 className="text-base font-semibold text-foreground mt-6 mb-2">
+          Authentication
+        </h3>
+        <p className="text-sm text-foreground/80 leading-relaxed mb-4">
+          The extension uses
+          <code className="font-mono mx-1">chrome.identity.launchWebAuthFlow</code>
+          to sign in with Google, exchanging the result for a Firebase
+          ID Token. The session token is stored in
+          <code className="font-mono mx-1">chrome.storage.session</code>
+          (cleared automatically when the browser closes). It is not
+          shared with third parties.
+        </p>
+
+        <h3 className="text-base font-semibold text-foreground mt-6 mb-2">
+          Requested permissions and purpose
+        </h3>
+        <div className="space-y-3">
+          {[
+            { p: "tabs", d: "Open, focus, and manage application tabs in parallel." },
+            { p: "storage", d: "Persist personal data and extension settings locally." },
+            { p: "identity", d: "Authenticate via Google/Firebase." },
+            { p: "scripting", d: "Inject form-filling logic into Gupy job pages." },
+            { p: "alarms", d: "Periodically poll the Merlin server for the application queue." },
+            { p: "Access to *.gupy.io", d: "Read form labels and fill fields during an application." },
+            { p: "Access to merlincv.com", d: "Sync the application queue and status with the Merlin dashboard." },
+          ].map((row) => (
+            <div key={row.p} className="rounded-xl bg-secondary/70 p-4">
+              <p className="text-sm font-medium text-foreground font-mono">{row.p}</p>
+              <p className="text-sm text-muted-foreground mt-0.5">{row.d}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <h2 className="text-xl font-semibold text-foreground mb-3">
+          15. Regional Availability
         </h2>
         <p className="text-sm text-foreground/80 leading-relaxed">
           The Merlin platform is currently available for users in the{" "}
