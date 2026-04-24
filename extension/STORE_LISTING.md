@@ -77,13 +77,27 @@ This is where most of the work is. The form requires a justification for
 **every** permission and host pattern declared in the manifest, plus
 single-purpose, remote-code declaration, and a compliance certification.
 
-### Privacy policy URL
+### Privacy policy URL — use the staging URL for submission
 
 ```
-https://merlincv.com/privacidade
+https://staging.merlincv.com/privacidade
 ```
 
-(Section 14 of the policy is dedicated to the extension specifically.)
+**Why staging, not prod**: `merlincv.com/privacidade` doesn't have section 14
+(extension-specific disclosures) yet. That content ships when we promote
+staging → main. We can't promote until the extension is approved — because
+the install banner on /vagas and /candidaturas would point users to a 404
+Web Store URL during the review window, and the batch-apply flow would
+queue jobs that nothing drives.
+
+Section 14 of the staging policy is dedicated to the extension. The
+reviewer reads it from the staging URL.
+
+**After the extension is approved:**
+1. Merge staging → main (frontend deploys to merlincv.com)
+2. Edit this listing field in the Web Store dashboard → swap to
+   `https://merlincv.com/privacidade`
+3. Both URLs then serve the same content.
 
 ### Single purpose description
 
