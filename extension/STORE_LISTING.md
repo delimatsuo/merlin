@@ -6,10 +6,27 @@ to match the form **field-by-field**, in the order the dashboard shows them.
 | | |
 |---|---|
 | Item name (from manifest) | **Gupy AutoApply** |
-| Status | Draft |
+| Status | Under review (v1.0.1 submitted 2026-04-24) |
 | **Published extension ID** | `gpnbdjkdalnalehhfajgapalhlogbbbd` |
 | Dev-unpacked extension ID | `pckpedgciidgclkelofcicgaeelcicea` (kept by `key` field in `manifest.json`) |
 | Publisher | Ella Executive Search Ltda |
+
+## Submission history
+
+- **v1.0.0** (2026-04-23): REJECTED — "Purple Potassium" violation, Routing ID `FZSL`. Unused `scripting` permission flagged. Rejection email in support@ellaexecutivesearch.com inbox.
+- **v1.0.1** (2026-04-24): Resubmitted. Removed `scripting` AND `activeTab` (audit confirmed neither was used — content scripts run via pre-declared `matches` + `host_permissions`, not runtime injection). Awaiting review.
+
+## Pre-flight config status (all ✅ as of 2026-04-24)
+
+Verified programmatically — see session log for commands.
+
+| # | Item | Status |
+|---|---|---|
+| 1 | OAuth redirect URI on client `531233742939-4vqg9iv7c0v4jr89hb5a428f1486pltj` | ✅ `https://gpnbdjkdalnalehhfajgapalhlogbbbd.chromiumapp.org` (NO trailing slash — must match what the extension code emits at `service-worker.ts:40`) |
+| 2 | Firebase Auth authorized domain | ✅ `gpnbdjkdalnalehhfajgapalhlogbbbd.chromiumapp.org` present |
+| 3 | Cloud Run `CHROME_EXTENSION_ORIGIN` | ✅ `chrome-extension://pckpedgciidgclkelofcicgaeelcicea,chrome-extension://gpnbdjkdalnalehhfajgapalhlogbbbd` |
+
+**Gotcha**: Google OAuth does exact string matching on `redirect_uri`. A trailing slash in the Cloud Console entry does NOT match the code's slash-less URI (first fix attempt had the slash → mismatch).
 
 ---
 
@@ -80,10 +97,16 @@ single-purpose, remote-code declaration, and a compliance certification.
 ### Privacy policy URL — use the staging URL for submission
 
 ```
-https://staging.merlincv.com/privacidade
+https://staging.merlincv.com/privacy
 ```
 
-**Why staging, not prod**: `merlincv.com/privacidade` doesn't have section 14
+**Use `/privacy` not `/privacidade`** — `/privacidade` is a client-side
+redirect to `/privacy`. Web Store reviewers expect the URL they're given
+to land directly. The page is i18n'd: a pt-BR browser sees the Portuguese
+text, an EN browser sees English. Both contain Section 14 (extension
+disclosures).
+
+**Why staging, not prod**: `merlincv.com/privacy` doesn't have section 14
 (extension-specific disclosures) yet. That content ships when we promote
 staging → main. We can't promote until the extension is approved — because
 the install banner on /vagas and /candidaturas would point users to a 404
@@ -96,7 +119,7 @@ reviewer reads it from the staging URL.
 **After the extension is approved:**
 1. Merge staging → main (frontend deploys to merlincv.com)
 2. Edit this listing field in the Web Store dashboard → swap to
-   `https://merlincv.com/privacidade`
+   `https://merlincv.com/privacy`
 3. Both URLs then serve the same content.
 
 ### Single purpose description
@@ -109,11 +132,6 @@ Automatiza o preenchimento de formularios de candidatura em vagas hospedadas no 
 
 Paste each block into the matching field:
 
-**`activeTab`**
-```
-Necessario para a extensao interagir com a aba ativa quando o usuario abre o popup, identificando se a pagina atual e Gupy ou o painel Merlin.
-```
-
 **`alarms`**
 ```
 Necessario para verificar periodicamente (a cada 90 segundos) se ha novas candidaturas pendentes na fila do servidor Merlin. Sem isso, o usuario teria que abrir a extensao manualmente para iniciar cada lote de candidaturas.
@@ -122,11 +140,6 @@ Necessario para verificar periodicamente (a cada 90 segundos) se ha novas candid
 **`identity`**
 ```
 Necessario para autenticacao Google OAuth via chrome.identity.launchWebAuthFlow. Este e o unico metodo recomendado pelo Chrome para extensoes MV3 que se autenticam contra um backend Firebase. O token resultante e armazenado em chrome.storage.session e nao e compartilhado com terceiros.
-```
-
-**`scripting`**
-```
-Necessario para injetar a logica de preenchimento de formularios em paginas de vagas Gupy. A injecao ocorre apenas em paginas em *.gupy.io durante uma candidatura ativa do proprio usuario.
 ```
 
 **`storage`**
