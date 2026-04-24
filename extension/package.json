@@ -1,11 +1,12 @@
 {
   "name": "gupy-autoapply-extension",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Chrome extension for automating Gupy job applications",
   "scripts": {
     "build": "webpack --mode production",
-    "watch": "webpack --mode development --watch"
+    "watch": "webpack --mode development --watch",
+    "build:store": "./scripts/build-store.sh"
   },
   "dependencies": {
     "firebase": "^12.10.0"

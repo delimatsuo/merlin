@@ -266,6 +266,45 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   releaseSession(tabId);
 });
 
+// --- Dashboard navigation ---
+
+// Frontends matched by manifest host_permissions. Order = preference when
+// the user has no Merlin tab open at all (prod first).
+const MERLIN_FRONTENDS = [
+  "https://merlincv.com",
+  "https://staging.merlincv.com",
+  "http://localhost:3000",
+];
+const CANDIDATURAS_PATH = "/dashboard/candidaturas";
+
+async function openCandidaturasDashboard(): Promise<void> {
+  // 1. Already-open candidaturas tab on any env → focus it (no new tab).
+  const allMerlinTabs = await chrome.tabs.query({
+    url: MERLIN_FRONTENDS.map((h) => `${h}/*`),
+  });
+  const existing = allMerlinTabs.find(
+    (t) => t.url && t.url.includes(CANDIDATURAS_PATH),
+  );
+  if (existing?.id != null) {
+    await chrome.tabs.update(existing.id, { active: true });
+    if (existing.windowId) {
+      await chrome.windows.update(existing.windowId, { focused: true });
+    }
+    return;
+  }
+
+  // 2. No candidaturas tab. Use the env the user already has open
+  // (so a staging user doesn't get bounced to prod), else default to prod.
+  let origin = MERLIN_FRONTENDS[0];
+  for (const host of MERLIN_FRONTENDS) {
+    if (allMerlinTabs.some((t) => t.url?.startsWith(host + "/"))) {
+      origin = host;
+      break;
+    }
+  }
+  await chrome.tabs.create({ url: `${origin}${CANDIDATURAS_PATH}` });
+}
+
 // --- Message Handler ---
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -313,8 +352,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return { focused: await focusQueueTab(message.queueId) };
 
       case "QUEUE_OPEN_DASHBOARD":
-        // Dashboard now lives in Merlin frontend, not the extension.
-        await chrome.tabs.create({ url: "https://merlincv.com/dashboard/candidaturas" });
+        // Dashboard lives in the Merlin frontend. Focus an existing
+        // candidaturas tab if one is open (any env), else open a new tab on
+        // whichever env the user already has open, falling back to prod.
+        await openCandidaturasDashboard();
         return { opened: true };
 
       case "GET_QUEUE_OWNERSHIP": {

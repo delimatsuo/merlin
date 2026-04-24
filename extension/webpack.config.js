@@ -18,9 +18,11 @@ const API_BASE =
   process.env.API_BASE ||
   "https://merlin-backend-531233742939.southamerica-east1.run.app";
 
-module.exports = {
-  mode: "development",
-  devtool: "inline-source-map",
+module.exports = (env, argv) => ({
+  mode: argv.mode === "production" ? "production" : "development",
+  // Inline source maps balloon production bundles and aren't useful in a
+  // packaged extension (no source code to map back to). Keep for dev only.
+  devtool: argv.mode === "production" ? false : "inline-source-map",
   entry: {
     content: "./src/content/index.ts",
     "service-worker": "./src/background/service-worker.ts",
@@ -58,4 +60,4 @@ module.exports = {
       ],
     }),
   ],
-};
+});
