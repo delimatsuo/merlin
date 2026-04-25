@@ -105,8 +105,8 @@ store listing goes live (with the published install rather than unpacked).
 
 ## Privacy policy
 
-- [ ] Visit `https://merlincv.com/privacidade` → section 14 covers extension
-- [ ] Visit `https://merlincv.com/privacy` → section 14 covers extension (EN)
+- [ ] Visit `https://staging.merlincv.com/privacy` → section 14 covers extension (this is the URL submitted to the Web Store; production URL doesn't have section 14 yet — content lives on staging until staging→main is merged after Web Store approval)
+- [ ] After staging→main merge: visit `https://merlincv.com/privacy` and `/privacidade` → section 14 covers extension; then update the Web Store listing's Privacy URL field to the prod URL
 
 ## After Web Store publish (re-run on a 4th clean Chrome profile)
 
@@ -117,8 +117,10 @@ store listing goes live (with the published install rather than unpacked).
       `chrome.runtime.id` should now resolve from the published install)
 - [ ] Sign-in flow still works (this is the most common breaker — Firebase
       `authorized_domains` and Google OAuth `redirect_uris` must include
-      `gpnbdjkdalnalehhfajgapalhlogbbbd.chromiumapp.org`, which they do
-      per memory)
+      `gpnbdjkdalnalehhfajgapalhlogbbbd.chromiumapp.org`. Both verified
+      2026-04-24 — see `extension/HANDOVER.md` "Verified pre-flight config"
+      table for re-verify commands. Note: OAuth URI must NOT have trailing
+      slash, code at `src/background/service-worker.ts:40` emits without one.)
 
 ## If anything fails
 
