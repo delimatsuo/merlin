@@ -27,7 +27,6 @@ module.exports = (env, argv) => ({
     content: "./src/content/index.ts",
     "service-worker": "./src/background/service-worker.ts",
     popup: "./src/popup/popup.ts",
-    offscreen: "./src/offscreen/offscreen.ts",
     "merlin-bridge": "./src/content/merlin-bridge.ts",
   },
   output: {
@@ -56,7 +55,6 @@ module.exports = (env, argv) => ({
       patterns: [
         { from: "src/popup/popup.html", to: "popup.html" },
         { from: "src/popup/popup.css", to: "popup.css" },
-        { from: "src/offscreen/offscreen.html", to: "offscreen.html" },
       ],
     }),
   ],
