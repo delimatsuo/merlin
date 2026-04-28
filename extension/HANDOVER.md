@@ -1,7 +1,7 @@
 # Gupy AutoApply Extension — Handover
 
-**Last updated**: 2026-04-24
-**Last commit on `staging`**: `2c8154ca` — fix(extension): remove unused scripting + activeTab permissions
+**Last updated**: 2026-04-28
+**Last commit on `staging`**: `8a1e6df6` — fix(extension): remove dead Firebase auth code (remote-code policy)
 
 Read this first. It tells you where we are, what's pending, what to read next, and what to do when the Web Store verdict lands.
 
@@ -9,19 +9,24 @@ Read this first. It tells you where we are, what's pending, what to read next, a
 
 ## Current state (TL;DR)
 
-- **Extension v1.0.1 is under review** at the Chrome Web Store. Submitted 2026-04-24 after v1.0.0 was rejected.
-- All runtime config (OAuth, Firebase, CORS) is verified and working — the extension is ready to sign users in as soon as Google approves.
-- Code, store listing, and submission pre-flights are done. There is **nothing to implement** while waiting.
+- **Extension v1.0.2 is under review** at the Chrome Web Store. Submitted 2026-04-28 to listing `gpnbdjkdalnalehhfajgapalhlogbbbd` (the original v1.0.0 listing — see "Listing pivot" below for why).
+- All runtime config (OAuth, Firebase, CORS) is verified for this listing's ID — the extension is ready to sign users in once Google approves.
+- Code is clean. There is **nothing to implement** while waiting.
 
 ## Ongoing situation
 
-### Web Store submission
-| Version | Date | Outcome |
-|---|---|---|
-| 1.0.0 | 2026-04-23 | ❌ Rejected — "Purple Potassium" violation, Routing ID `FZSL`. Requested `scripting` permission but never called `chrome.scripting.*`. |
-| 1.0.1 | 2026-04-24 | ⏳ Awaiting review. Removed `scripting` AND `activeTab` (audit confirmed neither used — content scripts run via pre-declared `matches` + `host_permissions`). |
+### Web Store submission history
+| Version | Listing ID | Date | Outcome |
+|---|---|---|---|
+| 1.0.0 | `gpnbdjkdalnalehhfajgapalhlogbbbd` | 2026-04-23 | ❌ "Purple Potassium" / FZSL — unused `scripting` permission |
+| 1.0.1 | `imfpdljkoafagikpaifhakgbnlamgjpc` (orphan — see below) | 2026-04-24 | ❌ Two violations: (a) "remote hosted code in MV3" (Red Potassium); (b) "Google Sign-in not working" — caused by OAuth redirect not allowlisted for the orphan ID |
+| 1.0.2 | `gpnbdjkdalnalehhfajgapalhlogbbbd` (back to original) | 2026-04-28 | ⏳ Pending review. Firebase code removed. |
 
-Reviewer notes submitted with v1.0.1 explicitly point at the FZSL routing ID and describe the fix.
+### Listing pivot (important context)
+
+When v1.0.0 was rejected, the user was unsure of the resubmit flow and accidentally created a NEW listing for v1.0.1 (item ID `imfpdljkoafagikpaifhakgbnlamgjpc`) instead of updating the original draft of `gpnbdjkdalnalehhfajgapalhlogbbbd`. The OAuth redirect URI, Firebase authorized domains, and Cloud Run CORS were all configured for the ORIGINAL ID, so v1.0.1's reviewer hit `redirect_uri_mismatch` when trying to sign in.
+
+For v1.0.2 we pivoted back to the original listing — its ID matches all the auth allowlists, no new config needed. The orphan v1.0.1 listing is still in the dashboard with status "Rejected"; safe to delete after v1.0.2 is approved.
 
 Expected turnaround: 1–3 business days.
 
@@ -57,8 +62,11 @@ This is intentional — production `merlincv.com/privacy` doesn't have Section 1
 
 Both are currently allowlisted in OAuth + Firebase + Cloud Run CORS. Once approved, copy Google's public key from the Web Store Dev Console → Package tab → replace `manifest.json`'s `key` field so local dev installs get the same ID as published. See `STORE_LISTING.md` section "4. (Optional, recommended) sync local dev to published ID" for exact steps.
 
-### 4. 🟢 Stale ancillary files in repo root (not blocking)
-Untracked: `.playwright-mcp/`, `candidaturas-filled.png`, `dashboard-preview.png`, `email-preview-*.html`, `login-clean-state.png`. Leftover from ad-hoc screenshots/testing. Safe to ignore or gitignore.
+### 4. 🟢 Orphan v1.0.1 listing in dashboard (not blocking)
+Item ID `imfpdljkoafagikpaifhakgbnlamgjpc` shows as "Rejected" in the Dev Console items list. Created accidentally on 2026-04-24 when the user thought they had to "start a new application" to resubmit. After v1.0.2 is approved, delete this orphan listing from the dashboard to clean up.
+
+### 5. 🟢 Stale ancillary files in repo root (not blocking)
+Untracked: `.playwright-mcp/`, `candidaturas-filled.png`, `dashboard-preview.png`, `email-preview-*.html`, `login-clean-state.png`, plus the `*.png` screenshots from this Playwright session (`v100-*.png`, `submit-dialog.png`, etc.). Leftover from ad-hoc screenshots/testing. Safe to ignore or gitignore.
 
 ---
 
@@ -92,9 +100,9 @@ All three were verified programmatically on 2026-04-24. **Do not change unless t
 2. **Do not auto-trust the reviewer.** The v1.0.0 rejection was correct; future ones may not be. Audit the claim against the code before changing anything.
 3. If legitimate:
    - Make the minimal fix
-   - Bump `package.json` version (currently 1.0.1 — next would be 1.0.2)
+   - Bump `package.json` version (currently 1.0.2 — next would be 1.0.3)
    - `cd extension && npm run build:store`
-   - Upload new ZIP to Dev Console
+   - Upload new ZIP to Dev Console — **always to listing `gpnbdjkdalnalehhfajgapalhlogbbbd`** (NOT a fresh listing); this is the one with all OAuth/Firebase/CORS configured
    - Update `STORE_LISTING.md` submission history
    - Resubmit with a note referencing the prior Routing ID
 4. If the rejection is mistaken and you can argue it:
