@@ -40,6 +40,7 @@ jobs:
               - '.firebaserc'
             backend:
               - 'backend/**'
+              - 'scrapers/**'
 
       - name: Set environment
         id: env
@@ -139,10 +140,9 @@ jobs:
         run: gcloud auth configure-docker ${{ env.CLOUD_RUN_REGION }}-docker.pkg.dev --quiet
 
       - name: Build and push Docker image
-        working-directory: backend
         run: |
           IMAGE="${{ env.CLOUD_RUN_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/merlin/${{ env.CLOUD_RUN_SERVICE }}:${{ github.sha }}"
-          docker build -t "$IMAGE" .
+          docker build -f backend/Dockerfile -t "$IMAGE" .
           docker push "$IMAGE"
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
 
@@ -161,6 +161,7 @@ jobs:
             --max-instances 25 \
             --min-instances 1 \
             --timeout 300 \
+            --set-secrets="SCRAPFLY_API_KEY=SCRAPFLY_API_KEY:latest" \
             --quiet
 
       - name: Verify deployment
@@ -200,10 +201,9 @@ jobs:
         run: gcloud auth configure-docker ${{ env.CLOUD_RUN_REGION }}-docker.pkg.dev --quiet
 
       - name: Build and push Jobs image
-        working-directory: backend
         run: |
           IMAGE="${{ env.CLOUD_RUN_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/merlin/${{ env.CLOUD_RUN_JOB }}:${{ github.sha }}"
-          docker build -t "$IMAGE" .
+          docker build -f backend/Dockerfile -t "$IMAGE" .
           docker push "$IMAGE"
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
 
@@ -223,6 +223,7 @@ jobs:
               --task-timeout 3600 \
               --max-retries 1 \
               --command "python,-m,app.jobs.entrypoint" \
+              --set-secrets="SCRAPFLY_API_KEY=SCRAPFLY_API_KEY:latest" \
               --quiet
           else
             gcloud run jobs create ${{ env.CLOUD_RUN_JOB }} \
@@ -235,5 +236,6 @@ jobs:
               --task-timeout 3600 \
               --max-retries 1 \
               --command "python,-m,app.jobs.entrypoint" \
+              --set-secrets="SCRAPFLY_API_KEY=SCRAPFLY_API_KEY:latest" \
               --quiet
           fi
