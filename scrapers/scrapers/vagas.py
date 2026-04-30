@@ -57,7 +57,7 @@ def _parse_ldjson(html: str) -> Optional[dict]:
 
 
 def _location_str(ldjson: dict) -> str:
-    loc = ldjson.get("jobLocation", {})
+    loc = ldjson.get("jobLocation") or {}  # guard against None
     if isinstance(loc, list):
         loc = loc[0] if loc else {}
     addr = loc.get("address", {})
@@ -90,17 +90,26 @@ async def _fetch_detail(
     org = data.get("hiringOrganization", {})
     company = org.get("name") if isinstance(org, dict) else None
 
-    return RawJob(
-        source="vagas",
-        source_id=job_id,
-        source_url=url,
-        raw_text=data.get("description") or "",
-        title_hint=data.get("title") or "",
-        company_hint=company,
-        location_hint=_location_str(data) or None,
-        work_mode_hint="onsite",
-        posted_date_hint=(data.get("datePosted") or "")[:10] or None,
-    )
+    # Build required fields first
+    result: RawJob = {
+        "source": "vagas",
+        "source_id": job_id,
+        "source_url": url,
+        "raw_text": data.get("description") or "",
+        "title_hint": data.get("title") or "",
+    }
+
+    # Only set optional fields when truthy
+    if company:
+        result["company_hint"] = company
+    location = _location_str(data)
+    if location:
+        result["location_hint"] = location
+    result["work_mode_hint"] = "onsite"
+    date = (data.get("datePosted") or "")[:10]
+    if date:
+        result["posted_date_hint"] = date
+    return result
 
 
 async def scrape_vagas(
