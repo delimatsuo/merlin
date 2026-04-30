@@ -27,8 +27,11 @@ class ScrapflyJobClient:
             asp=asp,
             country=country,
         )
-        result = await self._client.async_scrape(config)
-        html = result.scrape_result.get("content", "")
+        try:
+            result = await self._client.async_scrape(config)
+        except Exception as e:
+            raise RuntimeError(f"Scrapfly fetch failed for {url}: {e}") from e
+        html = result.content
         if not html:
             raise ValueError(f"Scrapfly returned empty content for {url}")
         logger.debug("scrapfly_fetch_ok", url=url, bytes=len(html))

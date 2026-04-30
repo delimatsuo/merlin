@@ -1,8 +1,3 @@
-# DEPRECATED: Logic has moved to scrapers/scrapers/gupy.py.
-# This file is kept as a fallback until the new package is proven in production
-# for 7+ consecutive days. See scraper.py — it no longer imports from here.
-# Delete after: 2026-05-07 (or when confirmed stable).
-
 """Direct scraper for Gupy's public candidate-portal API.
 
 This is the same endpoint that powers https://portal.gupy.io for all
@@ -29,6 +24,8 @@ from typing import Optional
 import httpx
 import structlog
 
+from scrapers.types import RawJob
+
 logger = structlog.get_logger()
 
 _API_URL = "https://employability-portal.gupy.io/api/v1/jobs"
@@ -36,13 +33,13 @@ _PAGE_SIZE = 100  # Gupy's hard max per page
 _USER_AGENT = "MerlinCV-JobAggregator/1.0 (+https://merlincv.com; contact@merlincv.com)"
 _CONCURRENCY = 3  # Be polite — 3 concurrent requests max
 _REQUEST_TIMEOUT = 20.0
-_SEMAPHORE = asyncio.Semaphore(_CONCURRENCY)
 
 
 async def _fetch_page(
     client: httpx.AsyncClient,
     job_name: str,
     offset: int,
+    semaphore: asyncio.Semaphore,
     workplace_type: Optional[str] = None,
 ) -> list[dict]:
     """Fetch one page of results. Returns [] on any error."""
@@ -54,18 +51,18 @@ async def _fetch_page(
     if workplace_type:
         params["workplaceType"] = workplace_type
 
-    async with _SEMAPHORE:
+    async with semaphore:
         try:
             resp = await client.get(_API_URL, params=params)
         except httpx.RequestError as e:
-            logger.warning("gupy_direct_request_error", term=job_name, offset=offset, error=str(e))
+            logger.warning("gupy_request_error", term=job_name, offset=offset, error=str(e))
             return []
 
     if resp.status_code != 200:
         # A 400 when offset is too deep ends pagination; anything else is noise.
         if resp.status_code != 400:
             logger.warning(
-                "gupy_direct_http_error",
+                "gupy_http_error",
                 term=job_name,
                 offset=offset,
                 status=resp.status_code,
@@ -76,7 +73,7 @@ async def _fetch_page(
     try:
         payload = resp.json()
     except ValueError:
-        logger.warning("gupy_direct_bad_json", term=job_name, offset=offset)
+        logger.warning("gupy_bad_json", term=job_name, offset=offset)
         return []
 
     return payload.get("data") or []
@@ -86,12 +83,13 @@ async def _scrape_term(
     client: httpx.AsyncClient,
     term: str,
     max_results: int,
+    semaphore: asyncio.Semaphore,
 ) -> list[dict]:
     """Paginate a single keyword search up to max_results."""
     collected: list[dict] = []
     offset = 0
     while len(collected) < max_results:
-        batch = await _fetch_page(client, term, offset)
+        batch = await _fetch_page(client, term, offset, semaphore)
         if not batch:
             break
         collected.extend(batch)
@@ -100,12 +98,12 @@ async def _scrape_term(
             break
         offset += _PAGE_SIZE
 
-    logger.info("gupy_direct_term_done", term=term, count=len(collected))
+    logger.info("gupy_term_done", term=term, count=len(collected))
     return collected
 
 
-def _normalize_job(job: dict) -> dict:
-    """Convert Gupy API shape into our canonical scraped-job dict."""
+def _normalize_job(job: dict) -> RawJob:
+    """Convert Gupy API shape into our canonical RawJob."""
     city = (job.get("city") or "").strip()
     state = (job.get("state") or "").strip()
     country = (job.get("country") or "").strip()
@@ -121,47 +119,47 @@ def _normalize_job(job: dict) -> dict:
     else:
         work_mode = "onsite"
 
-    return {
-        "source": "gupy",
-        "source_id": str(job.get("id") or ""),
-        "raw_text": job.get("description") or "",
-        "source_url": job.get("jobUrl") or "",
-        "title_hint": job.get("name") or "",
-        "company_hint": job.get("careerPageName") or "",
-        "posted_date_hint": job.get("publishedDate"),
-        "location_hint": location,
-        "work_mode_hint": work_mode,
-    }
+    return RawJob(
+        source="gupy",
+        source_id=str(job.get("id") or ""),
+        raw_text=job.get("description") or "",
+        source_url=job.get("jobUrl") or "",
+        title_hint=job.get("name") or "",
+        company_hint=job.get("careerPageName") or "",
+        posted_date_hint=(job.get("publishedDate") or "")[:10] or None,
+        location_hint=location,
+        work_mode_hint=work_mode,
+    )
 
 
-async def scrape_gupy_direct(
+async def scrape_gupy(
     search_terms: list[str],
     max_per_term: int = 1500,
-) -> list[dict]:
+) -> list[RawJob]:
     """Scrape Gupy via the public candidate-portal API.
 
-    Returns a deduplicated list of job dicts in the same shape as the
-    existing scrape_gupy (Apify-based) function.
+    Returns a deduplicated list of RawJob dicts.
     """
     if not search_terms:
         return []
 
+    semaphore = asyncio.Semaphore(_CONCURRENCY)
     headers = {
         "Accept": "application/json",
         "User-Agent": _USER_AGENT,
     }
 
     async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT, headers=headers) as client:
-        tasks = [_scrape_term(client, term, max_per_term) for term in search_terms]
+        tasks = [_scrape_term(client, term, max_per_term, semaphore) for term in search_terms]
         results_per_term = await asyncio.gather(*tasks, return_exceptions=True)
 
     # Flatten + dedupe by job id.
     seen_ids: set[str] = set()
-    deduped: list[dict] = []
+    deduped: list[RawJob] = []
     raw_total = 0
     for term_results in results_per_term:
         if isinstance(term_results, BaseException):
-            logger.error("gupy_direct_term_failed", error=str(term_results))
+            logger.error("gupy_term_failed", error=str(term_results))
             continue
         raw_total += len(term_results)
         for job in term_results:
@@ -172,7 +170,7 @@ async def scrape_gupy_direct(
             deduped.append(_normalize_job(job))
 
     logger.info(
-        "gupy_direct_complete",
+        "gupy_complete",
         terms=len(search_terms),
         raw_total=raw_total,
         unique=len(deduped),
