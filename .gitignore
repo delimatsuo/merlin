@@ -53,3 +53,6 @@ npm-debug.log*
 
 # Planning (keep for development)
 # .planning/
+
+# Git worktrees
+.worktrees/
