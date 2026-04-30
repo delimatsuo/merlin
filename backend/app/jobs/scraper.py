@@ -4,20 +4,26 @@ import asyncio
 import hashlib
 import re
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import structlog
 from firebase_admin import firestore as fb_firestore
 
 from app.config import get_settings
-from app.jobs.apify_client import scrape_gupy as scrape_gupy_apify, scrape_brazil_jobs
-from app.jobs.gupy_direct import scrape_gupy_direct
-from app.jobs.adzuna_client import scrape_adzuna
 from app.services.gemini_ai import extract_job_data_batch
+from scrapers import scrape_gupy, scrape_catho, scrape_vagas, scrape_programathor
 
 logger = structlog.get_logger()
 
 _BRT = ZoneInfo("America/Sao_Paulo")
+
+
+def _validate_url(url: str) -> str:
+    """Strip non-http/https URLs to prevent stored XSS via javascript: URIs."""
+    if not url:
+        return ""
+    return url if urlparse(url.strip()).scheme in ("http", "https") else ""
 
 
 def _strip_html(text: str) -> str:
@@ -165,30 +171,33 @@ async def run_scraping_pipeline() -> dict:
     sources_ok = 0
     sources_failed = 0
 
-    # Gupy is the only source. Adzuna was removed because its jobs aren't
-    # automatable and cluttered the feed. scrape_gupy_direct hits Gupy's
-    # public candidate-portal API (free, supports keyword search). The
-    # Apify-based fallback is kept in the import for emergencies — wire it
-    # back via adding (scrape_gupy_apify, "gupy") to this list if the direct
-    # API breaks. Adzuna client is preserved for reference / future non-
-    # automated-feed use cases; just not scraped by default anymore.
-    for scraper_fn, source_name in [
-        (scrape_gupy_direct, "gupy"),
-        # (scrape_adzuna, "adzuna"),            # Removed — not automatable
-        # (scrape_brazil_jobs, "brazil_jobs"),  # Suspended — $0.005/job too expensive
-        # (scrape_gupy_apify, "gupy_apify"),    # Fallback — paid, disabled by default
-    ]:
-        try:
-            jobs = await scraper_fn(search_terms)
-            if jobs:
-                all_raw_jobs.extend(jobs)
-                sources_ok += 1
-                logger.info("scrape_source_ok", source=source_name, count=len(jobs))
-            else:
-                logger.warning("scrape_source_empty", source=source_name)
-                sources_failed += 1
-        except Exception as e:
-            logger.error("scrape_source_failed", source=source_name, error=str(e))
+    # Run all sources concurrently. Catho requires a Scrapfly key and is
+    # skipped silently when not configured. Gupy/Vagas/ProgramaThor are free.
+    catho_key = settings.scrapfly_api_key
+    if not catho_key:
+        logger.warning("catho_skipped_no_scrapfly_key")
+
+    source_coros = {
+        "gupy": scrape_gupy(search_terms),
+        "vagas": scrape_vagas(search_terms, max_pages=2),
+        "programathor": scrape_programathor(search_terms, max_pages=3),
+    }
+    if catho_key:
+        source_coros["catho"] = scrape_catho(search_terms, scrapfly_api_key=catho_key)
+
+    source_names = list(source_coros.keys())
+    source_results = await asyncio.gather(*source_coros.values(), return_exceptions=True)
+
+    for source_name, result in zip(source_names, source_results):
+        if isinstance(result, BaseException):
+            logger.error("scrape_source_failed", source=source_name, error=str(result))
+            sources_failed += 1
+        elif result:
+            all_raw_jobs.extend(result)
+            sources_ok += 1
+            logger.info("scrape_source_ok", source=source_name, count=len(result))
+        else:
+            logger.warning("scrape_source_empty", source=source_name)
             sources_failed += 1
 
     if not all_raw_jobs:
@@ -364,7 +373,7 @@ async def run_scraping_pipeline() -> dict:
                     "posted_date": posted_date,
                     "categories": extracted.get("categories", []),
                     "source": raw_job.get("source", "unknown"),
-                    "source_url": raw_job.get("source_url", ""),
+                    "source_url": _validate_url(raw_job.get("source_url", "")),
                     "raw_text": clean_text[:10000],
                     "extracted_at": now_iso,
                     "expires_at": expires_at,

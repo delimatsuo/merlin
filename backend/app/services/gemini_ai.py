@@ -2,6 +2,7 @@
 
 import json
 import re
+import uuid
 from typing import Optional
 
 import anthropic
@@ -897,11 +898,16 @@ async def extract_job_data_batch(raw_texts: list[str]) -> list[dict]:
     if not raw_texts:
         return []
 
-    # Build combined input with separator
-    combined = "\n---JOB---\n".join(text[:2000] for text in raw_texts)
+    # Use a UUID-based separator to prevent prompt injection via job text.
+    separator = f"===JOB_{uuid.uuid4().hex.upper()}==="
+    safe_texts = [text.replace(separator, "---")[:2000] for text in raw_texts]
+    combined = f"\n{separator}\n".join(safe_texts)
+
+    # Inject the actual separator into the prompt so the model knows what to split on.
+    prompt = JOB_BATCH_EXTRACTION_PROMPT.replace('"---JOB---"', f'"{separator}"')
 
     content = await _call_flash_lite(
-        system=JOB_BATCH_EXTRACTION_PROMPT,
+        system=prompt,
         user_content=combined,
         task="job_extraction_batch",
     )
