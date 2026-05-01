@@ -350,14 +350,23 @@ export class StateMachine {
               break;
             }
 
-            if (!isClickable(finishBtn)) {
+            const finalConfirmationClickability = { ignoreAriaDisabled: true };
+            if (!isClickable(finishBtn, finalConfirmationClickability)) {
               // Gupy's cooling period — poll up to 25s for enablement.
-              // Typical wait is 3-10s. 25s is generous for slow connections.
+              // We still respect native disabled and pointer-events blocks,
+              // but ignore aria-disabled here because Gupy uses it on the
+              // secondary "Finish application" CTA even when the control is
+              // the valid way to submit without optional personalization.
               console.log(
                 "[SM] FINAL_CONFIRMATION: Finish button not clickable yet, waiting...",
                 describeClickability(finishBtn),
               );
-              const becameClickable = await waitUntilClickable(finishBtn, 25000, 400);
+              const becameClickable = await waitUntilClickable(
+                finishBtn,
+                25000,
+                400,
+                finalConfirmationClickability,
+              );
               if (!becameClickable) {
                 console.error(
                   "[SM] FINAL_CONFIRMATION: Finish button stayed disabled after 25s",

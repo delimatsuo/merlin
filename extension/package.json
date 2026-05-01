@@ -1,6 +1,6 @@
 {
   "name": "gupy-autoapply-extension",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "private": true,
   "description": "Chrome extension for automating Gupy job applications",
   "scripts": {
@@ -9,6 +9,7 @@
     "build:store": "./scripts/build-store.sh",
     "test:queue": "tsc --rootDir src --target ES2020 --module ES2020 --moduleResolution node --lib ES2020,DOM --skipLibCheck --outDir /tmp/merlin-extension-tests src/background/queue-diagnostics.ts && node test/queue-diagnostics.test.mjs",
     "test:catho": "tsc --rootDir src --target ES2020 --module ES2020 --moduleResolution node --lib ES2020,DOM --skipLibCheck --outDir /tmp/merlin-extension-tests src/content/adapters/catho-utils.ts && node test/catho-utils.test.mjs",
+    "test:dom-helpers": "tsc --rootDir src --target ES2020 --module ES2020 --moduleResolution node --lib ES2020,DOM --skipLibCheck --outDir /tmp/merlin-extension-tests src/content/dom/helpers.ts && node test/dom-helpers.test.mjs",
     "test:content-storage": "node test/content-storage-boundary.test.mjs"
   },
   "devDependencies": {

@@ -127,8 +127,8 @@ export async function humanLikeType(
  * Simulates a realistic mouse click sequence on an element.
  */
 /**
- * Is this element actually clickable right now? Checks the three signals
- * browsers and React apps actually use to block click propagation:
+ * Is this element actually clickable right now? Checks the signals browsers
+ * and React apps commonly use to block click propagation:
  *   - HTMLButtonElement.disabled (native)
  *   - aria-disabled="true"
  *   - CSS pointer-events: none (on the element or any ancestor)
@@ -139,9 +139,18 @@ export async function humanLikeType(
  * fully clickable. An opacity-based rejection produced 5/5 false negatives
  * in a real batch and left every finish-click as a no-op.
  */
-export function isClickable(el: HTMLElement): boolean {
+export interface ClickabilityOptions {
+  /**
+   * Some Gupy controls use aria-disabled as secondary-action styling while
+   * still accepting clicks. Keep the default strict for generic buttons, but
+   * allow board-specific callers to opt out when they have stronger context.
+   */
+  ignoreAriaDisabled?: boolean;
+}
+
+export function isClickable(el: HTMLElement, options: ClickabilityOptions = {}): boolean {
   if ((el as HTMLButtonElement).disabled) return false;
-  if (el.getAttribute("aria-disabled") === "true") return false;
+  if (!options.ignoreAriaDisabled && el.getAttribute("aria-disabled") === "true") return false;
   if (getComputedStyle(el).pointerEvents === "none") return false;
   let cursor: HTMLElement | null = el.parentElement;
   while (cursor) {
@@ -177,10 +186,11 @@ export async function waitUntilClickable(
   el: HTMLElement,
   timeoutMs: number = 20000,
   intervalMs: number = 400,
+  options: ClickabilityOptions = {},
 ): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (isClickable(el)) return true;
+    if (isClickable(el, options)) return true;
     await sleep(intervalMs);
   }
   return false;
