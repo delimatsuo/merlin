@@ -13,6 +13,15 @@
  * Gupy page" bug, which read a global session flag).
  */
 
+import {
+  type QueueDriveResult,
+  queueApiErrorResult,
+  queueApiNotConfiguredResult,
+  queueBusyResult,
+  queueUnexpectedErrorResult,
+  summarizeQueueDrive,
+} from "./queue-diagnostics";
+
 const POLL_ALARM = "merlin_queue_poll";
 const POLL_INTERVAL_MIN = 1.5; // 90 seconds per spec
 const ACTIVE_STATUSES = new Set(["pending", "running", "needs_attention"]);
@@ -104,11 +113,30 @@ export async function getTabOwnership(tabId: number): Promise<QueueOwnership | n
   return (result[ownershipKey(tabId)] as QueueOwnership | undefined) ?? null;
 }
 
-async function fetchQueue(): Promise<{ active: QueueEntry[]; recent: QueueEntry[] } | null> {
-  if (!apiRequest) return null;
+function apiErrorMessage(resp: { data?: any; error?: string; status?: number }): string | undefined {
+  if (resp.error) return resp.error;
+  if (typeof resp.data?.detail === "string") return resp.data.detail;
+  if (typeof resp.data?.message === "string") return resp.data.message;
+  if (resp.status && resp.status >= 400) return `HTTP ${resp.status}`;
+  return undefined;
+}
+
+async function fetchQueue(): Promise<{
+  queue?: { active: QueueEntry[]; recent: QueueEntry[] };
+  error?: string;
+  status?: number;
+}> {
+  if (!apiRequest) {
+    return { error: "Queue API client is not configured" };
+  }
   const resp = await apiRequest("GET", "/api/applications/queue");
-  if (resp.error || !resp.data) return null;
-  return resp.data;
+  if (resp.error || !resp.data || (resp.status !== undefined && resp.status >= 400)) {
+    return {
+      status: resp.status,
+      error: apiErrorMessage(resp) ?? "Queue API request failed",
+    };
+  }
+  return { queue: resp.data };
 }
 
 async function patchQueueEntry(
@@ -119,9 +147,19 @@ async function patchQueueEntry(
     error_message?: string;
     tab_id?: number | null;
   },
-): Promise<void> {
-  if (!apiRequest) return;
-  await apiRequest("PATCH", `/api/applications/queue/${id}`, body);
+): Promise<{ ok: boolean; status?: number; error?: string }> {
+  if (!apiRequest) {
+    return { ok: false, error: "Queue API client is not configured" };
+  }
+  const resp = await apiRequest("PATCH", `/api/applications/queue/${id}`, body);
+  if (resp.error || (resp.status !== undefined && resp.status >= 400)) {
+    return {
+      ok: false,
+      status: resp.status,
+      error: apiErrorMessage(resp) ?? "Queue API patch failed",
+    };
+  }
+  return { ok: true, status: resp.status };
 }
 
 async function completeBatch(batchId: string): Promise<void> {
@@ -158,14 +196,24 @@ async function findQueueIdForTab(tabId: number): Promise<string | null> {
  *     (they're waiting on the user, not actively consuming a slot).
  *   - When no active entries remain, call complete-batch (once per batch).
  */
-export async function driveQueue(): Promise<void> {
-  if (driving) return;
-  driving = true;
-  try {
-    const queue = await fetchQueue();
-    if (!queue) return;
+export async function driveQueue(): Promise<QueueDriveResult> {
+  if (driving) return queueBusyResult();
+  if (!apiRequest) return queueApiNotConfiguredResult();
 
-    const active = queue.active;
+  driving = true;
+  let openedCount = 0;
+  let failedToOpenCount = 0;
+
+  try {
+    const fetched = await fetchQueue();
+    if (!fetched.queue) {
+      return queueApiErrorResult({
+        status: fetched.status,
+        error: fetched.error,
+      });
+    }
+
+    const active = fetched.queue.active;
     const attentionCount = active.filter((e) => e.status === "needs_attention").length;
     await updateBadge(attentionCount);
 
@@ -206,12 +254,31 @@ export async function driveQueue(): Promise<void> {
         const tab = await chrome.tabs.create({ url: next.job_url, active: false });
         if (tab.id) {
           await setTabOwnership(tab.id, { queueId: next.id, batchId: next.batch_id });
-          await patchQueueEntry(next.id, {
+          const patchResult = await patchQueueEntry(next.id, {
             status: "running",
             tab_id: tab.id,
           });
+          if (!patchResult.ok) {
+            failedToOpenCount += 1;
+            await clearTabOwnership(tab.id);
+            try {
+              await chrome.tabs.remove(tab.id);
+            } catch {
+              /* tab already closed */
+            }
+            console.error(
+              "[Queue] Failed to mark entry running:",
+              patchResult.error,
+              patchResult.status,
+            );
+          } else {
+            openedCount += 1;
+          }
+        } else {
+          failedToOpenCount += 1;
         }
       } catch (err) {
+        failedToOpenCount += 1;
         await patchQueueEntry(next.id, {
           status: "failed",
           error_message: (err as Error).message,
@@ -225,10 +292,12 @@ export async function driveQueue(): Promise<void> {
 
     // Batch complete? Re-fetch and check for zero active.
     const refreshed = await fetchQueue();
-    if (!refreshed) return;
-    if (refreshed.active.length === 0 && refreshed.recent.length > 0) {
+    if (!refreshed.queue) {
+      return summarizeQueueDrive({ active, openedCount, failedToOpenCount });
+    }
+    if (refreshed.queue.active.length === 0 && refreshed.queue.recent.length > 0) {
       // Find the most recent batch id that hasn't been notified yet.
-      const latestBatch = refreshed.recent[0].batch_id;
+      const latestBatch = refreshed.queue.recent[0].batch_id;
       const notifiedKey = `batch_notified_${latestBatch}`;
       const stored = await chrome.storage.session.get(notifiedKey);
       if (!stored[notifiedKey]) {
@@ -236,8 +305,11 @@ export async function driveQueue(): Promise<void> {
         await chrome.storage.session.set({ [notifiedKey]: true });
       }
     }
+
+    return summarizeQueueDrive({ active, openedCount, failedToOpenCount });
   } catch (err) {
     console.error("[Queue] driveQueue failed:", err);
+    return queueUnexpectedErrorResult(err);
   } finally {
     driving = false;
   }
@@ -336,8 +408,8 @@ export async function onTabRemoved(tabId: number): Promise<void> {
 }
 
 /** Called from the frontend (via merlincv.com content-script bridge) or popup. */
-export async function queueKick(): Promise<void> {
-  await driveQueue();
+export async function queueKick(): Promise<QueueDriveResult> {
+  return driveQueue();
 }
 
 /** Focus the tab for a given queue entry, if it's still open. */

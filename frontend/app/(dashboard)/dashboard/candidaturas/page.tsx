@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, Suspense } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
@@ -18,9 +18,9 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
-import { useQueueStore, type QueueEntry } from "@/lib/store";
+import { useAuthStore, useQueueStore, type QueueEntry } from "@/lib/store";
 import { useTranslation } from "@/lib/hooks/useTranslation";
-import { useExtensionDetected } from "@/lib/hooks/useExtensionDetected";
+import { useExtensionStatus, type ExtensionUser } from "@/lib/hooks/useExtensionDetected";
 import { ExtensionInstallBanner } from "@/components/extension-install-banner";
 import { cn } from "@/lib/utils";
 
@@ -31,6 +31,34 @@ interface QueueResponse {
   active: QueueEntry[];
   recent: QueueEntry[];
   active_batch_id: string | null;
+}
+
+interface QueueDriveResult {
+  ok: boolean;
+  reason?: string;
+  activeCount?: number;
+  pendingCount?: number;
+  runningCount?: number;
+  attentionCount?: number;
+  openedCount?: number;
+  failedToOpenCount?: number;
+  pendingIds?: string[];
+  apiStatus?: number;
+  error?: string;
+}
+
+interface QueueKickResult {
+  ok?: boolean;
+  error?: string;
+  queue?: QueueDriveResult;
+  user?: ExtensionUser | null;
+  isAuthenticated?: boolean;
+  version?: string;
+}
+
+function shortUid(uid?: string | null): string {
+  if (!uid) return "";
+  return uid.length > 8 ? `...${uid.slice(-8)}` : uid;
 }
 
 const STATUS_COLORS: Record<QueueEntry["status"], { bg: string; text: string }> = {
@@ -139,15 +167,23 @@ function QueueRow({
 
 function CandidaturasContent() {
   const { t } = useTranslation();
+  const { user } = useAuthStore();
   const { active, recent, loading, setQueue, setLoading } = useQueueStore();
   const [tab, setTab] = useState<"pipeline" | "history">("pipeline");
   const [controlBusy, setControlBusy] = useState(false);
-  const extensionDetected = useExtensionDetected() === true;
+  const [lastKickResult, setLastKickResult] = useState<QueueKickResult | null>(null);
+  const extensionStatus = useExtensionStatus();
+  const extensionDetected = extensionStatus.detected === true;
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastQueueKick = useRef<{ signature: string; at: number } | null>(null);
   const activeCount = active.length;
+  const pendingEntries = useMemo(
+    () => active.filter((entry) => entry.status === "pending"),
+    [active],
+  );
+  const pendingCount = pendingEntries.length;
 
-  const fetchQueue = async () => {
+  const fetchQueue = useCallback(async () => {
     try {
       const resp = await api.get<QueueResponse>("/api/applications/queue");
       setQueue({
@@ -158,7 +194,7 @@ function CandidaturasContent() {
     } catch {
       /* transient errors show via toast elsewhere */
     }
-  };
+  }, [setQueue]);
 
   // Initial load + live polling while on Pipeline tab.
   useEffect(() => {
@@ -170,8 +206,7 @@ function CandidaturasContent() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fetchQueue, setLoading]);
 
   // Poll 5s while there's live work the user is watching, 60s while idle
   // (just to notice a new batch from another device). Pause entirely when
@@ -212,8 +247,7 @@ function CandidaturasContent() {
       document.removeEventListener("visibilitychange", onVisibility);
       if (pollTimer.current) clearInterval(pollTimer.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, activeCount]);
+  }, [tab, activeCount, fetchQueue]);
 
   // Default to Pipeline when there's active work; otherwise show whichever
   // tab the user picked.
@@ -229,8 +263,7 @@ function CandidaturasContent() {
   // fired, or forever if the bridge was stale.
   useEffect(() => {
     if (!extensionDetected) return;
-    const pendingIds = active
-      .filter((entry) => entry.status === "pending")
+    const pendingIds = pendingEntries
       .map((entry) => entry.id)
       .sort();
     if (pendingIds.length === 0) return;
@@ -246,7 +279,108 @@ function CandidaturasContent() {
     } catch {
       /* extension unavailable; install banner covers the fallback */
     }
-  }, [active, extensionDetected]);
+  }, [pendingEntries, extensionDetected]);
+
+  useEffect(() => {
+    const onMsg = (event: MessageEvent) => {
+      if (event.source !== window) return;
+      const data = event.data as QueueKickResult & { type?: string };
+      if (!data || data.type !== "MERLIN_QUEUE_KICK_RESULT") return;
+      setLastKickResult({
+        ok: data.ok,
+        error: data.error,
+        queue: data.queue,
+        user: data.user ?? null,
+        isAuthenticated: data.isAuthenticated,
+        version: data.version,
+      });
+      void fetchQueue();
+    };
+
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, [fetchQueue]);
+
+  const queueIssue = useMemo(() => {
+    if (pendingCount === 0) return null;
+    if (extensionStatus.detected === false) return null;
+
+    const extensionUser = lastKickResult?.user ?? extensionStatus.user ?? null;
+    const extensionAuthenticated =
+      lastKickResult?.isAuthenticated ?? extensionStatus.isAuthenticated;
+    const dashboardEmail = user?.email ?? null;
+
+    if (extensionStatus.detected === true && !extensionStatus.version) {
+      return {
+        title: "Extensão desatualizada",
+        body: "Recarregue a extensão Merlin 1.0.7. A versão instalada não envia diagnósticos suficientes para iniciar este lote com segurança.",
+        detail: "",
+      };
+    }
+
+    if (extensionStatus.detected === true && extensionAuthenticated === false) {
+      return {
+        title: "Extensão sem login",
+        body: "Entre na extensão Merlin com a mesma conta do painel antes de iniciar as candidaturas.",
+        detail: dashboardEmail ? `Painel: ${dashboardEmail}` : "",
+      };
+    }
+
+    if (user?.uid && extensionUser?.uid && user.uid !== extensionUser.uid) {
+      return {
+        title: "Extensão conectada em outra sessão",
+        body: "O painel e a extensão estão autenticados como usuários Firebase diferentes, então a extensão não encontra este lote.",
+        detail: `Painel: ${dashboardEmail ?? shortUid(user.uid)} (${shortUid(user.uid)}) · Extensão: ${extensionUser.email ?? shortUid(extensionUser.uid)} (${shortUid(extensionUser.uid)})`,
+      };
+    }
+
+    const queue = lastKickResult?.queue;
+    if (!queue) return null;
+    if (queue.reason === "already_running") return null;
+
+    if (queue.ok === false) {
+      const authCopy =
+        queue.apiStatus === 401
+          ? "A sessão da extensão expirou. Entre novamente na extensão."
+          : "A extensão tentou buscar a fila, mas o backend recusou ou falhou.";
+      return {
+        title: "Extensão não conseguiu iniciar a fila",
+        body: authCopy,
+        detail: queue.error
+          ? `Erro: ${queue.error}${queue.apiStatus ? ` (HTTP ${queue.apiStatus})` : ""}`
+          : queue.apiStatus
+            ? `HTTP ${queue.apiStatus}`
+            : "",
+      };
+    }
+
+    if ((queue.pendingCount ?? 0) === 0 && pendingCount > 0) {
+      return {
+        title: "Extensão não encontrou este lote",
+        body: "O painel tem vagas aguardando, mas a extensão buscou uma fila sem pendências. Saia e entre novamente na extensão com a mesma conta do painel.",
+        detail: dashboardEmail ? `Conta do painel: ${dashboardEmail}` : "",
+      };
+    }
+
+    if ((queue.failedToOpenCount ?? 0) > 0) {
+      return {
+        title: "Algumas abas não abriram",
+        body: "A extensão encontrou o lote, mas não conseguiu abrir ou marcar todas as vagas como em andamento.",
+        detail: `${queue.failedToOpenCount} falha(s) ao abrir ou atualizar a fila.`,
+      };
+    }
+
+    return null;
+  }, [
+    extensionStatus.detected,
+    extensionStatus.isAuthenticated,
+    extensionStatus.user,
+    extensionStatus.version,
+    lastKickResult,
+    pendingCount,
+    user?.email,
+    user?.uid,
+  ]);
 
   const handleReview = (entry: QueueEntry) => {
     // Ask the extension SW (via the merlincv.com content-script bridge) to
@@ -319,6 +453,23 @@ function CandidaturasContent() {
       </div>
 
       <ExtensionInstallBanner />
+
+      {queueIssue && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-950">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-amber-700" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">{queueIssue.title}</p>
+              <p className="text-xs mt-1 text-amber-900">{queueIssue.body}</p>
+              {queueIssue.detail && (
+                <p className="text-[11px] mt-1 text-amber-800 break-words">
+                  {queueIssue.detail}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex items-center justify-between border-b border-border">

@@ -2,6 +2,19 @@
 
 import { useEffect, useState } from "react";
 
+export interface ExtensionUser {
+  uid: string;
+  email: string | null;
+  displayName?: string | null;
+}
+
+export interface ExtensionStatus {
+  detected: boolean | undefined;
+  version?: string;
+  user?: ExtensionUser | null;
+  isAuthenticated?: boolean;
+}
+
 /**
  * Detect the Merlin Chrome extension via postMessage handshake with the
  * `merlin-bridge.ts` content script.
@@ -12,8 +25,10 @@ import { useEffect, useState } from "react";
  *   - `true` if the extension content script answered MERLIN_EXTENSION_READY
  *   - `false` after a short timeout with no reply
  */
-export function useExtensionDetected(timeoutMs = 1200): boolean | undefined {
-  const [detected, setDetected] = useState<boolean | undefined>(undefined);
+export function useExtensionStatus(timeoutMs = 1200): ExtensionStatus {
+  const [status, setStatus] = useState<ExtensionStatus>({
+    detected: undefined,
+  });
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -22,7 +37,15 @@ export function useExtensionDetected(timeoutMs = 1200): boolean | undefined {
       if (e.source !== window) return;
       if (e.data?.type === "MERLIN_EXTENSION_READY") {
         if (timer) clearTimeout(timer);
-        setDetected(true);
+        setStatus({
+          detected: true,
+          version: typeof e.data.version === "string" ? e.data.version : undefined,
+          user: e.data.user ?? null,
+          isAuthenticated:
+            typeof e.data.isAuthenticated === "boolean"
+              ? e.data.isAuthenticated
+              : undefined,
+        });
       }
     };
     window.addEventListener("message", onMsg);
@@ -37,7 +60,9 @@ export function useExtensionDetected(timeoutMs = 1200): boolean | undefined {
     }
 
     timer = setTimeout(() => {
-      setDetected((prev) => (prev === undefined ? false : prev));
+      setStatus((prev) =>
+        prev.detected === undefined ? { detected: false } : prev,
+      );
     }, timeoutMs);
 
     return () => {
@@ -46,7 +71,11 @@ export function useExtensionDetected(timeoutMs = 1200): boolean | undefined {
     };
   }, [timeoutMs]);
 
-  return detected;
+  return status;
+}
+
+export function useExtensionDetected(timeoutMs = 1200): boolean | undefined {
+  return useExtensionStatus(timeoutMs).detected;
 }
 
 // Published extension ID, assigned by the Chrome Web Store on first upload.

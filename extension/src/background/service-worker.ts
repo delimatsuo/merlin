@@ -130,6 +130,15 @@ async function signOutUser(): Promise<void> {
   await chrome.storage.session.set({ authState });
 }
 
+async function readAuthState(): Promise<AuthState> {
+  const stored = await chrome.storage.session.get("authState");
+  const state = (stored.authState || authState) as AuthState;
+  if (state.token && !authState.token) {
+    authState = state;
+  }
+  return state;
+}
+
 async function getValidToken(): Promise<string | null> {
   // Check if token is still valid (in-memory)
   if (authState.token && Date.now() < authState.tokenExpiry - TOKEN_REFRESH_BUFFER_MS) {
@@ -312,10 +321,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const handle = async () => {
     switch (message.type) {
       case "PING":
-        return {
-          ok: true,
-          version: chrome.runtime.getManifest().version,
-        };
+        {
+          const state = await readAuthState();
+          return {
+            ok: true,
+            version: chrome.runtime.getManifest().version,
+            user: state.user,
+            isAuthenticated: !!state.token,
+          };
+        }
 
       case "SIGN_IN":
         return signIn();
@@ -326,12 +340,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       case "GET_AUTH_STATE": {
         // Read directly from storage to avoid race with SW startup restore
-        const stored = await chrome.storage.session.get("authState");
-        const state = (stored.authState || authState) as AuthState;
-        // Also sync in-memory state if it was stale
-        if (state.token && !authState.token) {
-          authState = state;
-        }
+        const state = await readAuthState();
         return { user: state.user, isAuthenticated: !!state.token };
       }
 
@@ -351,8 +360,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       // --- Batch queue (backend-sourced) ---
       case "QUEUE_KICK":
         // Triggered by popup open, merlincv.com bridge, or tab events.
-        await queueKick();
-        return { ok: true };
+        {
+          const queue = await queueKick();
+          const state = await readAuthState();
+          return {
+            ok: queue.ok,
+            error: queue.error,
+            queue,
+            user: state.user,
+            isAuthenticated: !!state.token,
+            version: chrome.runtime.getManifest().version,
+          };
+        }
 
       case "QUEUE_FOCUS_TAB":
         return { focused: await focusQueueTab(message.queueId) };
@@ -364,9 +383,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // Then kick the queue immediately: from the popup, "Abrir
         // candidaturas em lote" is a user intent to start any pending work,
         // not just navigate to a page that may already be focused.
-        await openCandidaturasDashboard();
-        await queueKick();
-        return { opened: true, kicked: true };
+        {
+          await openCandidaturasDashboard();
+          const queue = await queueKick();
+          const state = await readAuthState();
+          return {
+            ok: queue.ok,
+            error: queue.error,
+            opened: true,
+            kicked: true,
+            queue,
+            user: state.user,
+            isAuthenticated: !!state.token,
+            version: chrome.runtime.getManifest().version,
+          };
+        }
 
       case "GET_QUEUE_OWNERSHIP": {
         const tabId = sender.tab?.id;

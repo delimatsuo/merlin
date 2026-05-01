@@ -16,6 +16,21 @@ type BridgedMessage =
   | { type: "MERLIN_QUEUE_FOCUS_TAB"; queueId: string }
   | { type: "MERLIN_EXTENSION_PING" };
 
+interface ExtensionUser {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+}
+
+interface WorkerResponse {
+  ok?: boolean;
+  error?: string;
+  version?: string;
+  user?: ExtensionUser | null;
+  isAuthenticated?: boolean;
+  queue?: unknown;
+}
+
 const ALLOWED_TYPES = new Set<BridgedMessage["type"]>([
   "MERLIN_QUEUE_KICK",
   "MERLIN_QUEUE_FOCUS_TAB",
@@ -39,10 +54,15 @@ function sendWorkerMessage<T>(message: unknown): Promise<T | null> {
 }
 
 async function announceReady(): Promise<void> {
-  const response = await sendWorkerMessage<{ ok?: boolean }>({ type: "PING" });
+  const response = await sendWorkerMessage<WorkerResponse>({ type: "PING" });
   if (response?.ok) {
     window.postMessage(
-      { type: "MERLIN_EXTENSION_READY" },
+      {
+        type: "MERLIN_EXTENSION_READY",
+        version: response.version,
+        user: response.user ?? null,
+        isAuthenticated: response.isAuthenticated ?? false,
+      },
       window.location.origin,
     );
   }
@@ -52,12 +72,14 @@ async function forwardToWorker(
   message: { type: "QUEUE_KICK" } | { type: "QUEUE_FOCUS_TAB"; queueId: string },
   resultType: "MERLIN_QUEUE_KICK_RESULT" | "MERLIN_QUEUE_FOCUS_TAB_RESULT",
 ): Promise<void> {
-  const response = await sendWorkerMessage<{ error?: string }>(message);
+  const response = await sendWorkerMessage<WorkerResponse>(message);
+  const unavailable = !response;
   window.postMessage(
     {
+      ...(response ?? {}),
       type: resultType,
-      ok: !!response && !response.error,
-      error: response?.error ?? (!response ? "extension_unavailable" : undefined),
+      ok: !!response && response.ok !== false && !response.error,
+      error: response?.error ?? (unavailable ? "extension_unavailable" : undefined),
     },
     window.location.origin,
   );
