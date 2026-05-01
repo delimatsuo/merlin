@@ -24,6 +24,9 @@ let currentSubView: SubView | null = null;
 /** Does this user already have PII saved? Cached so edit→cancel restores. */
 let piiWasCompleteOnOpen = false;
 
+const BR_DATE_RE = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
 // ---------- View switching ----------
 
 function showView(view: View): void {
@@ -58,6 +61,32 @@ function toast(message: string, kind: "success" | "error" = "success"): void {
   }, 2200);
 }
 
+function toBrazilianDateInput(value: string): string {
+  if (!value) return "";
+  if (BR_DATE_RE.test(value)) return value;
+  const match = value.match(ISO_DATE_RE);
+  if (!match) return value;
+  return `${match[3]}/${match[2]}/${match[1]}`;
+}
+
+function isValidBrazilianDate(value: string): boolean {
+  if (!value) return true;
+  const match = value.match(BR_DATE_RE);
+  if (!match) return false;
+
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  if (year < 1900 || year > new Date().getFullYear()) return false;
+
+  const date = new Date(year, month - 1, day);
+  return (
+    date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day
+  );
+}
+
 // ---------- User bar ----------
 
 function setUserEmail(email: string | null): void {
@@ -78,7 +107,7 @@ function piiToForm(pii: PiiProfile): void {
   set("cpf", pii.cpf);
   set("rg", pii.rg);
   set("motherName", pii.motherName);
-  set("birthDate", pii.birthDate);
+  set("birthDate", toBrazilianDateInput(pii.birthDate));
   set("gender", pii.gender);
   set("ethnicity", pii.ethnicity);
   set("disability", pii.disability);
@@ -98,7 +127,7 @@ function formToPii(): PiiProfile {
     cpf: read("cpf"),
     rg: read("rg"),
     motherName: read("motherName"),
-    birthDate: read("birthDate"),
+    birthDate: toBrazilianDateInput(read("birthDate")),
     gender: read("gender"),
     ethnicity: read("ethnicity"),
     disability: read("disability"),
@@ -139,6 +168,15 @@ function applyCepMask(el: HTMLInputElement): void {
   el.addEventListener("input", () => {
     let v = el.value.replace(/\D/g, "").slice(0, 8);
     if (v.length > 5) v = `${v.slice(0, 5)}-${v.slice(5)}`;
+    el.value = v;
+  });
+}
+
+function applyBirthDateMask(el: HTMLInputElement): void {
+  el.addEventListener("input", () => {
+    let v = el.value.replace(/\D/g, "").slice(0, 8);
+    if (v.length > 4) v = `${v.slice(0, 2)}/${v.slice(2, 4)}/${v.slice(4)}`;
+    else if (v.length > 2) v = `${v.slice(0, 2)}/${v.slice(2)}`;
     el.value = v;
   });
 }
@@ -312,6 +350,10 @@ function wire(): void {
       toast("CPF e telefone são obrigatórios.", "error");
       return;
     }
+    if (!isValidBrazilianDate(pii.birthDate)) {
+      toast("Use data de nascimento no formato dd/mm/yyyy.", "error");
+      return;
+    }
     await savePiiProfile(pii);
     piiWasCompleteOnOpen = true;
     renderPiiStatus(pii);
@@ -323,6 +365,7 @@ function wire(): void {
   // Input masks
   applyCpfMask(document.getElementById("cpf") as HTMLInputElement);
   applyPhoneMask(document.getElementById("phone") as HTMLInputElement);
+  applyBirthDateMask(document.getElementById("birthDate") as HTMLInputElement);
   applyCepMask(document.getElementById("zip") as HTMLInputElement);
 }
 

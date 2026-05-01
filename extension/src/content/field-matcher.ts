@@ -28,7 +28,7 @@ interface PiiPattern {
   getValue: (pii: PiiProfile) => string;
 }
 
-/** Convert YYYY-MM-DD (HTML date input) to DD/MM/YYYY (Brazilian format). */
+/** Convert legacy YYYY-MM-DD values to DD/MM/YYYY (Brazilian format). */
 function toBrazilianDate(dateStr: string): string {
   if (!dateStr) return "";
   // Already in DD/MM/YYYY format
