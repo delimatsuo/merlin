@@ -355,8 +355,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // Dashboard lives in the Merlin frontend. Focus an existing
         // candidaturas tab if one is open (any env), else open a new tab on
         // whichever env the user already has open, falling back to prod.
+        // Then kick the queue immediately: from the popup, "Abrir
+        // candidaturas em lote" is a user intent to start any pending work,
+        // not just navigate to a page that may already be focused.
         await openCandidaturasDashboard();
-        return { opened: true };
+        await queueKick();
+        return { opened: true, kicked: true };
 
       case "GET_QUEUE_OWNERSHIP": {
         const tabId = sender.tab?.id;

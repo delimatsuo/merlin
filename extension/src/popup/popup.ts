@@ -328,8 +328,21 @@ function wire(): void {
 
   // Open dashboard
   document.getElementById("open-dashboard")?.addEventListener("click", async () => {
-    await chrome.runtime.sendMessage({ type: "QUEUE_OPEN_DASHBOARD" });
-    window.close();
+    const btn = document.getElementById("open-dashboard") as HTMLButtonElement;
+    const originalText = btn.textContent ?? "Abrir e iniciar candidaturas em lote";
+    btn.disabled = true;
+    btn.textContent = "Iniciando…";
+    try {
+      const resp = await chrome.runtime.sendMessage({ type: "QUEUE_OPEN_DASHBOARD" });
+      if (resp?.error) {
+        throw new Error(resp.error);
+      }
+      window.close();
+    } catch {
+      btn.disabled = false;
+      btn.textContent = originalText;
+      toast("Não foi possível iniciar. Tente recarregar a extensão.", "error");
+    }
   });
 
   // Edit PII from ready view
