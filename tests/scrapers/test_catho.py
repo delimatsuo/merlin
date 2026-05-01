@@ -63,6 +63,9 @@ async def test_search_catho_extracts_job_ids_and_card_data(scrapfly):
     assert results[0]["title_hint"] == "Desenvolvedor Backend"
     assert results[0]["company_hint"] == "Empresa Acme"
     assert results[0]["salary_hint"] == "R$ 8.000"
+    assert results[0]["source_url"] == "https://www.catho.com.br/vagas/desenvolvedor-backend/36001"
+    assert "Titulo: Desenvolvedor Backend" in results[0]["raw_text"]
+    assert len(results[0]["raw_text"]) > 50
     assert results[1]["source_id"] == "36002"
 
 

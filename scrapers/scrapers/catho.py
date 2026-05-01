@@ -16,6 +16,7 @@ import json
 import re
 import structlog
 from typing import Optional
+from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
 
@@ -34,6 +35,38 @@ _JOB_ID_RE = re.compile(r"/vagas/[^/]+/(\d+)/?$")
 # ---------------------------------------------------------------------------
 # HTML parsing helpers
 # ---------------------------------------------------------------------------
+
+def _slug_from_href(href: str) -> str:
+    """Extract the slug segment from a Catho job href or absolute URL."""
+    path = urlparse(href).path
+    parts = [p for p in path.split("/") if p]
+    if len(parts) >= 3 and parts[0] == "vagas":
+        return parts[1]
+    return ""
+
+
+def _card_raw_text(
+    *,
+    title: str,
+    company_hint: str = "",
+    location_hint: str = "",
+    salary_hint: str = "",
+) -> str:
+    """Build enough text from a Catho card for extraction and persistence.
+
+    Catho search pages expose useful card metadata, but not the full job
+    description. The main scraper intentionally drops rows with empty raw_text,
+    so keeping these hints here prevents Catho cards from disappearing before
+    they can be matched by title/location/source.
+    """
+    fields = [
+        f"Titulo: {title}",
+        f"Empresa: {company_hint or 'Nao informada'}",
+        f"Local: {location_hint or 'Nao informado'}",
+        f"Salario: {salary_hint or 'Nao informado'}",
+        "Fonte: Catho",
+    ]
+    return ". ".join(fields) + "."
 
 def _parse_search_cards(html: str) -> list[RawJob]:
     """Extract job cards from a Catho search-results page.
@@ -88,10 +121,15 @@ def _parse_search_cards(html: str) -> list[RawJob]:
             "source": "catho",
             "source_id": job_id,
             "source_url": _DETAIL_URL.format(
-                slug=href.split("/")[2] if len(href.split("/")) >= 3 else "",
+                slug=_slug_from_href(href),
                 job_id=job_id,
             ),
-            "raw_text": "",
+            "raw_text": _card_raw_text(
+                title=title,
+                company_hint=company_hint,
+                location_hint=location_hint,
+                salary_hint=salary_hint,
+            ),
             "title_hint": title,
         }
         if company_hint:
