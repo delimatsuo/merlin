@@ -23,6 +23,7 @@ import { useTranslation } from "@/lib/hooks/useTranslation";
 import { useExtensionStatus, type ExtensionUser } from "@/lib/hooks/useExtensionDetected";
 import { ExtensionInstallBanner } from "@/components/extension-install-banner";
 import { cn } from "@/lib/utils";
+import { getQueueHistoryTimestamp, sortQueueHistoryNewestFirst } from "@/lib/queue-history";
 
 const POLL_INTERVAL_MS = 5_000;
 const IDLE_POLL_INTERVAL_MS = 60_000;
@@ -91,15 +92,43 @@ function StatusIcon({ status }: { status: QueueEntry["status"] }) {
   }
 }
 
+function historyDateLabelKey(status: QueueEntry["status"]): string {
+  switch (status) {
+    case "applied":
+      return "candidaturas.historyDate.applied";
+    case "failed":
+      return "candidaturas.historyDate.failed";
+    case "skipped":
+      return "candidaturas.historyDate.skipped";
+    case "cancelled":
+      return "candidaturas.historyDate.cancelled";
+    default:
+      return "candidaturas.historyDate.completed";
+  }
+}
+
+function formatQueueHistoryDate(entry: QueueEntry, locale: string): string | null {
+  const timestamp = getQueueHistoryTimestamp(entry);
+  if (!timestamp) return null;
+
+  return new Intl.DateTimeFormat(locale, {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(timestamp));
+}
+
 function QueueRow({
   entry,
   onReview,
+  showHistoryDate = false,
 }: {
   entry: QueueEntry;
   onReview: (entry: QueueEntry) => void;
+  showHistoryDate?: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const colors = STATUS_COLORS[entry.status];
+  const historyDate = showHistoryDate ? formatQueueHistoryDate(entry, locale) : null;
 
   return (
     <div className="apple-shadow-sm rounded-2xl bg-card p-4">
@@ -117,6 +146,12 @@ function QueueRow({
           {entry.company && (
             <p className="text-xs text-muted-foreground mt-0.5 truncate">
               {entry.company}
+            </p>
+          )}
+
+          {historyDate && (
+            <p className="text-[11px] text-muted-foreground mt-1">
+              {t(historyDateLabelKey(entry.status), { date: historyDate })}
             </p>
           )}
 
@@ -180,6 +215,10 @@ function CandidaturasContent() {
   const pendingEntries = useMemo(
     () => active.filter((entry) => entry.status === "pending"),
     [active],
+  );
+  const historyEntries = useMemo(
+    () => sortQueueHistoryNewestFirst(recent),
+    [recent],
   );
   const pendingCount = pendingEntries.length;
 
@@ -432,9 +471,9 @@ function CandidaturasContent() {
 
   // Last-batch summary for the empty-pipeline state.
   const lastBatchSummary = (() => {
-    if (recent.length === 0) return null;
-    const lastBatchId = recent[0].batch_id;
-    const entries = recent.filter((e) => e.batch_id === lastBatchId);
+    if (historyEntries.length === 0) return null;
+    const lastBatchId = historyEntries[0].batch_id;
+    const entries = historyEntries.filter((e) => e.batch_id === lastBatchId);
     const applied = entries.filter((e) => e.status === "applied").length;
     const attention = entries.filter((e) => e.status === "needs_attention").length;
     const failed = entries.filter((e) => e.status === "failed" || e.status === "cancelled" || e.status === "skipped").length;
@@ -476,7 +515,7 @@ function CandidaturasContent() {
         <div className="flex items-center">
           {[
             { key: "pipeline" as const, label: t("candidaturas.tabPipeline"), count: active.length },
-            { key: "history" as const, label: t("candidaturas.tabHistory"), count: recent.length },
+            { key: "history" as const, label: t("candidaturas.tabHistory"), count: historyEntries.length },
           ].map((item) => {
             const isActive = tab === item.key;
             return (
@@ -603,7 +642,7 @@ function CandidaturasContent() {
       {/* History tab */}
       {tab === "history" && (
         <>
-          {recent.length === 0 ? (
+          {historyEntries.length === 0 ? (
             <div className="apple-shadow rounded-2xl bg-card p-8 text-center">
               <p className="text-sm text-muted-foreground">
                 {t("candidaturas.emptyHistory")}
@@ -611,8 +650,13 @@ function CandidaturasContent() {
             </div>
           ) : (
             <div className="space-y-3">
-              {recent.map((entry) => (
-                <QueueRow key={entry.id} entry={entry} onReview={handleReview} />
+              {historyEntries.map((entry) => (
+                <QueueRow
+                  key={entry.id}
+                  entry={entry}
+                  onReview={handleReview}
+                  showHistoryDate
+                />
               ))}
             </div>
           )}
