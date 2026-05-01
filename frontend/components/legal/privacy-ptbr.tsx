@@ -317,15 +317,15 @@ export default function PrivacyPTBR() {
           14. Extensao Chrome (Gupy AutoApply)
         </h2>
         <p className="text-sm text-foreground/80 leading-relaxed mb-4">
-          A extensao oficial do Merlin para o Chrome automatiza o
-          preenchimento de formularios de candidatura no portal Gupy a
-          partir do seu perfil Merlin. Esta secao detalha o tratamento
-          de dados especifico da extensao.
+          A extensao oficial do Merlin para o Chrome automatiza
+          candidaturas em portais de vagas suportados a partir do seu
+          perfil Merlin. Esta secao detalha o tratamento de dados
+          especifico da extensao.
         </p>
         <p className="text-sm text-foreground/80 leading-relaxed mb-4">
-          <strong>Finalidade unica:</strong> automatizar o preenchimento
-          de formularios em vagas hospedadas em gupy.io. Nenhum outro
-          uso da extensao e oferecido.
+          <strong>Finalidade unica:</strong> automatizar candidaturas em
+          vagas hospedadas nos portais suportados, atualmente gupy.io e
+          catho.com.br. Nenhum outro uso da extensao e oferecido.
         </p>
 
         <h3 className="text-base font-semibold text-foreground mt-6 mb-2">
@@ -351,10 +351,10 @@ export default function PrivacyPTBR() {
           ))}
         </ul>
         <p className="text-sm text-foreground/80 leading-relaxed mb-4">
-          Esses dados sao usados apenas pela extensao para preencher
-          campos correspondentes em formularios Gupy. Permanecem na
-          maquina do usuario ate que sejam editados ou que a extensao
-          seja desinstalada.
+          Esses dados sao usados apenas pela extensao durante
+          candidaturas nos portais suportados. Permanecem na maquina do
+          usuario ate que sejam editados ou que a extensao seja
+          desinstalada.
         </p>
 
         <h3 className="text-base font-semibold text-foreground mt-6 mb-2">
@@ -375,13 +375,14 @@ export default function PrivacyPTBR() {
         </ul>
 
         <h3 className="text-base font-semibold text-foreground mt-6 mb-2">
-          Dados lidos das paginas Gupy
+          Dados lidos das paginas de vagas suportadas
         </h3>
         <p className="text-sm text-foreground/80 leading-relaxed mb-4">
-          A extensao le rotulos e a estrutura de formularios em paginas
-          de vagas Gupy para identificar campos a preencher. O conteudo
-          de paginas Gupy nao e armazenado nem transmitido fora do
-          contexto da candidatura ativa do proprio usuario.
+          A extensao le botoes, mensagens de status, rotulos e a
+          estrutura de formularios em paginas de vagas suportadas para
+          executar a candidatura e identificar campos a preencher. O
+          conteudo dessas paginas nao e armazenado nem transmitido fora
+          do contexto da candidatura ativa do proprio usuario.
         </p>
 
         <h3 className="text-base font-semibold text-foreground mt-6 mb-2">
@@ -405,9 +406,9 @@ export default function PrivacyPTBR() {
             { p: "tabs", d: "Abrir, focar e gerenciar abas de candidatura em paralelo." },
             { p: "storage", d: "Persistir dados pessoais e configuracoes da extensao localmente." },
             { p: "identity", d: "Realizar autenticacao via Google/Firebase." },
-            { p: "scripting", d: "Injetar a logica de preenchimento em paginas de vagas Gupy." },
             { p: "alarms", d: "Verificar periodicamente a fila de candidaturas no servidor Merlin." },
             { p: "Acesso a *.gupy.io", d: "Ler rotulos de formularios e preencher campos durante uma candidatura." },
+            { p: "Acesso a www.catho.com.br", d: "Detectar e acionar o botao de candidatura em vagas da Catho." },
             { p: "Acesso a merlincv.com", d: "Sincronizar a fila de candidaturas e o status com o painel Merlin." },
           ].map((row) => (
             <div key={row.p} className="rounded-xl bg-secondary/70 p-4">

@@ -9,10 +9,12 @@
 
 import type { BoardAdapter } from "./adapter";
 import { gupyAdapter } from "./gupy";
+import { cathoAdapter } from "./catho";
 
 const ADAPTERS: BoardAdapter[] = [
   gupyAdapter,
-  // Future: cathoAdapter, vagasAdapter, linkedinAdapter, greenhouseAdapter, ...
+  cathoAdapter,
+  // Future: vagasAdapter, linkedinAdapter, greenhouseAdapter, ...
 ];
 
 export function getAdapter(url: URL = new URL(window.location.href)): BoardAdapter | null {

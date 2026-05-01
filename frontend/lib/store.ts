@@ -546,6 +546,7 @@ export interface QueueEntry {
   id: string;
   job_id: string;
   job_url: string;
+  source: string;
   title: string;
   company: string;
   status:

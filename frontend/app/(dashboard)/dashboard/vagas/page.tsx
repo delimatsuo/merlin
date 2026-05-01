@@ -42,17 +42,14 @@ function VagasContent() {
   const [submittingBatch, setSubmittingBatch] = useState(false);
   const [totalInSystem, setTotalInSystem] = useState<number | null>(null);
 
-  // Merlin currently only supports Gupy postings for auto-apply. Non-Gupy
-  // matches are hidden from the feed entirely — we'll re-expose them once
-  // we ship adapters for LinkedIn Easy Apply, Vagas.com, Catho, etc.
-  const gupyMatches = useMemo(
-    () => matches.filter((m) => (m.source || "").toLowerCase() === "gupy"),
+  const automatableMatches = useMemo(
+    () => matches.filter((m) => ["gupy", "catho"].includes((m.source || "").toLowerCase())),
     [matches],
   );
-  const visibleMatches = gupyMatches;
+  const visibleMatches = automatableMatches;
   const selectedJobs = useMemo(
-    () => gupyMatches.filter((m) => selectedIds.has(m.job_id)),
-    [gupyMatches, selectedIds],
+    () => automatableMatches.filter((m) => selectedIds.has(m.job_id)),
+    [automatableMatches, selectedIds],
   );
 
   // Clear selection when the underlying matches change so we don't carry
@@ -224,9 +221,9 @@ function VagasContent() {
               {t("vagas.totalInSystem", { count: totalInSystem.toLocaleString("pt-BR") })}
             </p>
           )}
-          {matches.length > 0 && (
+          {visibleMatches.length > 0 && (
             <p className="text-xs text-muted-foreground/80 mt-0.5">
-              {t("vagas.matchesFound", { count: String(matches.length) })}
+              {t("vagas.matchesFound", { count: String(visibleMatches.length) })}
             </p>
           )}
         </div>
@@ -250,8 +247,7 @@ function VagasContent() {
         </p>
       </div>
 
-      {/* Supported-boards notice. Merlin auto-applies only to Gupy postings
-          today; more boards (LinkedIn, Vagas.com, Catho) are planned. */}
+      {/* Supported-boards notice. */}
       <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-3 flex items-center gap-2.5">
         <div className="shrink-0 h-7 w-7 rounded-full bg-amber-500/20 flex items-center justify-center">
           <Zap className="h-3.5 w-3.5 text-amber-700" />

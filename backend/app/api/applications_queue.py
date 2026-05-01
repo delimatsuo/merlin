@@ -54,6 +54,7 @@ router = APIRouter()
 
 RECENT_WINDOW_DAYS = 30
 ACTIVE_STATUSES = {"pending", "running", "needs_attention"}
+SUPPORTED_AUTOAPPLY_SOURCES = {"gupy", "catho"}
 
 
 def _to_response(entry: dict) -> QueueEntryResponse:
@@ -66,6 +67,7 @@ def _to_response(entry: dict) -> QueueEntryResponse:
         id=entry["id"],
         job_id=entry.get("job_id") or "",
         job_url=entry.get("job_url") or "",
+        source=entry.get("source") or "",
         title=entry.get("title") or "",
         company=entry.get("company") or "",
         status=entry.get("status") or "pending",
@@ -86,7 +88,7 @@ async def create_queue(
 ):
     """Create a batch of queue entries from selected jobs.
 
-    Only Gupy jobs are accepted. Non-Gupy jobs are rejected with a reason
+    Only supported auto-apply boards are accepted. Other jobs are rejected with a reason
     so the UI can explain. All accepted entries share a single batch_id.
     """
     fs = FirestoreService()
@@ -122,11 +124,12 @@ async def create_queue(
         if not job:
             rejected.append({"job_id": job_id, "reason": "not_found"})
             continue
-        if (job.get("source") or "").lower() != "gupy":
+        source = (job.get("source") or "").lower()
+        if source not in SUPPORTED_AUTOAPPLY_SOURCES:
             rejected.append({
                 "job_id": job_id,
                 "reason": "unsupported_source",
-                "source": job.get("source", ""),
+                "source": source,
             })
             continue
         job_url = job.get("source_url") or job.get("url") or ""
@@ -136,6 +139,7 @@ async def create_queue(
         accepted.append({
             "job_id": job_id,
             "job_url": job_url,
+            "source": source,
             # Coerce null/None from scraped Gupy data to empty string so
             # stored entries always satisfy the QueueEntryResponse contract.
             "title": job.get("title") or "",
@@ -153,9 +157,9 @@ async def create_queue(
         elif reasons == {"duplicate_in_request"}:
             detail = "Vagas duplicadas na seleção."
         elif "already_queued" in reasons:
-            detail = "Uma ou mais vagas selecionadas já estão no lote atual; as demais não são do Gupy."
+            detail = "Uma ou mais vagas selecionadas já estão no lote atual; as demais não são automatizáveis."
         else:
-            detail = "Nenhuma vaga elegível para aplicação automática (apenas Gupy)."
+            detail = "Nenhuma vaga elegível para aplicação automática (Gupy e Catho)."
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
 
     batch_id = str(uuid.uuid4())
@@ -329,6 +333,7 @@ async def dev_seed_queue(
         {
             "job_id": f"devseed-{uuid.uuid4().hex[:10]}",
             "job_url": job.job_url,
+            "source": "devseed",
             "title": job.title,
             "company": job.company,
         }

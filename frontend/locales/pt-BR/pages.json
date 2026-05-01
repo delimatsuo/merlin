@@ -362,7 +362,7 @@
   "vagas.batch.viewPipeline": "Ver candidaturas em andamento",
   "vagas.batch.filterAutomatableOnly": "Só automatizáveis",
   "vagas.batch.filterShowAll": "Mostrar todas",
-  "vagas.batch.filterEmptyAutomatable": "Nenhuma vaga do Gupy encontrada neste período. Ajuste o filtro ou o intervalo de tempo.",
+  "vagas.batch.filterEmptyAutomatable": "Nenhuma vaga automatizável encontrada neste período. Ajuste o filtro ou o intervalo de tempo.",
   "candidaturas.title": "Candidaturas em lote",
   "candidaturas.subtitle": "Acompanhe o progresso das aplicações automáticas",
   "candidaturas.tabPipeline": "Pipeline",
@@ -411,5 +411,5 @@
   "vagas.prefs.emailOff": "Desligado",
   "vagas.prefs.save": "Salvar preferências",
   "vagas.prefs.saving": "Salvando...",
-  "vagas.batch.supportedBoardsNotice": "No momento, o Merlin aplica automaticamente apenas em vagas do Gupy. Em breve: LinkedIn, Vagas.com e Catho."
+  "vagas.batch.supportedBoardsNotice": "No momento, o Merlin aplica automaticamente em vagas do Gupy e da Catho. Em breve: Vagas.com."
 }

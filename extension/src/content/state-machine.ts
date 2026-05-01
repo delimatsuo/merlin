@@ -5,6 +5,7 @@
  */
 
 import { AutoApplyStep, ErrorType } from "../lib/types";
+import { isAutoApplyFlowError } from "../lib/errors";
 import { getAdapter } from "./adapters/registry";
 import type { BoardAdapter } from "./adapters/adapter";
 import type { AdditionalInfoResult } from "./screens/additional-info";
@@ -412,7 +413,11 @@ export class StateMachine {
       }
     } catch (error) {
       console.error("[SM] Unhandled error:", error);
-      this.transitionToError(ErrorType.LLM_FAILED, (error as Error).message);
+      if (isAutoApplyFlowError(error)) {
+        this.transitionToError(error.type, error.message);
+      } else {
+        this.transitionToError(ErrorType.LLM_FAILED, (error as Error).message);
+      }
       this.broadcastStatus();
     } finally {
       this.running = false;

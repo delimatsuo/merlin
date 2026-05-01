@@ -82,7 +82,7 @@ async function initializeTabId(): Promise<number | null> {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === "START_AUTOAPPLY") {
     if (!isSupportedApplicationPage()) {
-      sendResponse({ success: false, error: "Não estamos em uma página de candidatura do Gupy." });
+      sendResponse({ success: false, error: "Não estamos em uma página de candidatura suportada." });
       return true;
     }
 
@@ -125,6 +125,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       step: sm.getStep(),
       error: sm.getError(),
       isOnGupyPage: isSupportedApplicationPage(),
+      isOnSupportedPage: isSupportedApplicationPage(),
     });
     return true;
   }

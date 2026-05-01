@@ -9,9 +9,11 @@ import type { MatchedJobItem } from "@/lib/store";
 
 const SOURCE_LABELS: Record<string, string> = {
   gupy: "Gupy",
+  catho: "Catho",
   linkedin: "LinkedIn",
   vagas: "Vagas",
   vagascom: "Vagas.com",
+  programathor: "ProgramaThor",
   infojobs: "InfoJobs",
   apinfo: "APInfo",
   brazil_jobs: "Brasil",
@@ -63,8 +65,10 @@ interface Props {
   onToggleSelect?: (jobId: string) => void;
 }
 
-function isGupy(source: string): boolean {
-  return (source || "").toLowerCase() === "gupy";
+const AUTOMATABLE_SOURCES = new Set(["gupy", "catho"]);
+
+function isAutomatable(source: string): boolean {
+  return AUTOMATABLE_SOURCES.has((source || "").toLowerCase());
 }
 
 export function JobCard({ job, selected = false, onToggleSelect }: Props) {
@@ -72,7 +76,7 @@ export function JobCard({ job, selected = false, onToggleSelect }: Props) {
   const { t } = useTranslation();
   const relTime = getRelativeTime(job.posted_date, t);
   const fresh = isNew(job.posted_date);
-  const automatable = isGupy(job.source);
+  const automatable = isAutomatable(job.source);
   const selectable = onToggleSelect !== undefined;
 
   const handleApply = () => {

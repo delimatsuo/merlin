@@ -1899,6 +1899,7 @@ class FirestoreService:
             doc = {
                 "job_id": entry["job_id"],
                 "job_url": entry["job_url"],
+                "source": entry.get("source", ""),
                 "title": entry.get("title", ""),
                 "company": entry.get("company", ""),
                 "status": "pending",

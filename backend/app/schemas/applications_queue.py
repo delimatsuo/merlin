@@ -26,6 +26,7 @@ class QueueEntryResponse(BaseModel):
     id: str
     job_id: str
     job_url: str
+    source: str = ""
     title: str
     company: str
     status: QueueStatus

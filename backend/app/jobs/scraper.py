@@ -11,6 +11,7 @@ import structlog
 from firebase_admin import firestore as fb_firestore
 
 from app.config import get_settings
+from app.jobs.capping import cap_new_jobs_by_source, count_jobs_by_source
 from app.services.gemini_ai import extract_job_data_batch
 from scrapers import scrape_gupy, scrape_catho, scrape_vagas, scrape_programathor
 
@@ -280,10 +281,15 @@ async def run_scraping_pipeline() -> dict:
     # as existing on subsequent scrapes and be skipped until they expire.
     MAX_NEW_JOBS_PER_RUN = 2500
     if len(new_raw_jobs) > MAX_NEW_JOBS_PER_RUN:
+        source_counts_before = count_jobs_by_source(new_raw_jobs)
         logger.info("scrape_cap_applied",
                     cap=MAX_NEW_JOBS_PER_RUN,
-                    available=len(new_raw_jobs))
-        new_raw_jobs = new_raw_jobs[:MAX_NEW_JOBS_PER_RUN]
+                    available=len(new_raw_jobs),
+                    source_counts_before=source_counts_before)
+        new_raw_jobs = cap_new_jobs_by_source(new_raw_jobs, MAX_NEW_JOBS_PER_RUN)
+        logger.info("scrape_cap_allocated",
+                    cap=MAX_NEW_JOBS_PER_RUN,
+                    source_counts_after=count_jobs_by_source(new_raw_jobs))
 
     # Phase 2: Batch extract — 10 jobs per Flash-Lite call, 5 calls in parallel
     BATCH_SIZE = 10

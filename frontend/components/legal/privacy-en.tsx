@@ -341,13 +341,14 @@ export default function PrivacyEN() {
           14. Chrome Extension (Gupy AutoApply)
         </h2>
         <p className="text-sm text-foreground/80 leading-relaxed mb-4">
-          The official Merlin Chrome extension automates filling out job
-          application forms on the Gupy portal using your Merlin profile.
-          This section details data handling specific to the extension.
+          The official Merlin Chrome extension automates applications on
+          supported job portals using your Merlin profile. This section
+          details data handling specific to the extension.
         </p>
         <p className="text-sm text-foreground/80 leading-relaxed mb-4">
-          <strong>Single purpose:</strong> automate form-filling for job
-          listings hosted on gupy.io. No other use is offered.
+          <strong>Single purpose:</strong> automate applications on
+          supported job portals, currently gupy.io and catho.com.br. No
+          other use is offered.
         </p>
 
         <h3 className="text-base font-semibold text-foreground mt-6 mb-2">
@@ -373,9 +374,9 @@ export default function PrivacyEN() {
           ))}
         </ul>
         <p className="text-sm text-foreground/80 leading-relaxed mb-4">
-          This data is used solely by the extension to fill matching
-          fields in Gupy forms. It remains on the user&apos;s machine until
-          edited or until the extension is uninstalled.
+          This data is used solely by the extension during applications
+          on supported job portals. It remains on the user&apos;s machine
+          until edited or until the extension is uninstalled.
         </p>
 
         <h3 className="text-base font-semibold text-foreground mt-6 mb-2">
@@ -396,13 +397,14 @@ export default function PrivacyEN() {
         </ul>
 
         <h3 className="text-base font-semibold text-foreground mt-6 mb-2">
-          Data read from Gupy pages
+          Data read from supported job pages
         </h3>
         <p className="text-sm text-foreground/80 leading-relaxed mb-4">
-          The extension reads form labels and structure on Gupy job
-          pages to identify which fields to fill. Gupy page content is
-          not stored or transmitted outside the context of the user&apos;s
-          own active application.
+          The extension reads buttons, status messages, form labels, and
+          form structure on supported job pages to complete the
+          application and identify fields to fill. Page content is not
+          stored or transmitted outside the context of the user&apos;s own
+          active application.
         </p>
 
         <h3 className="text-base font-semibold text-foreground mt-6 mb-2">
@@ -426,9 +428,9 @@ export default function PrivacyEN() {
             { p: "tabs", d: "Open, focus, and manage application tabs in parallel." },
             { p: "storage", d: "Persist personal data and extension settings locally." },
             { p: "identity", d: "Authenticate via Google/Firebase." },
-            { p: "scripting", d: "Inject form-filling logic into Gupy job pages." },
             { p: "alarms", d: "Periodically poll the Merlin server for the application queue." },
             { p: "Access to *.gupy.io", d: "Read form labels and fill fields during an application." },
+            { p: "Access to www.catho.com.br", d: "Detect and click the application button on Catho jobs." },
             { p: "Access to merlincv.com", d: "Sync the application queue and status with the Merlin dashboard." },
           ].map((row) => (
             <div key={row.p} className="rounded-xl bg-secondary/70 p-4">

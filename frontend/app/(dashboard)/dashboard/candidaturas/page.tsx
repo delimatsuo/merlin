@@ -117,7 +117,7 @@ function QueueRow({
                 className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
               >
                 <ExternalLink className="h-3 w-3" />
-                Gupy
+                {entry.source ? entry.source.charAt(0).toUpperCase() + entry.source.slice(1) : "Vaga"}
               </a>
             )}
           </div>

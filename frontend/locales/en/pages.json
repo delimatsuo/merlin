@@ -362,7 +362,7 @@
   "vagas.batch.viewPipeline": "View running applications",
   "vagas.batch.filterAutomatableOnly": "Automatable only",
   "vagas.batch.filterShowAll": "Show all",
-  "vagas.batch.filterEmptyAutomatable": "No Gupy jobs matched this period. Adjust the filter or time range.",
+  "vagas.batch.filterEmptyAutomatable": "No automatable jobs matched this period. Adjust the filter or time range.",
   "candidaturas.title": "Batch applications",
   "candidaturas.subtitle": "Track the progress of your automatic applications",
   "candidaturas.tabPipeline": "Pipeline",
@@ -411,5 +411,5 @@
   "vagas.prefs.emailOff": "Off",
   "vagas.prefs.save": "Save preferences",
   "vagas.prefs.saving": "Saving...",
-  "vagas.batch.supportedBoardsNotice": "Merlin currently auto-applies only to Gupy postings. Coming soon: LinkedIn, Vagas.com, and Catho."
+  "vagas.batch.supportedBoardsNotice": "Merlin currently auto-applies to Gupy and Catho postings. Coming soon: Vagas.com."
 }

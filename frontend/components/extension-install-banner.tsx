@@ -54,8 +54,8 @@ export function ExtensionInstallBanner() {
           Instale a extensão Merlin para Chrome
         </h3>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Necessária para candidaturas em lote — preenche os formulários do
-          Gupy automaticamente usando seu perfil.
+          Necessária para candidaturas em lote — automatiza vagas
+          compatíveis usando seu perfil.
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <a
