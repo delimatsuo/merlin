@@ -13,17 +13,52 @@
 
 import type { BoardAdapter } from "./adapter";
 import type { AdditionalInfoResult } from "../screens/additional-info";
-import type { CustomQuestionsResult } from "../screens/custom-questions";
+import type { CustomQuestionsResult, UnansweredField } from "../screens/custom-questions";
 import type { PersonalizationResult } from "../screens/personalization";
-import { sleep, waitUntilClickable } from "../dom/helpers";
+import { matchAndFillFields, findBestOption } from "../field-matcher";
+import {
+  clickCheckbox,
+  clickRadioOption,
+  clickReactSelect,
+  humanLikeClick,
+  humanLikeType,
+  randomDelay,
+  scrapeFormFields,
+  sleep,
+  waitForNavigation,
+  waitUntilClickable,
+  type ScrapedField,
+} from "../dom/helpers";
 import { AutoApplyStep, ErrorType } from "../../lib/types";
 import { AutoApplyFlowError } from "../../lib/errors";
+import { getPiiProfile } from "../../lib/pii-store";
+import {
+  classifyCathoScreen,
+  isCathoHost,
+  isCathoJobPath,
+  type CathoScreenKind,
+} from "./catho-utils";
+import type { ValidationError } from "../dom/errors";
 
 const APPLY_BUTTON_SELECTOR = '#form-apply-simple button[data-apply="normal"], button[data-apply="normal"]';
 const FAILURE_MODAL_SELECTOR = "#ModalApplyFailure";
 const SUCCESS_ALERT_SELECTOR = "[data-sent-apply-indicator-alert]";
 const SENDING_ALERT_SELECTOR = "[data-sending-apply-indicator-alert]";
 const SIGNIN_LINK_SELECTOR = 'a#signin[href*="/signin"], a[href="/signin/"]';
+const QUESTIONNAIRE_TEXT_MARKERS = [
+  "questionario da vaga",
+  "questionário da vaga",
+  "preencha seu cpf",
+  "enviar meu curriculo",
+  "enviar meu currículo",
+];
+
+const CPF_INPUT_SELECTOR = [
+  'input[name*="cpf" i]',
+  'input[id*="cpf" i]',
+  'input[placeholder*="cpf" i]',
+  'input[aria-label*="cpf" i]',
+].join(",");
 
 function isVisible(el: Element | null): el is HTMLElement {
   if (!el || !(el instanceof HTMLElement)) return false;
@@ -47,6 +82,15 @@ function visibleElement(selector: string): HTMLElement | null {
   return Array.from(document.querySelectorAll(selector)).find(isVisible) ?? null;
 }
 
+function normalizeText(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function findApplyButton(): HTMLButtonElement | null {
   const btn = visibleElement(APPLY_BUTTON_SELECTOR);
   return btn instanceof HTMLButtonElement ? btn : null;
@@ -58,6 +102,42 @@ function isLoggedOut(): boolean {
 
 function isFailureVisible(): boolean {
   return visibleElement(FAILURE_MODAL_SELECTOR) !== null;
+}
+
+function textLooksLikeQuestionnaire(text: string): boolean {
+  const normalized = normalizeText(text);
+  return QUESTIONNAIRE_TEXT_MARKERS.some((marker) =>
+    normalized.includes(normalizeText(marker)),
+  );
+}
+
+function findQuestionnaireModal(): HTMLElement | null {
+  const candidates = Array.from(
+    document.querySelectorAll<HTMLElement>(
+      '[role="dialog"], [aria-modal="true"], [class*="modal"], [class*="Modal"]',
+    ),
+  ).filter(isVisible);
+
+  for (const candidate of candidates) {
+    if (textLooksLikeQuestionnaire(candidate.innerText || candidate.textContent || "")) {
+      return candidate;
+    }
+  }
+
+  const submit = findQuestionnaireSubmitButton(document.body);
+  let node: HTMLElement | null = submit;
+  for (let depth = 0; node && depth < 8; depth++) {
+    if (textLooksLikeQuestionnaire(node.innerText || node.textContent || "")) {
+      return node;
+    }
+    node = node.parentElement;
+  }
+
+  return null;
+}
+
+function isQuestionnaireVisible(): boolean {
+  return findQuestionnaireModal() !== null;
 }
 
 function isSuccessVisible(): boolean {
@@ -75,13 +155,27 @@ function isSuccessVisible(): boolean {
   );
 }
 
-async function waitForApplyOutcome(timeoutMs = 25000): Promise<"success" | "failure" | "login" | "timeout"> {
+function findQuestionnaireSubmitButton(root: HTMLElement): HTMLButtonElement | null {
+  const buttons = Array.from(root.querySelectorAll<HTMLButtonElement>("button"));
+  return (
+    buttons.find((button) => {
+      if (!isVisible(button)) return false;
+      const text = normalizeText(button.innerText || button.textContent || "");
+      return text.includes("enviar meu curriculo");
+    }) ?? null
+  );
+}
+
+async function waitForApplyOutcome(
+  timeoutMs = 25000,
+): Promise<"success" | "failure" | "login" | "questionnaire" | "timeout"> {
   const deadline = Date.now() + timeoutMs;
   let sawSending = false;
 
   while (Date.now() < deadline) {
     if (isSuccessVisible()) return "success";
     if (isFailureVisible()) return "failure";
+    if (isQuestionnaireVisible()) return "questionnaire";
     if (isLoggedOut() && !findApplyButton()) return "login";
 
     if (visibleElement(SENDING_ALERT_SELECTOR)) sawSending = true;
@@ -95,23 +189,172 @@ async function waitForApplyOutcome(timeoutMs = 25000): Promise<"success" | "fail
   return "timeout";
 }
 
+function mapScreen(kind: CathoScreenKind): AutoApplyStep {
+  switch (kind) {
+    case "complete":
+      return AutoApplyStep.COMPLETE;
+    case "error":
+      return AutoApplyStep.ERROR;
+    case "questionnaire":
+      return AutoApplyStep.CUSTOM_QUESTIONS_FILL;
+    case "welcome":
+      return AutoApplyStep.WELCOME;
+    case "idle":
+    default:
+      return AutoApplyStep.IDLE;
+  }
+}
+
+function fieldHasValue(field: ScrapedField): boolean {
+  const el = field.element;
+
+  if (el instanceof HTMLInputElement) {
+    if (el.type === "checkbox" || el.type === "radio") {
+      return el.checked;
+    }
+    return el.value.trim().length > 0;
+  }
+
+  if (el instanceof HTMLTextAreaElement) {
+    return el.value.trim().length > 0;
+  }
+
+  if (el instanceof HTMLSelectElement) {
+    return el.selectedIndex > 0;
+  }
+
+  return false;
+}
+
+function cssEscape(value: string): string {
+  if (typeof CSS !== "undefined" && typeof (CSS as any).escape === "function") {
+    return (CSS as any).escape(value);
+  }
+  return value.replace(/([^\w-])/g, "\\$1");
+}
+
+async function fillCathoField(field: ScrapedField, answer: string): Promise<void> {
+  switch (field.type) {
+    case "text":
+    case "textarea": {
+      const input = field.element as HTMLInputElement | HTMLTextAreaElement;
+      await humanLikeType(input, answer);
+      break;
+    }
+
+    case "select": {
+      const bestOption = field.options ? findBestOption(field.options, answer) : answer;
+      if (!bestOption) {
+        throw new Error(`No matching option for "${answer}"`);
+      }
+      const selected = await clickReactSelect(field.element, bestOption);
+      if (!selected) {
+        throw new Error(`Select option "${bestOption}" not found`);
+      }
+      break;
+    }
+
+    case "radio": {
+      const radio = field.element as HTMLInputElement;
+      const name = radio.name;
+      const allRadios = name
+        ? Array.from(
+            document.querySelectorAll<HTMLInputElement>(
+              `input[type="radio"][name="${cssEscape(name)}"]`,
+            ),
+          )
+        : [radio];
+
+      let container: HTMLElement | null = radio.parentElement;
+      while (container && !allRadios.every((r) => container!.contains(r))) {
+        container = container.parentElement;
+      }
+      if (!container) container = document.body;
+
+      const bestOption = field.options ? findBestOption(field.options, answer) : answer;
+      if (!bestOption) {
+        throw new Error(`No matching option for "${answer}" in ${JSON.stringify(field.options)}`);
+      }
+      const clicked = await clickRadioOption(container, bestOption);
+      if (!clicked || !allRadios.some((r) => r.checked)) {
+        throw new Error(`Radio click failed for option "${bestOption}"`);
+      }
+      break;
+    }
+
+    case "checkbox": {
+      const shouldCheck = ["true", "sim", "yes"].includes(normalizeText(answer));
+      const container =
+        (field.element.closest(
+          '[class*="Checkbox"], [class*="checkbox"], [class*="field"], [class*="Field"]',
+        ) as HTMLElement | null) ?? field.element.parentElement;
+      if (!container) throw new Error("Checkbox container not found");
+      await clickCheckbox(container, shouldCheck);
+      break;
+    }
+  }
+}
+
+function extractJobContext(): { companyName: string; jobTitle: string } {
+  const jobTitle =
+    Array.from(document.querySelectorAll("h1"))
+      .map((el) => el.textContent?.trim() ?? "")
+      .find((text) => text.length > 5) ?? document.title.split("|")[0]?.trim() ?? "";
+
+  const companyName =
+    Array.from(document.querySelectorAll<HTMLElement>("h2, [class*='company'], [class*='Company']"))
+      .map((el) => el.textContent?.trim() ?? "")
+      .find((text) => text.length > 1 && text.length < 120) ?? "";
+
+  return { companyName, jobTitle };
+}
+
+function genericValidationError(message: string): ValidationError[] {
+  return [{ field: "Catho", message }];
+}
+
+async function fillCpfIfPresent(modal: HTMLElement): Promise<number> {
+  const input = modal.querySelector<HTMLInputElement>(CPF_INPUT_SELECTOR);
+  if (!input || fieldHasValue({
+    label: "CPF",
+    type: "text",
+    required: true,
+    element: input,
+    elementId: input.id || input.name || "cpf",
+  })) {
+    return 0;
+  }
+
+  const pii = await getPiiProfile();
+  if (!pii?.cpf) return 0;
+  await humanLikeType(input, pii.cpf);
+  return 1;
+}
+
 export const cathoAdapter: BoardAdapter = {
   name: "Catho",
 
   matches(url: URL): boolean {
-    return url.hostname === "www.catho.com.br";
+    return isCathoHost(url.hostname);
   },
 
   isApplicationPage(): boolean {
-    const segments = window.location.pathname.split("/").filter(Boolean);
-    return segments[0] === "vagas" && segments.length >= 3 && (findApplyButton() !== null || isSuccessVisible());
+    return (
+      isCathoHost(window.location.hostname) &&
+      isCathoJobPath(window.location.pathname) &&
+      (findApplyButton() !== null || isQuestionnaireVisible() || isSuccessVisible())
+    );
   },
 
   detectScreen(): AutoApplyStep {
-    if (isSuccessVisible()) return AutoApplyStep.COMPLETE;
-    if (isFailureVisible()) return AutoApplyStep.ERROR;
-    if (findApplyButton()) return AutoApplyStep.WELCOME;
-    return AutoApplyStep.IDLE;
+    return mapScreen(
+      classifyCathoScreen({
+        successVisible: isSuccessVisible(),
+        failureVisible: isFailureVisible(),
+        questionnaireVisible: isQuestionnaireVisible(),
+        applyButtonVisible: findApplyButton() !== null,
+      }),
+    );
   },
 
   async handleWelcome(): Promise<void> {
@@ -138,10 +381,11 @@ export const cathoAdapter: BoardAdapter = {
       );
     }
 
-    btn.click();
+    await humanLikeClick(btn);
     const outcome = await waitForApplyOutcome();
 
     if (outcome === "success") return;
+    if (outcome === "questionnaire") return;
     if (outcome === "login") {
       throw new AutoApplyFlowError(
         ErrorType.AUTH_REQUIRED,
@@ -157,7 +401,7 @@ export const cathoAdapter: BoardAdapter = {
 
     throw new AutoApplyFlowError(
       ErrorType.TIMEOUT,
-      "Catho não mostrou confirmação de envio em 25s.",
+      "Catho não mostrou confirmação de envio nem questionário em 25s.",
     );
   },
 
@@ -166,15 +410,151 @@ export const cathoAdapter: BoardAdapter = {
   },
 
   async handleCustomQuestions(): Promise<CustomQuestionsResult> {
-    return { answered: 0, skipped: 0, needsHuman: [], unansweredFields: [], validationErrors: [], llmCalls: 0 };
+    const modal = findQuestionnaireModal();
+    if (!modal) {
+      return {
+        answered: 0,
+        skipped: 0,
+        needsHuman: [],
+        unansweredFields: [],
+        validationErrors: [],
+        llmCalls: 0,
+      };
+    }
+
+    let answered = await fillCpfIfPresent(modal);
+    let skipped = 0;
+    let llmCalls = 0;
+    const needsHuman: string[] = [];
+    const unansweredFields: UnansweredField[] = [];
+    const { companyName, jobTitle } = extractJobContext();
+
+    const fields = scrapeFormFields(modal).filter((field) => {
+      if ((field.type as string) === "file") {
+        needsHuman.push(field.label);
+        skipped++;
+        return false;
+      }
+      if (fieldHasValue(field)) {
+        answered++;
+        return false;
+      }
+      return true;
+    });
+
+    const matchResults = await matchAndFillFields(fields, window.location.href, companyName || jobTitle);
+    if (matchResults.some((result) => result.source === "llm")) llmCalls++;
+
+    for (const result of matchResults) {
+      if (result.value === null) {
+        needsHuman.push(result.field.label);
+        skipped++;
+        continue;
+      }
+      try {
+        await fillCathoField(result.field, result.value);
+        answered++;
+        await randomDelay(150, 350);
+      } catch (error) {
+        console.error(`[Catho] Failed to fill "${result.field.label}":`, error);
+        needsHuman.push(result.field.label);
+        skipped++;
+      }
+    }
+
+    const needsHumanSet = new Set(needsHuman);
+    for (const field of fields) {
+      if (needsHumanSet.has(field.label)) {
+        unansweredFields.push({
+          label: field.label,
+          type: field.type,
+          options: field.options,
+        });
+      }
+    }
+
+    if (needsHuman.length > 0) {
+      return {
+        answered,
+        skipped,
+        llmCalls,
+        needsHuman,
+        unansweredFields,
+        validationErrors: [],
+      };
+    }
+
+    const submit = findQuestionnaireSubmitButton(modal);
+    if (!submit) {
+      return {
+        answered,
+        skipped,
+        llmCalls,
+        needsHuman: [],
+        unansweredFields: [],
+        validationErrors: genericValidationError("Botão 'Enviar meu currículo' não encontrado."),
+      };
+    }
+
+    const clickable = await waitUntilClickable(submit, 10000, 300);
+    if (!clickable) {
+      return {
+        answered,
+        skipped,
+        llmCalls,
+        needsHuman: [],
+        unansweredFields: [],
+        validationErrors: genericValidationError("Botão 'Enviar meu currículo' permaneceu indisponível."),
+      };
+    }
+
+    await humanLikeClick(submit);
+    await waitForNavigation(8000).catch(() => {});
+    const outcome = await waitForApplyOutcome(20000);
+    if (outcome === "success") {
+      return { answered, skipped, llmCalls, needsHuman: [], unansweredFields: [], validationErrors: [] };
+    }
+
+    if (outcome === "failure") {
+      return {
+        answered,
+        skipped,
+        llmCalls,
+        needsHuman: [],
+        unansweredFields: [],
+        validationErrors: genericValidationError("A Catho não concluiu a candidatura após o questionário."),
+      };
+    }
+
+    return {
+      answered,
+      skipped,
+      llmCalls,
+      needsHuman: [],
+      unansweredFields: [],
+      validationErrors: genericValidationError("Catho não mostrou confirmação de envio após o questionário."),
+    };
   },
 
   async handlePersonalization(): Promise<PersonalizationResult> {
     return { answered: false, llmCalls: 0 };
   },
 
-  async fillUserAnswers(): Promise<number> {
-    return 0;
+  async fillUserAnswers(answers: Record<string, string>): Promise<number> {
+    const modal = findQuestionnaireModal();
+    if (!modal) return 0;
+    const fields = scrapeFormFields(modal);
+    let filled = 0;
+
+    for (const [label, value] of Object.entries(answers)) {
+      const field = fields.find((candidate) => candidate.label === label);
+      if (!field || !value) continue;
+      await fillCathoField(field, value);
+      filled++;
+      await randomDelay(150, 350);
+    }
+
+    return filled;
   },
 
   findNextButton(): HTMLElement | null {
