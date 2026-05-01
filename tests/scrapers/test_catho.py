@@ -2,7 +2,7 @@ import json
 import pytest
 from unittest.mock import AsyncMock, patch
 
-from scrapers.catho import search_catho, fetch_catho_detail
+from scrapers.catho import search_catho, fetch_catho_detail, _parse_search_cards
 from scrapers.scrapfly_client import ScrapflyJobClient
 
 
@@ -22,6 +22,20 @@ SEARCH_HTML = """
     <p><span>Remoto</span></p>
     <p><strong>A Combinar</strong></p>
     <p>Publicada Hoje</p>
+  </li>
+</ul>
+</body></html>
+"""
+
+SEARCH_HTML_WITH_BADGE_BEFORE_LOCATION = """
+<html><body>
+<ul>
+  <li>
+    <h2><a href="/vagas/analista-financeiro/36003">Analista Financeiro</a></h2>
+    <p>Empresa Beta</p>
+    <p><span>Candidatura rapida</span></p>
+    <p><span>Campina Grande, PB</span></p>
+    <p><strong>A Combinar</strong></p>
   </li>
 </ul>
 </body></html>
@@ -67,6 +81,14 @@ async def test_search_catho_extracts_job_ids_and_card_data(scrapfly):
     assert "Titulo: Desenvolvedor Backend" in results[0]["raw_text"]
     assert len(results[0]["raw_text"]) > 50
     assert results[1]["source_id"] == "36002"
+
+
+def test_parse_search_cards_skips_badges_when_selecting_location():
+    results = _parse_search_cards(SEARCH_HTML_WITH_BADGE_BEFORE_LOCATION)
+
+    assert len(results) == 1
+    assert results[0]["location_hint"] == "Campina Grande, PB"
+    assert "Local: Campina Grande, PB" in results[0]["raw_text"]
 
 
 @pytest.mark.asyncio

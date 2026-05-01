@@ -30,6 +30,27 @@ _DETAIL_URL = "https://www.catho.com.br/vagas/{slug}/{job_id}"
 
 # Regex matching the last path segment of a Catho job URL — always numeric.
 _JOB_ID_RE = re.compile(r"/vagas/[^/]+/(\d+)/?$")
+_BR_STATE_RE = re.compile(
+    r"(?:^|[\s,/-])"
+    r"(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)"
+    r"(?:$|[\s,/-])",
+    re.IGNORECASE,
+)
+_COMMON_LOCATION_TERMS = (
+    "remoto",
+    "home office",
+    "hibrido",
+    "híbrido",
+    "sao paulo",
+    "são paulo",
+    "rio de janeiro",
+    "belo horizonte",
+    "curitiba",
+    "porto alegre",
+    "brasilia",
+    "brasília",
+    "campinas",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -67,6 +88,19 @@ def _card_raw_text(
         "Fonte: Catho",
     ]
     return ". ".join(fields) + "."
+
+
+def _looks_like_location(text: str) -> bool:
+    if not text:
+        return False
+    value = " ".join(text.split())
+    if len(value) > 80:
+        return False
+    lower = value.lower()
+    if any(term in lower for term in _COMMON_LOCATION_TERMS):
+        return True
+    return bool(_BR_STATE_RE.search(value))
+
 
 def _parse_search_cards(html: str) -> list[RawJob]:
     """Extract job cards from a Catho search-results page.
@@ -108,10 +142,15 @@ def _parse_search_cards(html: str) -> list[RawJob]:
             paras = card.find_all("p")
             if paras:
                 company_hint = paras[0].get_text(strip=True)
-            # Location: first <span> inside the card.
-            span = card.find("span")
-            if span:
-                location_hint = span.get_text(strip=True)
+            # Location: first span that looks like a real Brazilian location.
+            # Catho cards can include badges such as "Candidatura rapida" before
+            # the actual location; treating those as locations makes the backend
+            # country filter discard otherwise valid rows.
+            for span in card.find_all("span"):
+                span_text = span.get_text(" ", strip=True)
+                if _looks_like_location(span_text):
+                    location_hint = span_text
+                    break
             # Salary: first <strong> inside the card.
             strong = card.find("strong")
             if strong:

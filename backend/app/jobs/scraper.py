@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import re
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
@@ -69,15 +70,18 @@ def _make_job_id(source: str, source_id: str) -> str:
 # 15 terms × $0.20 = $3.00/day + Gupy ~$2 = ~$5/day total.
 # ---------------------------------------------------------------------------
 
-# Non-Brazilian location patterns — filter these out after scraping
+# Non-Brazilian location patterns — filter these out after scraping.
+# Keep these as country/city/region names, not bare two-letter state codes:
+# substring checks for codes such as "ca", "pa", and "ma" incorrectly drop
+# Brazilian locations and Catho badges that merely contain those letters.
 _NON_BRAZIL_PATTERNS = {
     # US states/cities
-    "ny", "nyc", "new york", "brooklyn", "manhattan", "midtown",
-    "ca", "california", "san francisco", "los angeles", "silicon valley",
-    "tx", "texas", "austin", "houston", "dallas",
-    "il", "chicago", "wa", "seattle", "ma", "boston",
-    "fl", "miami", "ga", "atlanta", "pa", "philadelphia",
-    "co", "denver", "nc", "charlotte", "az", "phoenix",
+    "nyc", "new york", "brooklyn", "manhattan", "midtown",
+    "california", "san francisco", "los angeles", "silicon valley",
+    "texas", "austin", "houston", "dallas",
+    "chicago", "seattle", "boston",
+    "miami", "atlanta", "philadelphia",
+    "denver", "charlotte", "phoenix",
     "united states", "usa", "u.s.",
     # Other countries
     "united kingdom", "uk", "london", "england",
@@ -295,6 +299,7 @@ async def run_scraping_pipeline() -> dict:
     BATCH_SIZE = 10
     PARALLEL_BATCHES = 5
     jobs_new = 0
+    jobs_new_by_source: Counter[str] = Counter()
     now_iso = datetime.now(_BRT).isoformat()
 
     batches = [new_raw_jobs[i:i + BATCH_SIZE] for i in range(0, len(new_raw_jobs), BATCH_SIZE)]
@@ -397,6 +402,7 @@ async def run_scraping_pipeline() -> dict:
             try:
                 await wb.commit()
                 jobs_new += len(chunk)
+                jobs_new_by_source.update(job_doc.get("source", "unknown") for _, job_doc in chunk)
             except Exception as e:
                 logger.error("jobs_batch_write_error", count=len(chunk), error=str(e))
 
@@ -405,7 +411,8 @@ async def run_scraping_pipeline() -> dict:
         # Log every 5 groups and always on the final group
         if group_idx % 5 == 0 or group_idx == groups_total - 1:
             logger.info("scrape_progress", groups_done=group_idx + 1,
-                        groups_total=groups_total, jobs_written=jobs_new)
+                        groups_total=groups_total, jobs_written=jobs_new,
+                        jobs_written_by_source=dict(jobs_new_by_source))
 
     # cleanup_expired_jobs is owned by entrypoint.py phase 4; don't run it
     # here. It previously ran twice per pipeline and its serial per-doc
@@ -416,6 +423,7 @@ async def run_scraping_pipeline() -> dict:
         "jobs_duplicate": jobs_duplicate,
         "jobs_total": len(all_raw_jobs),
         "jobs_scraped_unique": len(candidates),
+        "jobs_new_by_source": dict(jobs_new_by_source),
         "sources_ok": sources_ok,
         "sources_failed": sources_failed,
     }
