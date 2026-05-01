@@ -25,6 +25,15 @@ import { getPiiProfile, isPiiComplete } from "../lib/pii-store";
 import { loadProfile } from "../lib/profile";
 import { getMode } from "../lib/settings";
 import { apiPost } from "../lib/api-client";
+import {
+  AUTOAPPLY_SESSION_KEY_PREFIX,
+  LEGACY_AUTOAPPLY_SESSION_KEY,
+} from "../lib/session-state";
+import {
+  getAutoApplySession,
+  removeAutoApplySession,
+  setAutoApplySession,
+} from "./session-state-proxy";
 
 function adapter(): BoardAdapter {
   const a = getAdapter();
@@ -56,8 +65,21 @@ function reportTabStatus(update: {
  * on any Gupy tab, which caused the "starts applying the moment you open a
  * Gupy page" bug when multiple tabs shared a single session state.
  */
-const ACTIVE_SESSION_KEY_PREFIX = "autoapply_active_session_";
-const GLOBAL_SESSION_KEY = "autoapply_active_session"; // legacy, still cleared
+const ACTIVE_SESSION_KEY_PREFIX = AUTOAPPLY_SESSION_KEY_PREFIX;
+const GLOBAL_SESSION_KEY = LEGACY_AUTOAPPLY_SESSION_KEY; // legacy, still cleared
+
+interface PersistedAutoApplySession {
+  step?: AutoApplyStep;
+  fieldsAnswered?: number;
+  questionsAnswered?: number;
+  llmCalls?: number;
+  startTime?: number;
+  jobUrl?: string;
+  mode?: "dry-run" | "auto";
+  running?: boolean;
+  pendingFields?: UnansweredField[];
+  manualOrigin?: boolean;
+}
 
 export class StateMachine {
   private currentStep: AutoApplyStep = AutoApplyStep.IDLE;
@@ -185,19 +207,17 @@ export class StateMachine {
           // Keep running=true in persisted state so the content script on the
           // next page auto-resumes after the user clicks Confirm manually.
           this.running = false;
-          await chrome.storage.session.set({
-            [this.sessionKey()]: {
-              step: this.currentStep,
-              fieldsAnswered: this.fieldsAnswered,
-              questionsAnswered: this.questionsAnswered,
-              llmCalls: this.llmCalls,
-              startTime: this.startTime,
-              jobUrl: this.jobUrl,
-              mode: this.mode,
-              running: true,
-              pendingFields: this.pendingFields,
-              manualOrigin: this.manualOrigin,
-            },
+          await setAutoApplySession<PersistedAutoApplySession>(this.sessionKey(), {
+            step: this.currentStep,
+            fieldsAnswered: this.fieldsAnswered,
+            questionsAnswered: this.questionsAnswered,
+            llmCalls: this.llmCalls,
+            startTime: this.startTime,
+            jobUrl: this.jobUrl,
+            mode: this.mode,
+            running: true,
+            pendingFields: this.pendingFields,
+            manualOrigin: this.manualOrigin,
           });
           this.broadcastStatus();
           return;
@@ -629,36 +649,23 @@ export class StateMachine {
   }
 
   private async persistState(): Promise<void> {
-    await chrome.storage.session.set({
-      [this.sessionKey()]: {
-        step: this.currentStep,
-        fieldsAnswered: this.fieldsAnswered,
-        questionsAnswered: this.questionsAnswered,
-        llmCalls: this.llmCalls,
-        startTime: this.startTime,
-        jobUrl: this.jobUrl,
-        mode: this.mode,
-        running: this.running,
-        pendingFields: this.pendingFields,
-        manualOrigin: this.manualOrigin,
-      },
+    await setAutoApplySession<PersistedAutoApplySession>(this.sessionKey(), {
+      step: this.currentStep,
+      fieldsAnswered: this.fieldsAnswered,
+      questionsAnswered: this.questionsAnswered,
+      llmCalls: this.llmCalls,
+      startTime: this.startTime,
+      jobUrl: this.jobUrl,
+      mode: this.mode,
+      running: this.running,
+      pendingFields: this.pendingFields,
+      manualOrigin: this.manualOrigin,
     });
   }
 
   private async restoreState(): Promise<void> {
     const key = this.sessionKey();
-    const result = await chrome.storage.session.get(key);
-    const state = result[key] as {
-      step?: AutoApplyStep;
-      fieldsAnswered?: number;
-      questionsAnswered?: number;
-      llmCalls?: number;
-      startTime?: number;
-      jobUrl?: string;
-      mode?: "dry-run" | "auto";
-      running?: boolean;
-      manualOrigin?: boolean;
-    } | undefined;
+    const state = await getAutoApplySession<PersistedAutoApplySession>(key);
     if (state) {
       this.currentStep = state.step ?? AutoApplyStep.IDLE;
       this.fieldsAnswered = state.fieldsAnswered ?? 0;
@@ -677,8 +684,7 @@ export class StateMachine {
   async hasActiveSessionForTab(): Promise<boolean> {
     if (this.tabId === null) return false;
     const key = this.sessionKey();
-    const result = await chrome.storage.session.get(key);
-    const state = result[key] as { running?: boolean } | undefined;
+    const state = await getAutoApplySession<PersistedAutoApplySession>(key);
     return !!state?.running;
   }
 
@@ -688,10 +694,7 @@ export class StateMachine {
    */
   async restorePendingPromptIfAny(): Promise<void> {
     const key = this.sessionKey();
-    const result = await chrome.storage.session.get(key);
-    const state = result[key] as
-      | { pendingFields?: UnansweredField[]; running?: boolean }
-      | undefined;
+    const state = await getAutoApplySession<PersistedAutoApplySession>(key);
     if (!state?.pendingFields?.length || state.running) return;
 
     showInPageHumanPrompt(state.pendingFields, async (answers) => {
@@ -709,9 +712,9 @@ export class StateMachine {
   }
 
   private async clearState(): Promise<void> {
-    await chrome.storage.session.remove(this.sessionKey());
+    await removeAutoApplySession(this.sessionKey());
     // Also clear the legacy global key if any process wrote to it.
-    await chrome.storage.session.remove(GLOBAL_SESSION_KEY);
+    await removeAutoApplySession(GLOBAL_SESSION_KEY);
   }
 
   private extractPageContext(): { company: string; jobTitle: string } {

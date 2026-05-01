@@ -7,6 +7,7 @@ import {
   onTabStatusUpdate,
   configureQueue,
 } from "./queue";
+import { isAutoApplySessionKey } from "../lib/session-state";
 
 // Types
 interface AuthState {
@@ -254,6 +255,13 @@ async function apiRequest(method: string, path: string, body?: unknown): Promise
   }
 }
 
+function assertAutoApplySessionKey(key: unknown): string {
+  if (typeof key !== "string" || !isAutoApplySessionKey(key)) {
+    throw new Error("Forbidden auto-apply session key");
+  }
+  return key;
+}
+
 // --- Session Lock ---
 
 function acquireSession(tabId: number, jobUrl: string): boolean {
@@ -406,6 +414,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return { ownership, tabId };
       }
 
+      case "AUTOAPPLY_SESSION_GET": {
+        const key = assertAutoApplySessionKey(message.key);
+        const stored = await chrome.storage.session.get(key);
+        return { ok: true, value: stored[key] ?? null };
+      }
+
+      case "AUTOAPPLY_SESSION_SET": {
+        const key = assertAutoApplySessionKey(message.key);
+        await chrome.storage.session.set({ [key]: message.value });
+        return { ok: true };
+      }
+
+      case "AUTOAPPLY_SESSION_REMOVE": {
+        const key = assertAutoApplySessionKey(message.key);
+        await chrome.storage.session.remove(key);
+        return { ok: true };
+      }
+
       // From content script state machines (tab-specific progress).
       case "TAB_STATUS_UPDATE":
         if (sender.tab?.id) {
@@ -426,11 +452,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true; // Keep channel open for async
 });
 
-// Content scripts already run in a TRUSTED context and can read/write
-// session storage under the default setAccessLevel. We intentionally do NOT
-// relax access to UNTRUSTED contexts — the Firebase ID token lives in
-// `authState` here, and widening access exposes it to any future
-// world:"MAIN" script injections on host pages.
+// Do not relax session storage access to content scripts. The Firebase ID
+// token lives in `authState`, so page-context code reaches session state only
+// through the narrow AUTOAPPLY_SESSION_* proxy above.
 
 // Restore auth state from session storage on startup
 chrome.storage.session.get("authState", (result) => {
