@@ -311,6 +311,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // From popup or content script
   const handle = async () => {
     switch (message.type) {
+      case "PING":
+        return {
+          ok: true,
+          version: chrome.runtime.getManifest().version,
+        };
+
       case "SIGN_IN":
         return signIn();
 

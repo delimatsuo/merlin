@@ -12,7 +12,7 @@ import { useEffect, useState } from "react";
  *   - `true` if the extension content script answered MERLIN_EXTENSION_READY
  *   - `false` after a short timeout with no reply
  */
-export function useExtensionDetected(timeoutMs = 600): boolean | undefined {
+export function useExtensionDetected(timeoutMs = 1200): boolean | undefined {
   const [detected, setDetected] = useState<boolean | undefined>(undefined);
 
   useEffect(() => {

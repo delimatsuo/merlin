@@ -22,8 +22,45 @@ const ALLOWED_TYPES = new Set<BridgedMessage["type"]>([
   "MERLIN_EXTENSION_PING",
 ]);
 
-function announceReady(): void {
-  window.postMessage({ type: "MERLIN_EXTENSION_READY" }, window.location.origin);
+function sendWorkerMessage<T>(message: unknown): Promise<T | null> {
+  return new Promise((resolve) => {
+    try {
+      chrome.runtime.sendMessage(message, (response: T | undefined) => {
+        if (chrome.runtime.lastError) {
+          resolve(null);
+          return;
+        }
+        resolve(response ?? null);
+      });
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+async function announceReady(): Promise<void> {
+  const response = await sendWorkerMessage<{ ok?: boolean }>({ type: "PING" });
+  if (response?.ok) {
+    window.postMessage(
+      { type: "MERLIN_EXTENSION_READY" },
+      window.location.origin,
+    );
+  }
+}
+
+async function forwardToWorker(
+  message: { type: "QUEUE_KICK" } | { type: "QUEUE_FOCUS_TAB"; queueId: string },
+  resultType: "MERLIN_QUEUE_KICK_RESULT" | "MERLIN_QUEUE_FOCUS_TAB_RESULT",
+): Promise<void> {
+  const response = await sendWorkerMessage<{ error?: string }>(message);
+  window.postMessage(
+    {
+      type: resultType,
+      ok: !!response && !response.error,
+      error: response?.error ?? (!response ? "extension_unavailable" : undefined),
+    },
+    window.location.origin,
+  );
 }
 
 window.addEventListener("message", (event) => {
@@ -34,17 +71,18 @@ window.addEventListener("message", (event) => {
   if (!ALLOWED_TYPES.has(data.type)) return;
 
   if (data.type === "MERLIN_QUEUE_KICK") {
-    chrome.runtime.sendMessage({ type: "QUEUE_KICK" }).catch(() => {});
+    void forwardToWorker({ type: "QUEUE_KICK" }, "MERLIN_QUEUE_KICK_RESULT");
   } else if (data.type === "MERLIN_QUEUE_FOCUS_TAB") {
-    chrome.runtime
-      .sendMessage({ type: "QUEUE_FOCUS_TAB", queueId: data.queueId })
-      .catch(() => {});
+    void forwardToWorker(
+      { type: "QUEUE_FOCUS_TAB", queueId: data.queueId },
+      "MERLIN_QUEUE_FOCUS_TAB_RESULT",
+    );
   } else if (data.type === "MERLIN_EXTENSION_PING") {
     // Frontend component mounted after the bridge loaded — answer its ping
     // so pages that client-side-navigate in can still detect us.
-    announceReady();
+    void announceReady();
   }
 });
 
 // Announce our presence on initial load so pages already listening hear us.
-announceReady();
+void announceReady();

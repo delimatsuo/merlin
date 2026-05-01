@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Gupy AutoApply",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0KMkLyEZsYaf2hb6i1fF9jmybU9FLDvxN++xyjfFj8oslbGDFAgwctOo5nulTQ6Fovz3dSgrQRoEbv1JFn8/Dzcm8cYDeSpkk6/qde/6puvWrs7yDG6Wut+X8nbTRMlQFfbj842F5THxOCGXlxPjSODng1J/SkJS6oo0DqsZNOgFI4rh6m0f4Ps3LIMq+nFCVtKecH+sceRUy5/XSTBipDAj0ge8dhgcix0VWfLOugOo490vb4hXnbteMgrn9n1HPMEtH1usyhfxSy0TJF6y0OKiCejgv8AVwmNHIJXCWHKI/1lUV4tXUZF7EKvdoWJKMT/Jzf2AmRXI6bpOAn2euQIDAQAB",
   "permissions": ["tabs", "storage", "identity", "alarms"],
   "host_permissions": [

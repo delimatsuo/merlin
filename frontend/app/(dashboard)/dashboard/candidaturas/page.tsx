@@ -144,6 +144,7 @@ function CandidaturasContent() {
   const [controlBusy, setControlBusy] = useState(false);
   const extensionDetected = useExtensionDetected() === true;
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastQueueKick = useRef<{ signature: string; at: number } | null>(null);
   const activeCount = active.length;
 
   const fetchQueue = async () => {
@@ -220,6 +221,32 @@ function CandidaturasContent() {
     if (active.length > 0 && tab !== "pipeline") setTab("pipeline");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active.length]);
+
+  // If the user lands directly on the batch page with pending entries, nudge
+  // the extension worker. The original flow only kicked the worker from the
+  // job-search page after creating a batch, so any missed bridge message left
+  // the pipeline stuck in "Aguardando" until the extension alarm eventually
+  // fired, or forever if the bridge was stale.
+  useEffect(() => {
+    if (!extensionDetected) return;
+    const pendingIds = active
+      .filter((entry) => entry.status === "pending")
+      .map((entry) => entry.id)
+      .sort();
+    if (pendingIds.length === 0) return;
+
+    const signature = pendingIds.join(",");
+    const now = Date.now();
+    const last = lastQueueKick.current;
+    if (last?.signature === signature && now - last.at < 15_000) return;
+
+    lastQueueKick.current = { signature, at: now };
+    try {
+      window.postMessage({ type: "MERLIN_QUEUE_KICK" }, window.location.origin);
+    } catch {
+      /* extension unavailable; install banner covers the fallback */
+    }
+  }, [active, extensionDetected]);
 
   const handleReview = (entry: QueueEntry) => {
     // Ask the extension SW (via the merlincv.com content-script bridge) to
