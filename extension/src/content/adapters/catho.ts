@@ -34,8 +34,10 @@ import { AutoApplyFlowError } from "../../lib/errors";
 import { getPiiProfile } from "../../lib/pii-store";
 import {
   classifyCathoScreen,
+  isCathoDismissActionText,
   isCathoHost,
   isCathoJobPath,
+  isCathoUpsellText,
   type CathoScreenKind,
 } from "./catho-utils";
 import type { ValidationError } from "../dom/errors";
@@ -45,6 +47,17 @@ const FAILURE_MODAL_SELECTOR = "#ModalApplyFailure";
 const SUCCESS_ALERT_SELECTOR = "[data-sent-apply-indicator-alert]";
 const SENDING_ALERT_SELECTOR = "[data-sending-apply-indicator-alert]";
 const SIGNIN_LINK_SELECTOR = 'a#signin[href*="/signin"], a[href="/signin/"]';
+const CLICKABLE_SELECTOR = 'button, a, [role="button"], [class*="button"], [class*="Button"]';
+const UPSELL_CONTAINER_SELECTOR = [
+  '[role="dialog"]',
+  '[aria-modal="true"]',
+  '[class*="modal"]',
+  '[class*="Modal"]',
+  '[class*="overlay"]',
+  '[class*="Overlay"]',
+  '[class*="popup"]',
+  '[class*="Popup"]',
+].join(",");
 const QUESTIONNAIRE_TEXT_MARKERS = [
   "questionario da vaga",
   "questionário da vaga",
@@ -98,6 +111,100 @@ function findApplyButton(): HTMLButtonElement | null {
 
 function isLoggedOut(): boolean {
   return visibleElement(SIGNIN_LINK_SELECTOR) !== null;
+}
+
+function elementText(el: HTMLElement): string {
+  return el.innerText || el.textContent || "";
+}
+
+function findCloseButton(root: HTMLElement): HTMLElement | null {
+  const controls = Array.from(root.querySelectorAll<HTMLElement>(CLICKABLE_SELECTOR))
+    .filter(isVisible);
+  return (
+    controls.find((control) => {
+      const label =
+        control.getAttribute("aria-label") ||
+        control.getAttribute("title") ||
+        elementText(control);
+      const normalized = normalizeText(label);
+      return (
+        normalized === "x" ||
+        normalized === "×" ||
+        normalized.includes("fechar") ||
+        normalized.includes("close")
+      );
+    }) ?? null
+  );
+}
+
+function findCathoUpsellDismissButton(): HTMLElement | null {
+  const containers = Array.from(document.querySelectorAll<HTMLElement>(UPSELL_CONTAINER_SELECTOR))
+    .filter(isVisible)
+    .filter((container) => isCathoUpsellText(elementText(container)));
+
+  for (const container of containers) {
+    const controls = Array.from(container.querySelectorAll<HTMLElement>(CLICKABLE_SELECTOR)).filter(isVisible);
+    const dismiss = controls.find((control) => isCathoDismissActionText(elementText(control)));
+    if (dismiss) return dismiss;
+
+    const close = findCloseButton(container);
+    if (close) return close;
+  }
+
+  const controls = Array.from(document.querySelectorAll<HTMLElement>(CLICKABLE_SELECTOR))
+    .filter(isVisible);
+  for (const control of controls) {
+    if (!isCathoDismissActionText(elementText(control))) continue;
+
+    let cursor: HTMLElement | null = control;
+    for (let depth = 0; cursor && depth < 8; depth++) {
+      if (isCathoUpsellText(elementText(cursor))) return control;
+      cursor = cursor.parentElement;
+    }
+  }
+
+  for (const control of controls) {
+    const label =
+      control.getAttribute("aria-label") ||
+      control.getAttribute("title") ||
+      elementText(control);
+    const normalized = normalizeText(label);
+    if (
+      normalized !== "x" &&
+      normalized !== "×" &&
+      !normalized.includes("fechar") &&
+      !normalized.includes("close")
+    ) {
+      continue;
+    }
+
+    let cursor: HTMLElement | null = control;
+    for (let depth = 0; cursor && depth < 8; depth++) {
+      if (isCathoUpsellText(elementText(cursor))) return control;
+      cursor = cursor.parentElement;
+    }
+  }
+
+  return null;
+}
+
+async function dismissCathoUpsells(maxDismissals = 3): Promise<number> {
+  let dismissed = 0;
+
+  for (let attempt = 0; attempt < maxDismissals; attempt++) {
+    const button = findCathoUpsellDismissButton();
+    if (!button) break;
+
+    console.log(
+      "[Catho] Dismissing upsell modal:",
+      elementText(button).trim() || button.getAttribute("aria-label") || button.tagName,
+    );
+    await humanLikeClick(button);
+    dismissed++;
+    await sleep(500);
+  }
+
+  return dismissed;
 }
 
 function isFailureVisible(): boolean {
@@ -173,6 +280,8 @@ async function waitForApplyOutcome(
   let sawSending = false;
 
   while (Date.now() < deadline) {
+    await dismissCathoUpsells(2);
+
     if (isSuccessVisible()) return "success";
     if (isFailureVisible()) return "failure";
     if (isQuestionnaireVisible()) return "questionnaire";
@@ -365,6 +474,8 @@ export const cathoAdapter: BoardAdapter = {
       );
     }
 
+    await dismissCathoUpsells();
+
     const btn = findApplyButton();
     if (!btn) {
       throw new AutoApplyFlowError(
@@ -382,6 +493,7 @@ export const cathoAdapter: BoardAdapter = {
     }
 
     await humanLikeClick(btn);
+    await dismissCathoUpsells();
     const outcome = await waitForApplyOutcome();
 
     if (outcome === "success") return;
@@ -410,6 +522,8 @@ export const cathoAdapter: BoardAdapter = {
   },
 
   async handleCustomQuestions(): Promise<CustomQuestionsResult> {
+    await dismissCathoUpsells();
+
     const modal = findQuestionnaireModal();
     if (!modal) {
       return {

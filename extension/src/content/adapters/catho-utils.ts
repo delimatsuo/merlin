@@ -21,6 +21,37 @@ export function isCathoJobPath(pathname: string): boolean {
   return segments[0] === "vagas" && segments.length >= 3;
 }
 
+function normalizeCathoText(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function isCathoUpsellText(text: string): boolean {
+  const normalized = normalizeCathoText(text);
+  return [
+    "destaque extra",
+    "pule na frente",
+    "mais chances de receber um contato",
+    "concorrentes desta vaga",
+    "sua posicao agora",
+  ].some((marker) => normalized.includes(marker));
+}
+
+export function isCathoDismissActionText(text: string): boolean {
+  const normalized = normalizeCathoText(text);
+  return [
+    "agora nao",
+    "nao quero",
+    "depois",
+    "fechar",
+    "close",
+  ].some((marker) => normalized === marker || normalized.includes(marker));
+}
+
 export function classifyCathoScreen(signals: CathoScreenSignals): CathoScreenKind {
   if (signals.successVisible) return "complete";
   if (signals.failureVisible) return "error";

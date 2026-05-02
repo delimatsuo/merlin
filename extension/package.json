@@ -1,6 +1,6 @@
 {
   "name": "gupy-autoapply-extension",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "private": true,
   "description": "Chrome extension for automating Gupy job applications",
   "scripts": {

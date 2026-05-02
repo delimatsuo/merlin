@@ -9,7 +9,13 @@ const utils = await import(
   pathToFileURL(`${buildDir}/content/adapters/catho-utils.js`).href
 );
 
-const { classifyCathoScreen, isCathoHost, isCathoJobPath } = utils;
+const {
+  classifyCathoScreen,
+  isCathoDismissActionText,
+  isCathoHost,
+  isCathoJobPath,
+  isCathoUpsellText,
+} = utils;
 
 assert.equal(isCathoHost("catho.com.br"), true);
 assert.equal(isCathoHost("www.catho.com.br"), true);
@@ -50,3 +56,11 @@ assert.equal(
   }),
   "complete",
 );
+
+assert.equal(isCathoUpsellText("Pule na frente dos concorrentes desta vaga"), true);
+assert.equal(isCathoUpsellText("Quer ter até 18 vezes mais chances de receber um contato?"), true);
+assert.equal(isCathoUpsellText("Questionário da vaga"), false);
+
+assert.equal(isCathoDismissActionText("Agora não"), true);
+assert.equal(isCathoDismissActionText("Agora nao"), true);
+assert.equal(isCathoDismissActionText("Quero o Destaque Extra"), false);
