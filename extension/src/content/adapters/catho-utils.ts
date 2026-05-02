@@ -43,13 +43,15 @@ export function isCathoUpsellText(text: string): boolean {
 
 export function isCathoDismissActionText(text: string): boolean {
   const normalized = normalizeCathoText(text);
-  return [
+  const textDismisses = [
     "agora nao",
     "nao quero",
     "depois",
     "fechar",
     "close",
   ].some((marker) => normalized === marker || normalized.includes(marker));
+
+  return textDismisses || normalized === "x" || normalized === "×";
 }
 
 export function classifyCathoScreen(signals: CathoScreenSignals): CathoScreenKind {

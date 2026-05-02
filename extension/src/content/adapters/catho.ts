@@ -47,10 +47,30 @@ const FAILURE_MODAL_SELECTOR = "#ModalApplyFailure";
 const SUCCESS_ALERT_SELECTOR = "[data-sent-apply-indicator-alert]";
 const SENDING_ALERT_SELECTOR = "[data-sending-apply-indicator-alert]";
 const SIGNIN_LINK_SELECTOR = 'a#signin[href*="/signin"], a[href="/signin/"]';
-const CLICKABLE_SELECTOR = 'button, a, [role="button"], [class*="button"], [class*="Button"]';
+const CLICKABLE_SELECTOR = [
+  "button",
+  "a",
+  '[role="button"]',
+  "[tabindex]",
+  '[class*="button"]',
+  '[class*="Button"]',
+  '[class*="btn"]',
+  '[class*="Btn"]',
+  '[class*="link"]',
+  '[class*="Link"]',
+  "div",
+  "span",
+  "p",
+  "u",
+  "strong",
+  "i",
+].join(",");
 const UPSELL_CONTAINER_SELECTOR = [
   '[role="dialog"]',
   '[aria-modal="true"]',
+  "aside",
+  "section",
+  "article",
   '[class*="modal"]',
   '[class*="Modal"]',
   '[class*="overlay"]',
@@ -117,23 +137,65 @@ function elementText(el: HTMLElement): string {
   return el.innerText || el.textContent || "";
 }
 
-function findCloseButton(root: HTMLElement): HTMLElement | null {
+function controlLabel(control: HTMLElement): string {
+  return (
+    control.getAttribute("aria-label") ||
+    control.getAttribute("title") ||
+    elementText(control)
+  );
+}
+
+function isActionSizedLabel(label: string): boolean {
+  return normalizeText(label).length <= 80;
+}
+
+function isDismissControl(control: HTMLElement): boolean {
+  const label = controlLabel(control);
+  return isActionSizedLabel(label) && isCathoDismissActionText(label);
+}
+
+function findDismissControl(root: HTMLElement): HTMLElement | null {
   const controls = Array.from(root.querySelectorAll<HTMLElement>(CLICKABLE_SELECTOR))
     .filter(isVisible);
+  return controls.find(isDismissControl) ?? null;
+}
+
+function findDismissControlInUpsellAncestor(control: HTMLElement): HTMLElement | null {
+  if (!isDismissControl(control)) return null;
+
+  let cursor: HTMLElement | null = control;
+  for (let depth = 0; cursor && depth < 14; depth++) {
+    if (isCathoUpsellText(elementText(cursor))) return control;
+    cursor = cursor.parentElement;
+  }
+
+  return null;
+}
+
+function findDismissControlNearUpsellText(root: HTMLElement): HTMLElement | null {
+  let cursor: HTMLElement | null = root;
+  for (let depth = 0; cursor && depth < 8; depth++) {
+    const dismiss = findDismissControl(cursor);
+    if (dismiss) return dismiss;
+    cursor = cursor.parentElement;
+  }
+
+  return null;
+}
+
+function findVisibleDismissControl(): HTMLElement | null {
+  const controls = Array.from(document.querySelectorAll<HTMLElement>(CLICKABLE_SELECTOR))
+    .filter(isVisible);
+
+  for (const control of controls) {
+    const dismiss = findDismissControlInUpsellAncestor(control);
+    if (dismiss) return dismiss;
+  }
+
   return (
-    controls.find((control) => {
-      const label =
-        control.getAttribute("aria-label") ||
-        control.getAttribute("title") ||
-        elementText(control);
-      const normalized = normalizeText(label);
-      return (
-        normalized === "x" ||
-        normalized === "×" ||
-        normalized.includes("fechar") ||
-        normalized.includes("close")
-      );
-    }) ?? null
+    isCathoUpsellText(elementText(document.body))
+      ? controls.find(isDismissControl) ?? null
+      : null
   );
 }
 
@@ -143,49 +205,21 @@ function findCathoUpsellDismissButton(): HTMLElement | null {
     .filter((container) => isCathoUpsellText(elementText(container)));
 
   for (const container of containers) {
-    const controls = Array.from(container.querySelectorAll<HTMLElement>(CLICKABLE_SELECTOR)).filter(isVisible);
-    const dismiss = controls.find((control) => isCathoDismissActionText(elementText(control)));
+    const dismiss = findDismissControl(container);
     if (dismiss) return dismiss;
-
-    const close = findCloseButton(container);
-    if (close) return close;
   }
 
-  const controls = Array.from(document.querySelectorAll<HTMLElement>(CLICKABLE_SELECTOR))
-    .filter(isVisible);
-  for (const control of controls) {
-    if (!isCathoDismissActionText(elementText(control))) continue;
-
-    let cursor: HTMLElement | null = control;
-    for (let depth = 0; cursor && depth < 8; depth++) {
-      if (isCathoUpsellText(elementText(cursor))) return control;
-      cursor = cursor.parentElement;
-    }
+  const upsellTextNodes = Array.from(
+    document.querySelectorAll<HTMLElement>(UPSELL_CONTAINER_SELECTOR),
+  )
+    .filter(isVisible)
+    .filter((candidate) => isCathoUpsellText(elementText(candidate)));
+  for (const textNode of upsellTextNodes) {
+    const dismiss = findDismissControlNearUpsellText(textNode);
+    if (dismiss) return dismiss;
   }
 
-  for (const control of controls) {
-    const label =
-      control.getAttribute("aria-label") ||
-      control.getAttribute("title") ||
-      elementText(control);
-    const normalized = normalizeText(label);
-    if (
-      normalized !== "x" &&
-      normalized !== "×" &&
-      !normalized.includes("fechar") &&
-      !normalized.includes("close")
-    ) {
-      continue;
-    }
-
-    let cursor: HTMLElement | null = control;
-    for (let depth = 0; cursor && depth < 8; depth++) {
-      if (isCathoUpsellText(elementText(cursor))) return control;
-      cursor = cursor.parentElement;
-    }
-  }
-
-  return null;
+  return findVisibleDismissControl();
 }
 
 async function dismissCathoUpsells(maxDismissals = 3): Promise<number> {

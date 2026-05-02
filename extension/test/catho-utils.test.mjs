@@ -63,4 +63,6 @@ assert.equal(isCathoUpsellText("Questionário da vaga"), false);
 
 assert.equal(isCathoDismissActionText("Agora não"), true);
 assert.equal(isCathoDismissActionText("Agora nao"), true);
+assert.equal(isCathoDismissActionText("×"), true);
+assert.equal(isCathoDismissActionText("X"), true);
 assert.equal(isCathoDismissActionText("Quero o Destaque Extra"), false);
