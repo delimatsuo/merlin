@@ -79,6 +79,16 @@ def _autoapply_rejection_reason(source: str, job_url: str) -> str | None:
     return "unsupported_source"
 
 
+def _should_skip_active_queue_entry(entry: dict) -> bool:
+    if entry.get("status") not in ACTIVE_STATUSES:
+        return False
+    reason = _autoapply_rejection_reason(
+        str(entry.get("source") or ""),
+        str(entry.get("job_url") or ""),
+    )
+    return reason == "unsupported_apply_method"
+
+
 def _to_response(entry: dict) -> QueueEntryResponse:
     # Use `or ""` for every required string — dict.get(key, default) only
     # returns the default when the key is MISSING, not when the stored value
@@ -231,11 +241,33 @@ async def list_queue(
             detail=f"Firestore read failed: {type(e).__name__}: {str(e)[:200]}",
         )
 
+    normalized_entries: list[dict] = []
+    for entry in entries:
+        if _should_skip_active_queue_entry(entry):
+            updated, err = await fs.update_queue_entry(
+                user.uid,
+                entry["id"],
+                {
+                    "status": "skipped",
+                    "error_message": "Fluxo de candidatura manual/WhatsApp não é automatizável pelo Merlin.",
+                },
+            )
+            if updated:
+                entry = updated
+            else:
+                logger.warning(
+                    "queue_auto_skip_unsupported_apply_method_failed",
+                    uid=user.uid,
+                    entry_id=entry.get("id"),
+                    error=err,
+                )
+        normalized_entries.append(entry)
+
     active: list[QueueEntryResponse] = []
     recent: list[QueueEntryResponse] = []
     active_batch_id: str | None = None
 
-    for entry in entries:
+    for entry in normalized_entries:
         try:
             resp = _to_response(entry)
         except Exception as e:
