@@ -55,6 +55,11 @@ node -e "
       matches: (cs.matches || []).filter(p => !p.includes('localhost')),
     }));
   }
+  if (Array.isArray(m.externally_connectable?.matches)) {
+    m.externally_connectable.matches = m.externally_connectable.matches.filter(
+      p => !p.includes('localhost')
+    );
+  }
   fs.writeFileSync('$WORK_DIR/manifest.json', JSON.stringify(m, null, 2) + '\n');
 "
 
