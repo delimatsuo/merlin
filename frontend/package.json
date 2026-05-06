@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test:queue-history": "tsc --rootDir . --target ES2020 --module ES2020 --moduleResolution node --lib ES2020,DOM --skipLibCheck --outDir /tmp/merlin-frontend-tests lib/queue-history.ts && node test/queue-history.test.mjs",
-    "test:job-automation": "tsc --rootDir . --target ES2020 --module ES2020 --moduleResolution node --lib ES2020,DOM --skipLibCheck --outDir /tmp/merlin-frontend-tests lib/job-automation.ts && node test/job-automation.test.mjs"
+    "test:job-automation": "tsc --rootDir . --target ES2020 --module ES2020 --moduleResolution node --lib ES2020,DOM --skipLibCheck --outDir /tmp/merlin-frontend-tests lib/job-automation.ts && node test/job-automation.test.mjs",
+    "test:extension-detection": "tsc --rootDir . --target ES2020 --module ES2020 --moduleResolution node --lib ES2020,DOM --skipLibCheck --outDir /tmp/merlin-frontend-tests lib/extension-detection.ts && node test/extension-detection.test.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",

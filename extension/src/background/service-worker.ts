@@ -324,20 +324,40 @@ async function openCandidaturasDashboard(): Promise<void> {
 
 // --- Message Handler ---
 
+async function extensionPresenceResponse() {
+  const state = await readAuthState();
+  return {
+    ok: true,
+    version: chrome.runtime.getManifest().version,
+    user: state.user,
+    isAuthenticated: !!state.token,
+  };
+}
+
+chrome.runtime.onMessageExternal.addListener((message, _sender, sendResponse) => {
+  const handle = async () => {
+    switch (message?.type) {
+      case "PING":
+        return extensionPresenceResponse();
+      default:
+        return { error: "Unknown message type" };
+    }
+  };
+
+  handle().then((result) => {
+    try { sendResponse(result); } catch { /* sender closed */ }
+  }).catch((err) => {
+    try { sendResponse({ error: err.message }); } catch { /* sender closed */ }
+  });
+  return true;
+});
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // From popup or content script
   const handle = async () => {
     switch (message.type) {
       case "PING":
-        {
-          const state = await readAuthState();
-          return {
-            ok: true,
-            version: chrome.runtime.getManifest().version,
-            user: state.user,
-            isAuthenticated: !!state.token,
-          };
-        }
+        return extensionPresenceResponse();
 
       case "SIGN_IN":
         return signIn();

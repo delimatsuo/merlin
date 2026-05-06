@@ -15,6 +15,13 @@
     "http://localhost:8000/*"
   ],
   "background": { "service_worker": "dist/service-worker.js" },
+  "externally_connectable": {
+    "matches": [
+      "https://merlincv.com/*",
+      "https://staging.merlincv.com/*",
+      "http://localhost:3000/*"
+    ]
+  },
   "content_scripts": [
     {
       "matches": ["*://*.gupy.io/*"],

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { X } from "lucide-react";
+import { RefreshCw, X } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   useExtensionDetected,
@@ -40,6 +40,10 @@ export function ExtensionInstallBanner() {
     setDismissed(true);
   };
 
+  const reload = () => {
+    window.location.reload();
+  };
+
   return (
     <div className="rounded-2xl border border-border bg-card apple-shadow-sm p-4 sm:p-5 flex items-start gap-4">
       <Image
@@ -47,6 +51,7 @@ export function ExtensionInstallBanner() {
         alt=""
         width={40}
         height={40}
+        unoptimized
         className="rounded-lg shrink-0"
       />
       <div className="min-w-0 flex-1">
@@ -54,8 +59,8 @@ export function ExtensionInstallBanner() {
           Instale a extensão Merlin para Chrome
         </h3>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Necessária para candidaturas em lote — automatiza vagas
-          compatíveis usando seu perfil.
+          Necessária para candidaturas em lote. Se você acabou de instalar
+          ou atualizar, recarregue esta página para o Chrome ativar a extensão aqui.
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <a
@@ -66,6 +71,10 @@ export function ExtensionInstallBanner() {
           >
             Instalar no Chrome
           </a>
+          <Button variant="outline" size="sm" onClick={reload} className="gap-1.5">
+            <RefreshCw className="h-3.5 w-3.5" />
+            Já instalei
+          </Button>
           <Button variant="ghost" size="sm" onClick={dismiss}>
             Agora não
           </Button>

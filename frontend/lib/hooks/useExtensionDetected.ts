@@ -2,17 +2,21 @@
 
 import { useEffect, useState } from "react";
 
-export interface ExtensionUser {
-  uid: string;
-  email: string | null;
-  displayName?: string | null;
-}
+import {
+  type ChromeRuntimeLike,
+  type ExtensionStatus,
+  type ExtensionUser,
+  pingInstalledExtension,
+} from "@/lib/extension-detection";
 
-export interface ExtensionStatus {
-  detected: boolean | undefined;
-  version?: string;
-  user?: ExtensionUser | null;
-  isAuthenticated?: boolean;
+export type { ExtensionStatus, ExtensionUser };
+
+declare global {
+  interface Window {
+    chrome?: {
+      runtime?: ChromeRuntimeLike;
+    };
+  }
 }
 
 /**
@@ -25,7 +29,7 @@ export interface ExtensionStatus {
  *   - `true` if the extension content script answered MERLIN_EXTENSION_READY
  *   - `false` after a short timeout with no reply
  */
-export function useExtensionStatus(timeoutMs = 1200): ExtensionStatus {
+export function useExtensionStatus(timeoutMs = 2500): ExtensionStatus {
   const [status, setStatus] = useState<ExtensionStatus>({
     detected: undefined,
   });
@@ -58,6 +62,12 @@ export function useExtensionStatus(timeoutMs = 1200): ExtensionStatus {
     } catch {
       /* ignore */
     }
+
+    void pingInstalledExtension(window.chrome?.runtime).then((detected) => {
+      if (!detected) return;
+      if (timer) clearTimeout(timer);
+      setStatus(detected);
+    });
 
     timer = setTimeout(() => {
       setStatus((prev) =>
