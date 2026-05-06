@@ -18,6 +18,7 @@ import {
 import { api } from "@/lib/api";
 import { useTranslation } from "@/lib/hooks/useTranslation";
 import { cn } from "@/lib/utils";
+import { isAutoApplySupported } from "@/lib/job-automation";
 
 interface FeedResponse {
   date: string;
@@ -42,11 +43,14 @@ function VagasContent() {
   const [submittingBatch, setSubmittingBatch] = useState(false);
   const [totalInSystem, setTotalInSystem] = useState<number | null>(null);
 
-  const automatableMatches = useMemo(
+  const visibleMatches = useMemo(
     () => matches.filter((m) => ["gupy", "catho"].includes((m.source || "").toLowerCase())),
     [matches],
   );
-  const visibleMatches = automatableMatches;
+  const automatableMatches = useMemo(
+    () => visibleMatches.filter(isAutoApplySupported),
+    [visibleMatches],
+  );
   const selectedJobs = useMemo(
     () => automatableMatches.filter((m) => selectedIds.has(m.job_id)),
     [automatableMatches, selectedIds],
@@ -289,12 +293,12 @@ function VagasContent() {
 
       {/* Matches */}
       {!loading && visibleMatches.length > 0 && (
-        <div className={cn("space-y-3", selectedIds.size > 0 && "pb-24")}>
+        <div className={cn("space-y-3", selectedJobs.length > 0 && "pb-24")}>
           {visibleMatches.map((job) => (
             <JobCard
               key={job.job_id}
               job={job}
-              selected={selectedIds.has(job.job_id)}
+              selected={selectedIds.has(job.job_id) && isAutoApplySupported(job)}
               onToggleSelect={toggle}
             />
           ))}
@@ -310,14 +314,14 @@ function VagasContent() {
       )}
 
       {/* Floating batch action footer */}
-      {selectedIds.size > 0 && (
+      {selectedJobs.length > 0 && (
         <div className="fixed bottom-0 inset-x-0 z-40 pointer-events-none px-4 pb-4">
           <div className="max-w-2xl mx-auto pointer-events-auto">
             <div className="rounded-2xl bg-foreground text-background apple-shadow-lg p-3 flex items-center gap-3">
               <span className="text-sm font-semibold pl-2">
-                {selectedIds.size === 1
+                {selectedJobs.length === 1
                   ? t("vagas.batch.footerCountOne")
-                  : t("vagas.batch.footerCount", { count: String(selectedIds.size) })}
+                  : t("vagas.batch.footerCount", { count: String(selectedJobs.length) })}
               </span>
               <button
                 type="button"

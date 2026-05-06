@@ -6,6 +6,10 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/lib/hooks/useTranslation";
 import type { MatchedJobItem } from "@/lib/store";
+import {
+  getAutoApplyRejectionReason,
+  isAutoApplySupported,
+} from "@/lib/job-automation";
 
 const SOURCE_LABELS: Record<string, string> = {
   gupy: "Gupy",
@@ -65,18 +69,13 @@ interface Props {
   onToggleSelect?: (jobId: string) => void;
 }
 
-const AUTOMATABLE_SOURCES = new Set(["gupy", "catho"]);
-
-function isAutomatable(source: string): boolean {
-  return AUTOMATABLE_SOURCES.has((source || "").toLowerCase());
-}
-
 export function JobCard({ job, selected = false, onToggleSelect }: Props) {
   const router = useRouter();
   const { t } = useTranslation();
   const relTime = getRelativeTime(job.posted_date, t);
   const fresh = isNew(job.posted_date);
-  const automatable = isAutomatable(job.source);
+  const rejectionReason = getAutoApplyRejectionReason(job);
+  const automatable = isAutoApplySupported(job);
   const selectable = onToggleSelect !== undefined;
 
   const handleApply = () => {
@@ -168,7 +167,9 @@ export function JobCard({ job, selected = false, onToggleSelect }: Props) {
 
             {selectable && !automatable && (
               <span className="px-1.5 py-0.5 rounded-md bg-muted text-[10px] text-muted-foreground/70 font-medium">
-                {t("vagas.batch.unsupportedTag")}
+                {rejectionReason === "unsupported_apply_method"
+                  ? t("vagas.batch.manualApplyTag")
+                  : t("vagas.batch.unsupportedTag")}
               </span>
             )}
 

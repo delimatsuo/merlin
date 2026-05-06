@@ -10,7 +10,8 @@
     "test:queue": "tsc --rootDir src --target ES2020 --module ES2020 --moduleResolution node --lib ES2020,DOM --skipLibCheck --outDir /tmp/merlin-extension-tests src/background/queue-diagnostics.ts && node test/queue-diagnostics.test.mjs",
     "test:catho": "tsc --rootDir src --target ES2020 --module ES2020 --moduleResolution node --lib ES2020,DOM --skipLibCheck --outDir /tmp/merlin-extension-tests src/content/adapters/catho-utils.ts && node test/catho-utils.test.mjs",
     "test:dom-helpers": "tsc --rootDir src --target ES2020 --module ES2020 --moduleResolution node --lib ES2020,DOM --skipLibCheck --outDir /tmp/merlin-extension-tests src/content/dom/helpers.ts && node test/dom-helpers.test.mjs",
-    "test:content-storage": "node test/content-storage-boundary.test.mjs"
+    "test:content-storage": "node test/content-storage-boundary.test.mjs",
+    "test:queue-eligibility": "tsc --rootDir src --target ES2020 --module ES2020 --moduleResolution node --lib ES2020,DOM --skipLibCheck --outDir /tmp/merlin-extension-tests src/background/queue-eligibility.ts && node test/queue-eligibility.test.mjs"
   },
   "devDependencies": {
     "@types/chrome": "^0.1.40",

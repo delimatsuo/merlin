@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -55,6 +56,27 @@ router = APIRouter()
 RECENT_WINDOW_DAYS = 30
 ACTIVE_STATUSES = {"pending", "running", "needs_attention"}
 SUPPORTED_AUTOAPPLY_SOURCES = {"gupy", "catho"}
+
+
+def _hostname(job_url: str) -> str:
+    try:
+        return (urlparse(job_url).hostname or "").lower()
+    except Exception:
+        return ""
+
+
+def _autoapply_rejection_reason(source: str, job_url: str) -> str | None:
+    source_key = (source or "").lower()
+    if source_key not in SUPPORTED_AUTOAPPLY_SOURCES:
+        return "unsupported_source"
+
+    host = _hostname(job_url)
+    if source_key == "gupy":
+        return None if host == "gupy.io" or host.endswith(".gupy.io") else "unsupported_apply_method"
+    if source_key == "catho":
+        return None if host == "catho.com.br" or host.endswith(".catho.com.br") else "unsupported_apply_method"
+
+    return "unsupported_source"
 
 
 def _to_response(entry: dict) -> QueueEntryResponse:
@@ -125,16 +147,17 @@ async def create_queue(
             rejected.append({"job_id": job_id, "reason": "not_found"})
             continue
         source = (job.get("source") or "").lower()
-        if source not in SUPPORTED_AUTOAPPLY_SOURCES:
-            rejected.append({
-                "job_id": job_id,
-                "reason": "unsupported_source",
-                "source": source,
-            })
-            continue
         job_url = job.get("source_url") or job.get("url") or ""
         if not job_url:
             rejected.append({"job_id": job_id, "reason": "no_url"})
+            continue
+        rejection_reason = _autoapply_rejection_reason(source, job_url)
+        if rejection_reason:
+            rejected.append({
+                "job_id": job_id,
+                "reason": rejection_reason,
+                "source": source,
+            })
             continue
         accepted.append({
             "job_id": job_id,
@@ -158,6 +181,8 @@ async def create_queue(
             detail = "Vagas duplicadas na seleção."
         elif "already_queued" in reasons:
             detail = "Uma ou mais vagas selecionadas já estão no lote atual; as demais não são automatizáveis."
+        elif reasons == {"unsupported_apply_method"}:
+            detail = "Uma ou mais vagas selecionadas usam um fluxo de candidatura que ainda não é automatizável pelo Merlin."
         else:
             detail = "Nenhuma vaga elegível para aplicação automática (Gupy e Catho)."
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)

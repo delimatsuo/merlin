@@ -347,6 +347,7 @@
   "vagas.batch.eligibleBanner": "{{count}} jobs eligible for auto-apply today",
   "vagas.batch.eligibleBannerOne": "1 job eligible for auto-apply today",
   "vagas.batch.unsupportedTag": "Not automatable",
+  "vagas.batch.manualApplyTag": "Manual/WhatsApp",
   "vagas.batch.footerCount": "{{count}} selected",
   "vagas.batch.footerCountOne": "1 selected",
   "vagas.batch.footerAction": "Apply in batch",

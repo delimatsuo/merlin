@@ -21,6 +21,7 @@ import {
   queueUnexpectedErrorResult,
   summarizeQueueDrive,
 } from "./queue-diagnostics";
+import { isQueueEntryAutoApplySupported } from "./queue-eligibility";
 
 const POLL_ALARM = "merlin_queue_poll";
 const POLL_INTERVAL_MIN = 1.5; // 90 seconds per spec
@@ -64,6 +65,7 @@ export interface QueueEntry {
   id: string;
   job_id: string;
   job_url: string;
+  source: string;
   title: string;
   company: string;
   status:
@@ -214,14 +216,32 @@ export async function driveQueue(): Promise<QueueDriveResult> {
     }
 
     const active = fetched.queue.active;
-    const attentionCount = active.filter((e) => e.status === "needs_attention").length;
+
+    for (const entry of active) {
+      if (!ACTIVE_STATUSES.has(entry.status) || isQueueEntryAutoApplySupported(entry)) continue;
+      await patchQueueEntry(entry.id, {
+        status: "skipped",
+        error_message: "Fluxo de candidatura manual/WhatsApp não é automatizável pelo Merlin.",
+      });
+      if (entry.tab_id !== null && entry.tab_id !== undefined) {
+        await clearTabOwnership(entry.tab_id);
+        try {
+          await chrome.tabs.remove(entry.tab_id);
+        } catch {
+          /* tab already closed */
+        }
+      }
+    }
+
+    const driveableActive = active.filter((e) => isQueueEntryAutoApplySupported(e));
+    const attentionCount = driveableActive.filter((e) => e.status === "needs_attention").length;
     await updateBadge(attentionCount);
 
-    const running = active.filter((e) => e.status === "running");
-    const pending = active.filter((e) => e.status === "pending");
+    const running = driveableActive.filter((e) => e.status === "running");
+    const pending = driveableActive.filter((e) => e.status === "pending");
 
     // Prune ownership for tabs that have been closed externally.
-    for (const entry of active) {
+    for (const entry of driveableActive) {
       if (entry.tab_id !== null && entry.tab_id !== undefined) {
         try {
           await chrome.tabs.get(entry.tab_id);
@@ -293,7 +313,7 @@ export async function driveQueue(): Promise<QueueDriveResult> {
     // Batch complete? Re-fetch and check for zero active.
     const refreshed = await fetchQueue();
     if (!refreshed.queue) {
-      return summarizeQueueDrive({ active, openedCount, failedToOpenCount });
+      return summarizeQueueDrive({ active: driveableActive, openedCount, failedToOpenCount });
     }
     if (refreshed.queue.active.length === 0 && refreshed.queue.recent.length > 0) {
       // Find the most recent batch id that hasn't been notified yet.
@@ -306,7 +326,7 @@ export async function driveQueue(): Promise<QueueDriveResult> {
       }
     }
 
-    return summarizeQueueDrive({ active, openedCount, failedToOpenCount });
+    return summarizeQueueDrive({ active: driveableActive, openedCount, failedToOpenCount });
   } catch (err) {
     console.error("[Queue] driveQueue failed:", err);
     return queueUnexpectedErrorResult(err);

@@ -347,6 +347,7 @@
   "vagas.batch.eligibleBanner": "{{count}} vagas elegíveis para aplicação automática hoje",
   "vagas.batch.eligibleBannerOne": "1 vaga elegível para aplicação automática hoje",
   "vagas.batch.unsupportedTag": "Não automatizável",
+  "vagas.batch.manualApplyTag": "Manual/WhatsApp",
   "vagas.batch.footerCount": "{{count}} selecionadas",
   "vagas.batch.footerCountOne": "1 selecionada",
   "vagas.batch.footerAction": "Aplicar em lote",
