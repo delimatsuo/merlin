@@ -126,7 +126,37 @@ async def test_scrape_catho_deduplicates_across_terms():
     from scrapers.catho import scrape_catho
     with patch("scrapers.catho.ScrapflyJobClient") as MockClient:
         instance = AsyncMock()
-        instance.fetch.side_effect = [SEARCH_HTML, "", SEARCH_HTML, ""]
+        async def fetch(url, **kwargs):
+            if "?q=" in url:
+                if "desenvolvedor" in url:
+                    return SEARCH_HTML
+                return ""
+            return DETAIL_HTML
+
+        instance.fetch.side_effect = fetch
         MockClient.return_value = instance
         jobs = await scrape_catho(["desenvolvedor", "backend"], scrapfly_api_key="test")
     assert len(jobs) == 2  # deduped by source_id
+
+
+@pytest.mark.asyncio
+async def test_scrape_catho_enriches_cards_with_detail_metadata():
+    from scrapers.catho import scrape_catho
+    with patch("scrapers.catho.ScrapflyJobClient") as MockClient:
+        instance = AsyncMock()
+
+        async def fetch(url, **kwargs):
+            if "?q=" in url:
+                return SEARCH_HTML
+            return DETAIL_HTML
+
+        instance.fetch.side_effect = fetch
+        MockClient.return_value = instance
+
+        jobs = await scrape_catho(["desenvolvedor"], scrapfly_api_key="test")
+
+    assert len(jobs) == 2
+    assert jobs[0]["location_hint"] == "São Paulo, SP"
+    assert jobs[0]["work_mode_hint"] == "onsite"
+    assert jobs[0]["posted_date_hint"] == "2026-04-30"
+    assert "Python expert" in jobs[0]["raw_text"]

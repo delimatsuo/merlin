@@ -12,6 +12,7 @@ Lower-level helpers (useful for unit-testing):
     fetch_catho_detail(client, job_id, slug)  -> RawJob | None
 """
 
+import asyncio
 import json
 import re
 import structlog
@@ -27,6 +28,7 @@ logger = structlog.get_logger()
 
 _SEARCH_URL = "https://www.catho.com.br/vagas/?q={query}&ordenar=mais_recentes&page={page}"
 _DETAIL_URL = "https://www.catho.com.br/vagas/{slug}/{job_id}"
+_DETAIL_CONCURRENCY = 3
 
 # Regex matching the last path segment of a Catho job URL — always numeric.
 _JOB_ID_RE = re.compile(r"/vagas/[^/]+/(\d+)/?$")
@@ -380,6 +382,48 @@ async def fetch_catho_detail(
     return job
 
 
+async def _enrich_cards_with_details(client, cards: list[RawJob]) -> list[RawJob]:
+    """Fetch detail pages for search cards and merge richer metadata.
+
+    Catho search cards are inconsistent: some expose location, but they do not
+    expose datePosted and often omit work mode. Detail pages can expose those
+    fields through JobPosting ld+json, so use them when available while keeping
+    the card as a fallback if the detail request is blocked or incomplete.
+    """
+    semaphore = asyncio.Semaphore(_DETAIL_CONCURRENCY)
+
+    async def enrich(card: RawJob) -> RawJob:
+        slug = _slug_from_href(card.get("source_url", ""))
+        if not slug:
+            return card
+
+        async with semaphore:
+            detail = await fetch_catho_detail(
+                client,
+                job_id=card["source_id"],
+                slug=slug,
+            )
+        if not detail:
+            return card
+
+        merged: RawJob = dict(card)  # type: ignore[assignment]
+        for key in (
+            "raw_text",
+            "title_hint",
+            "company_hint",
+            "location_hint",
+            "work_mode_hint",
+            "salary_hint",
+            "posted_date_hint",
+        ):
+            value = detail.get(key)
+            if value:
+                merged[key] = value
+        return merged
+
+    return await asyncio.gather(*(enrich(card) for card in cards))
+
+
 # ---------------------------------------------------------------------------
 # High-level entry point
 # ---------------------------------------------------------------------------
@@ -429,7 +473,7 @@ async def scrape_catho(
 
             for card in new_cards:
                 seen_ids.add(card["source_id"])
-                deduped.append(card)
+            deduped.extend(await _enrich_cards_with_details(client, new_cards))
 
     logger.info(
         "catho_complete",

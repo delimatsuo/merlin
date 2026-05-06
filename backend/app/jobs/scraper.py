@@ -63,6 +63,51 @@ def _make_job_id(source: str, source_id: str) -> str:
     return f"{source}_{uuid.uuid4().hex[:16]}"
 
 
+def _is_missing_metadata(value) -> bool:
+    """Return True when a stored field is empty or a known placeholder."""
+    if value is None:
+        return True
+    if not isinstance(value, str):
+        return False
+    normalized = _strip_html(value).lower().strip()
+    return normalized in {"", "nao informado", "não informado", "n/a", "none", "unknown"}
+
+
+def _metadata_refresh_fields(raw_job: dict, existing_job: dict, now_utc_iso: str) -> dict:
+    """Build low-risk field updates for re-seen existing job documents.
+
+    Catho search-card rows previously entered Firestore with sparse placeholders.
+    Once the Catho scraper fetches detail pages, we can repair those visible
+    card fields without forcing every duplicate job through AI extraction again.
+    """
+    fields = {"last_seen_at": now_utc_iso}
+    if (raw_job.get("source") or "").lower() != "catho":
+        return fields
+
+    refreshable = {
+        "title": _sanitize_field(raw_job.get("title_hint", "")),
+        "company": _sanitize_field(raw_job.get("company_hint", "")),
+        "location": _sanitize_field(raw_job.get("location_hint", "")),
+        "work_mode": raw_job.get("work_mode_hint", ""),
+        "salary_range": _sanitize_field(raw_job.get("salary_hint", "")),
+        "posted_date": raw_job.get("posted_date_hint"),
+        "source_url": _validate_url(raw_job.get("source_url", "")),
+    }
+
+    for field, value in refreshable.items():
+        if not value:
+            continue
+        if _is_missing_metadata(existing_job.get(field)) or field in {"posted_date", "work_mode", "source_url"}:
+            fields[field] = value
+
+    raw_text = _strip_html(raw_job.get("raw_text", ""))
+    existing_raw_text = _strip_html(existing_job.get("raw_text", ""))
+    if raw_text and len(raw_text) > max(len(existing_raw_text), 80):
+        fields["raw_text"] = raw_text[:10000]
+
+    return fields
+
+
 # ---------------------------------------------------------------------------
 # Broad search terms — each covers an entire department/area.
 # The Brazil Jobs actor returns ~100 results per call across
@@ -246,6 +291,7 @@ async def run_scraping_pipeline() -> dict:
 
     DEDUP_BATCH_SIZE = 500
     existing_ids: set[str] = set()
+    existing_jobs_by_id: dict[str, dict] = {}
     jobs_col = fs.db.collection("jobs")
     for i in range(0, len(candidates), DEDUP_BATCH_SIZE):
         chunk = candidates[i:i + DEDUP_BATCH_SIZE]
@@ -253,6 +299,7 @@ async def run_scraping_pipeline() -> dict:
         async for snap in fs.db.get_all(refs):
             if snap.exists:
                 existing_ids.add(snap.id)
+                existing_jobs_by_id[snap.id] = snap.to_dict() or {}
 
     new_raw_jobs = [j for j in candidates if j["_job_id"] not in existing_ids]
     jobs_duplicate = len(candidates) - len(new_raw_jobs)
@@ -265,6 +312,7 @@ async def run_scraping_pipeline() -> dict:
     # for the write path.
     now_utc_iso = datetime.now(timezone.utc).isoformat()
     if existing_ids:
+        raw_jobs_by_id = {j["_job_id"]: j for j in candidates}
         TOUCH_BATCH_SIZE = 500
         existing_list = list(existing_ids)
         jobs_touched = 0
@@ -272,7 +320,14 @@ async def run_scraping_pipeline() -> dict:
             chunk = existing_list[i:i + TOUCH_BATCH_SIZE]
             wb = fs.db.batch()
             for job_id in chunk:
-                wb.update(jobs_col.document(job_id), {"last_seen_at": now_utc_iso})
+                wb.update(
+                    jobs_col.document(job_id),
+                    _metadata_refresh_fields(
+                        raw_jobs_by_id.get(job_id, {}),
+                        existing_jobs_by_id.get(job_id, {}),
+                        now_utc_iso,
+                    ),
+                )
             try:
                 await wb.commit()
                 jobs_touched += len(chunk)
