@@ -84,7 +84,7 @@ export function useExtensionStatus(timeoutMs = 2500): ExtensionStatus {
   return status;
 }
 
-export function useExtensionDetected(timeoutMs = 1200): boolean | undefined {
+export function useExtensionDetected(timeoutMs = 2500): boolean | undefined {
   return useExtensionStatus(timeoutMs).detected;
 }
 
